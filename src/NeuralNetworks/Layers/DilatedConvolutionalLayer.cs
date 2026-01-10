@@ -1,4 +1,3 @@
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -306,30 +305,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _biasGradients;
 
-    #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
-
-    // GPU weight buffers
-    private GpuTensor<T>? _gpuKernels;
-    private GpuTensor<T>? _gpuBiases;
-
-    // GPU gradient buffers
-    private GpuTensor<T>? _gpuKernelsGradient;
-    private GpuTensor<T>? _gpuBiasesGradient;
-
-    // GPU velocity buffers (SGD momentum)
-    private GpuTensor<T>? _gpuKernelsVelocity;
-    private GpuTensor<T>? _gpuBiasesVelocity;
-
-    // GPU Adam first moment buffers
-    private GpuTensor<T>? _gpuKernelsM;
-    private GpuTensor<T>? _gpuBiasesM;
-
-    // GPU Adam second moment buffers
-    private GpuTensor<T>? _gpuKernelsV;
-    private GpuTensor<T>? _gpuBiasesV;
-    #endregion
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuOutput;
+    private int[]? _gpuOriginalInputShape;
+    private bool _gpuAddedBatchDimension;
+    private FusedActivationType _gpuActivationType;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -354,11 +335,6 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU-resident training.
-    /// </summary>
-    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -728,11 +704,14 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
             _dilation, _dilation,     // dilationH, dilationW
             fusedActivation);
 
-        // Cache inputs and outputs for backward pass during training
+        // Cache GPU tensors for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuLastInput = input4D;
-            _gpuLastOutput = result;
+            _gpuInput = input4D;
+            _gpuOutput = result;
+            _gpuOriginalInputShape = originalInputShape;
+            _gpuAddedBatchDimension = addedBatchDimension;
+            _gpuActivationType = fusedActivation;
         }
 
         // Restore original shape if needed
@@ -967,6 +946,93 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         // Convert input gradient from NCHW back to NHWC using Transpose
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
         return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident backward pass for dilated convolution.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from subsequent layer.</param>
+    /// <returns>GPU-resident gradient with respect to input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuOutput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Handle shape restoration if batch dimension was added
+        IGpuTensor<T> grad4D = outputGradient;
+        if (_gpuAddedBatchDimension && outputGradient.Shape.Length == 3)
+        {
+            grad4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+        else if (outputGradient.Shape.Length > 4 && _gpuOriginalInputShape != null)
+        {
+            // Flatten higher-rank gradient
+            int flatBatch = 1;
+            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            grad4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
+        }
+
+        // Step 1: Backprop through activation
+        IGpuTensor<T> activationGrad;
+        if (_gpuActivationType == FusedActivationType.None)
+        {
+            activationGrad = grad4D;
+        }
+        else
+        {
+            activationGrad = _gpuActivationType switch
+            {
+                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(grad4D, _gpuOutput),
+                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(grad4D, _gpuOutput),
+                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(grad4D, _gpuOutput),
+                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(grad4D, _gpuOutput, 0.01f),
+                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(grad4D, _gpuOutput),
+                _ => grad4D
+            };
+        }
+
+        // Step 2: Compute bias gradient - sum over batch and spatial dimensions
+        var biasGradGpu = gpuEngine.Conv2DBackwardBiasGpu<T>(activationGrad);
+        _biasGradients = biasGradGpu.ToTensor();
+
+        // Step 3: Compute kernel gradient
+        var kernelGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(
+            activationGrad,
+            _gpuInput,
+            _kernels.Shape,
+            new[] { _stride, _stride },
+            new[] { _padding, _padding },
+            new[] { _dilation, _dilation });
+        _kernelGradients = kernelGradGpu.ToTensor();
+
+        // Step 4: Compute input gradient
+        var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
+            activationGrad,
+            _kernels,
+            _gpuInput.Shape,
+            new[] { _stride, _stride },
+            new[] { _padding, _padding },
+            new[] { _dilation, _dilation });
+
+        // Restore original shape if needed
+        if (_gpuAddedBatchDimension && _gpuOriginalInputShape != null)
+        {
+            return inputGrad.CreateView(0, _gpuOriginalInputShape);
+        }
+        if (_gpuOriginalInputShape != null && _gpuOriginalInputShape.Length > 4)
+        {
+            return inputGrad.CreateView(0, _gpuOriginalInputShape);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
@@ -1214,6 +1280,13 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _lastOutput = null;
         _kernelGradients = null;
         _biasGradients = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuOutput = null;
+        _gpuOriginalInputShape = null;
+        _gpuAddedBatchDimension = false;
+        _gpuActivationType = FusedActivationType.None;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
@@ -1258,126 +1331,4 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
             return true;
         }
     }
-
-    #region GPU Training Methods
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // CPU fallback: download gradient, run Backward(), upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradient buffers to GPU for UpdateParametersGpu
-        if (_kernelGradients is not null)
-        {
-            _gpuKernelsGradient?.Dispose();
-            _gpuKernelsGradient = new GpuTensor<T>(backend, _kernelGradients, GpuTensorRole.Gradient);
-        }
-
-        if (_biasGradients is not null)
-        {
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasGradients, GpuTensorRole.Gradient);
-        }
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
-
-    /// <summary>
-    /// Updates parameters on GPU using the configured optimizer.
-    /// </summary>
-    /// <param name="config">The GPU optimizer configuration.</param>
-    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("UpdateParametersGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Ensure GPU weight buffers exist
-        _gpuKernels ??= new GpuTensor<T>(backend, _kernels, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
-
-        // Ensure optimizer state exists
-        EnsureDilatedConvOptimizerState(config, backend);
-
-        // Apply updates for kernels
-        if (_gpuKernelsGradient is not null)
-        {
-            var kernelsState = BuildDilatedConvOptimizerState("kernels");
-            config.ApplyUpdate(backend, _gpuKernels.Buffer, _gpuKernelsGradient.Buffer, kernelsState, _kernels.Length);
-        }
-
-        // Apply updates for biases
-        if (_gpuBiasesGradient is not null)
-        {
-            var biasesState = BuildDilatedConvOptimizerState("biases");
-            config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasesGradient.Buffer, biasesState, _biases.Length);
-        }
-
-        // Download updated weights back to CPU tensors
-        _kernels = _gpuKernels.ToTensor();
-        _biases = _gpuBiases.ToTensor();
-
-        // Notify engine that tensor data has changed
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
-    }
-
-    private void EnsureDilatedConvOptimizerState(IGpuOptimizerConfig config, IDirectGpuBackend backend)
-    {
-        var optimizerType = config.OptimizerType;
-
-        // Ensure velocity buffers for SGD momentum, NAG, LARS
-        if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
-        {
-            _gpuKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-
-        // Ensure Adam moment buffers
-        if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
-        {
-            _gpuKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_kernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-    }
-
-    private GpuOptimizerState BuildDilatedConvOptimizerState(string paramName)
-    {
-        return paramName switch
-        {
-            "kernels" => new GpuOptimizerState
-            {
-                Velocity = _gpuKernelsVelocity?.Buffer,
-                M = _gpuKernelsM?.Buffer,
-                V = _gpuKernelsV?.Buffer
-            },
-            "biases" => new GpuOptimizerState
-            {
-                Velocity = _gpuBiasesVelocity?.Buffer,
-                M = _gpuBiasesM?.Buffer,
-                V = _gpuBiasesV?.Buffer
-            },
-            _ => new GpuOptimizerState()
-        };
-    }
-
-    #endregion
 }

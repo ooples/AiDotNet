@@ -431,6 +431,26 @@ public class DelegatingGpuBackend : IDirectGpuBackend
             outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
 
     /// <inheritdoc/>
+    public virtual void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+        => Inner.ConvTranspose2DBackwardInput(gradOutput, kernel, gradInput, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
+
+    /// <inheritdoc/>
+    public virtual void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+        => Inner.ConvTranspose2DBackwardKernel(input, gradOutput, gradKernel, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
+
+    /// <inheritdoc/>
     public virtual void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
         int batch, int inChannels, int inHeight, int inWidth,
         int outChannels, int outHeight, int outWidth,
@@ -573,6 +593,14 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.GlobalMaxPool2D(input, output, batch, channels, height, width);
 
     /// <inheritdoc/>
+    public virtual void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        => Inner.GlobalAvgPool2DBackward(gradOutput, gradInput, batch, channels, height, width);
+
+    /// <inheritdoc/>
+    public virtual void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        => Inner.GlobalMaxPool2DBackward(gradOutput, indices, gradInput, batch, channels, height, width);
+
+    /// <inheritdoc/>
     public virtual void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         => Inner.AdaptiveAvgPool2D(input, output, batch, channels, inHeight, inWidth, outHeight, outWidth);
 
@@ -668,6 +696,13 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
         IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
         => Inner.InstanceNorm(input, output, gamma, beta, saveMean, saveInvVar, batch, channels, spatialSize, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+        => Inner.InstanceNormBackward(gradOutput, input, gamma, saveMean, saveInvVar, gradInput, gradGamma, gradBeta, batch, channels, spatialSize, epsilon);
 
     /// <inheritdoc/>
     public virtual void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
@@ -791,6 +826,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor)
         => Inner.NearestNeighborUpsample(input, output, batchChannels, height, width, scaleFactor);
+
+    /// <inheritdoc/>
+    public virtual void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        => Inner.NearestNeighborUpsampleBackward(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
 
     /// <inheritdoc/>
     public virtual void Fill(IGpuBuffer buffer, float value, int size) => Inner.Fill(buffer, value, size);

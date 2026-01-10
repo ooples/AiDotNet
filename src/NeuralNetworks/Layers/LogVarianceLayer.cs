@@ -375,6 +375,126 @@ public class LogVarianceLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// GPU-accelerated backward pass for the log-variance layer.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>GPU-resident gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradient for log(variance + epsilon) is computed as:
+    /// d(loss)/d(input) = outputGradient * (2 * (input - mean) / (axis_size * (variance + epsilon)))
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // We need the cached values from forward pass
+        if (_lastInput == null || _lastOutput == null || _meanValues == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int[] inputShape = _lastInput.Shape;
+        int inputRank = inputShape.Length;
+        int axisSize = inputShape[Axis];
+        int totalSize = _lastInput.Length;
+
+        // Compute outer and inner sizes for the reduction axis
+        int outerSize = 1;
+        for (int i = 0; i < Axis; i++)
+            outerSize *= inputShape[i];
+        int innerSize = 1;
+        for (int i = Axis + 1; i < inputRank; i++)
+            innerSize *= inputShape[i];
+
+        int outputSize = _lastOutput.Length;
+        const float epsilon = 1e-8f;
+
+        // Upload data to GPU
+        float[] inputData = DirectGpuEngine.ToFloatArray(_lastInput.Data);
+        float[] outputData = DirectGpuEngine.ToFloatArray(_lastOutput.Data);
+        float[] meanData = DirectGpuEngine.ToFloatArray(_meanValues.Data);
+        float[] gradOutputData = backend.DownloadBuffer(outputGradient.Buffer);
+
+        var inputBuffer = backend.AllocateBuffer(inputData);
+        var logVarianceBuffer = backend.AllocateBuffer(outputData);
+        var meanBuffer = backend.AllocateBuffer(meanData);
+        var gradOutputBuffer = backend.AllocateBuffer(gradOutputData);
+
+        // Compute variance = exp(log_variance)
+        var varianceBuffer = backend.AllocateBuffer(outputSize);
+        backend.Exp(logVarianceBuffer, varianceBuffer, outputSize);
+
+        // Add epsilon: variance_plus_eps = variance + epsilon
+        var epsilonBuffer = backend.AllocateBuffer(outputSize);
+        backend.Fill(epsilonBuffer, epsilon, outputSize);
+        var variancePlusEpsBuffer = backend.AllocateBuffer(outputSize);
+        backend.Add(varianceBuffer, epsilonBuffer, variancePlusEpsBuffer, outputSize);
+
+        // Compute 2 / (axis_size * (variance + epsilon))
+        var scaleBuffer = backend.AllocateBuffer(outputSize);
+        float invAxisSize = 2.0f / axisSize;
+        backend.Scale(variancePlusEpsBuffer, scaleBuffer, 1.0f, outputSize);
+        backend.Reciprocal(scaleBuffer, scaleBuffer, outputSize);
+        backend.Scale(scaleBuffer, scaleBuffer, invAxisSize, outputSize);
+
+        // Multiply by output gradient: gradScale = gradOutput * scale
+        var gradScaleBuffer = backend.AllocateBuffer(outputSize);
+        backend.Multiply(gradOutputBuffer, scaleBuffer, gradScaleBuffer, outputSize);
+
+        // Now we need to compute (input - mean) and broadcast gradScale
+        // This requires broadcasting gradScale from [outer, inner] to [outer, axisSize, inner]
+        // and broadcast mean from [outer, 1, inner] to [outer, axisSize, inner]
+        // Then compute gradInput = gradScale * (input - mean)
+
+        var gradInputBuffer = backend.AllocateBuffer(totalSize);
+
+        // Do the computation using CPU with parallel for efficiency
+        var gradScaleData = backend.DownloadBuffer(gradScaleBuffer);
+        var meanBroadcast = backend.DownloadBuffer(meanBuffer);
+
+        var gradInputData = new float[totalSize];
+        System.Threading.Tasks.Parallel.For(0, outerSize, outer =>
+        {
+            for (int axis = 0; axis < axisSize; axis++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputIdx = outer * axisSize * innerSize + axis * innerSize + inner;
+                    int outputIdx = outer * innerSize + inner;
+
+                    float x = inputData[inputIdx];
+                    float mean = meanBroadcast[outputIdx];
+                    float scale = gradScaleData[outputIdx];
+
+                    gradInputData[inputIdx] = (x - mean) * scale;
+                }
+            }
+        });
+
+        // Upload result to GPU
+        var resultBuffer = backend.AllocateBuffer(gradInputData);
+
+        // Cleanup intermediate buffers
+        inputBuffer.Dispose();
+        logVarianceBuffer.Dispose();
+        meanBuffer.Dispose();
+        gradOutputBuffer.Dispose();
+        varianceBuffer.Dispose();
+        epsilonBuffer.Dispose();
+        variancePlusEpsBuffer.Dispose();
+        scaleBuffer.Dispose();
+        gradScaleBuffer.Dispose();
+        gradInputBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, resultBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
+
+    /// <summary>
     /// Performs the backward pass of the log-variance layer.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -382,21 +502,21 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method implements the backward pass of the log-variance layer, which is used during training to propagate
-    /// error gradients backward through the network. It calculates how changes in the output affect the input, 
+    /// error gradients backward through the network. It calculates how changes in the output affect the input,
     /// taking into account the derivatives of the logarithm and variance calculations.
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how changes in the output
     /// would affect the input.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how its output affected the overall error
     /// - It calculates how each input value contributed to that error
     /// - This information is passed backward to earlier layers
-    /// 
+    ///
     /// The mathematics here are complex but involve the chain rule from calculus:
     /// - For the log function: the derivative is 1/x
     /// - For variance: it involves how each value's difference from the mean contributed
-    /// 
+    ///
     /// This process is part of how neural networks learn from their mistakes.
     /// </para>
     /// </remarks>

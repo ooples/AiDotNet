@@ -1,4 +1,3 @@
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -213,46 +212,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _valueWeightsVelocity;
     private Tensor<T>? _outputBiasVelocity;
 
-    #region GPU Training Fields
-    // Cached GPU tensors for backward pass
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuProjectedQueries;
-    private IGpuTensor<T>? _gpuProjectedKeys;
-    private IGpuTensor<T>? _gpuProjectedValues;
-    private IGpuTensor<T>? _gpuAttentionWeightsGpu;
-
-    // Cached GPU weight tensors
-    private IGpuTensor<T>? _gpuQueryWeights;
-    private IGpuTensor<T>? _gpuKeyWeights;
-    private IGpuTensor<T>? _gpuValueWeights;
-    private IGpuTensor<T>? _gpuOutputBias;
-
-    // Cached GPU gradient tensors
-    private IGpuTensor<T>? _gpuQueryWeightsGradient;
-    private IGpuTensor<T>? _gpuKeyWeightsGradient;
-    private IGpuTensor<T>? _gpuValueWeightsGradient;
-    private IGpuTensor<T>? _gpuOutputBiasGradient;
-
-    // Optimizer state buffers for query weights
-    private IGpuTensor<T>? _gpuQueryWeightsVelocity;
-    private IGpuTensor<T>? _gpuQueryWeightsM;
-    private IGpuTensor<T>? _gpuQueryWeightsV;
-
-    // Optimizer state buffers for key weights
-    private IGpuTensor<T>? _gpuKeyWeightsVelocity;
-    private IGpuTensor<T>? _gpuKeyWeightsM;
-    private IGpuTensor<T>? _gpuKeyWeightsV;
-
-    // Optimizer state buffers for value weights
-    private IGpuTensor<T>? _gpuValueWeightsVelocity;
-    private IGpuTensor<T>? _gpuValueWeightsM;
-    private IGpuTensor<T>? _gpuValueWeightsV;
-
-    // Optimizer state buffers for output bias
-    private IGpuTensor<T>? _gpuOutputBiasVelocity;
-    private IGpuTensor<T>? _gpuOutputBiasM;
-    private IGpuTensor<T>? _gpuOutputBiasV;
-    #endregion
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput2D;
+    private IGpuTensor<T>? _gpuQ;
+    private IGpuTensor<T>? _gpuK;
+    private IGpuTensor<T>? _gpuV;
+    private IGpuTensor<T>? _gpuAttentionWeights;
+    private int _gpuBatchSize;
+    private int _gpuSequenceLength;
+    private int _gpuEmbeddingDimension;
 
     /// <summary>
     /// The number of attention heads used in the multi-head attention mechanism.
@@ -334,11 +302,6 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU-resident training (backward pass and parameter updates on GPU).
-    /// </summary>
-    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Gets the total number of trainable parameters in this layer.
@@ -743,13 +706,16 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (IsTrainingMode)
         {
             // Cache GPU tensors for GPU-resident backward pass
-            _gpuLastInput = input3D;
-            _gpuProjectedQueries = Q;  // [batch, heads, seq, headDim]
-            _gpuProjectedKeys = K;
-            _gpuProjectedValues = V;
-            _gpuAttentionWeightsGpu = attentionWeightsGpu;
+            _gpuInput2D = input2D;
+            _gpuQ = Q;
+            _gpuK = K;
+            _gpuV = V;
+            _gpuAttentionWeights = attentionWeightsGpu;
+            _gpuBatchSize = batchSize;
+            _gpuSequenceLength = sequenceLength;
+            _gpuEmbeddingDimension = embeddingDimension;
 
-            // Also download to CPU for backward compatibility with CPU backward pass
+            // Also cache CPU tensors for fallback backward pass
             _lastInput = input3D.ToTensor();
             _lastAttentionScores = attentionWeightsGpu?.ToTensor();
             _lastOutput = output.ToTensor();
@@ -897,6 +863,99 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             ? inputGradient.Reshape(_originalInputShape)
             : inputGradient;
 
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
+    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuInput2D == null || _gpuQ == null || _gpuK == null || _gpuV == null || _gpuAttentionWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        int batchSize = _gpuBatchSize;
+        int sequenceLength = _gpuSequenceLength;
+        int embeddingDimension = _gpuEmbeddingDimension;
+
+        // Reshape output gradient to 3D if needed
+        IGpuTensor<T> outputGrad3D = outputGradient;
+        if (outputGradient.Shape.Length != 3)
+        {
+            outputGrad3D = gpuEngine.ReshapeGpu(outputGradient, [batchSize, sequenceLength, embeddingDimension]);
+        }
+
+        // Apply activation derivative (if not identity)
+        IGpuTensor<T> activationGrad;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            // For now, use identity derivative since complex activation backward needs output tensor
+            activationGrad = outputGrad3D;
+        }
+        else
+        {
+            activationGrad = outputGrad3D;
+        }
+
+        // Bias gradient: sum over batch and sequence dimensions
+        var biasSumBatch = gpuEngine.SumAxisGpu(activationGrad, 0);
+        var biasSum = gpuEngine.SumAxisGpu(biasSumBatch, 0);
+        _outputBiasGradient = biasSum.ToTensor();
+
+        // Output gradient to 4D: [B, H, S, D]
+        var dOutput4DShaped = gpuEngine.ReshapeGpu(activationGrad, [batchSize, sequenceLength, _headCount, _headDimension]);
+        var dOutput4D = gpuEngine.PermuteGpu(dOutput4DShaped, [0, 2, 1, 3]);
+
+        // Use GPU ScaledDotProductAttentionBackward for efficient gradient computation
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+        var (dQ_4D, dK_4D, dV_4D) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
+            dOutput4D, _gpuQ, _gpuK, _gpuV, _gpuAttentionWeights, scale, isCausal: false);
+
+        // Reshape gradients from 4D to 2D for weight gradient computation
+        var dQ_transposed = gpuEngine.PermuteGpu(dQ_4D, [0, 2, 1, 3]);
+        var dK_transposed = gpuEngine.PermuteGpu(dK_4D, [0, 2, 1, 3]);
+        var dV_transposed = gpuEngine.PermuteGpu(dV_4D, [0, 2, 1, 3]);
+
+        var dQ = gpuEngine.ReshapeGpu(dQ_transposed, [batchSize * sequenceLength, embeddingDimension]);
+        var dK = gpuEngine.ReshapeGpu(dK_transposed, [batchSize * sequenceLength, embeddingDimension]);
+        var dV = gpuEngine.ReshapeGpu(dV_transposed, [batchSize * sequenceLength, embeddingDimension]);
+
+        // Weight gradients: input2D^T @ dQ/dK/dV
+        var input2D_T = gpuEngine.TransposeGpu(_gpuInput2D);
+        var dQueryWeights = gpuEngine.MatMulGpuTensors(input2D_T, dQ);
+        var dKeyWeights = gpuEngine.MatMulGpuTensors(input2D_T, dK);
+        var dValueWeights = gpuEngine.MatMulGpuTensors(input2D_T, dV);
+
+        // Download weight gradients to CPU (needed for UpdateParameters)
+        _queryWeightsGradient = dQueryWeights.ToTensor();
+        _keyWeightsGradient = dKeyWeights.ToTensor();
+        _valueWeightsGradient = dValueWeights.ToTensor();
+
+        // Input gradient: dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
+        var wqT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_queryWeights), GpuTensorRole.Weight);
+        var wkT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_keyWeights), GpuTensorRole.Weight);
+        var wvT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_valueWeights), GpuTensorRole.Weight);
+
+        var dInputFromQ = gpuEngine.MatMulGpuTensors(dQ, wqT);
+        var dInputFromK = gpuEngine.MatMulGpuTensors(dK, wkT);
+        var dInputFromV = gpuEngine.MatMulGpuTensors(dV, wvT);
+
+        var dInput2D = gpuEngine.AddGpu(gpuEngine.AddGpu(dInputFromQ, dInputFromK), dInputFromV);
+
+        // Reshape back to original input shape
+        var inputGradient = gpuEngine.ReshapeGpu(dInput2D, [batchSize, sequenceLength, embeddingDimension]);
+
+        // Handle original input shape restoration
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            inputGradient = gpuEngine.ReshapeGpu(inputGradient, _originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -1327,6 +1386,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
         _outputBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput2D = null;
+        _gpuQ = null;
+        _gpuK = null;
+        _gpuV = null;
+        _gpuAttentionWeights = null;
     }
 
     /// <summary>
@@ -1695,226 +1761,6 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // This simplified version captures the core attention mechanism for JIT optimization.
 
         return output;
-    }
-
-    /// <summary>
-    /// GPU-resident backward pass for self-attention layer.
-    /// Computes gradients for all trainable parameters using cached GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from upstream layer.</param>
-    /// <returns>GPU-resident gradient to pass to previous layer.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
-
-        if (_gpuLastInput == null || _gpuProjectedQueries == null || _gpuProjectedKeys == null ||
-            _gpuProjectedValues == null || _gpuAttentionWeightsGpu == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        // Get dimensions from cached tensors
-        int batchSize = _gpuLastInput.Shape[0];
-        int seqLength = _gpuLastInput.Shape[1];
-        int embeddingDimension = _gpuLastInput.Shape[2];
-
-        // Ensure output gradient is 3D [batch, seq, embedding]
-        var gradOutput3D = outputGradient.Shape.Length == 3
-            ? outputGradient
-            : gpuEngine.ReshapeGpu(outputGradient, [batchSize, seqLength, embeddingDimension]);
-
-        // 1. Compute output bias gradient (sum over batch and seq dimensions)
-        _gpuOutputBiasGradient = gpuEngine.ReduceSumGpu(gradOutput3D, [0, 1]);
-        _outputBiasGradient = _gpuOutputBiasGradient.ToTensor();
-
-        // 2. Reshape gradient for attention backward: [batch, seq, embedding] -> [batch, heads, seq, headDim]
-        var gradOutput4D = gpuEngine.PermuteGpu(
-            gpuEngine.ReshapeGpu(gradOutput3D, [batchSize, seqLength, _headCount, _headDimension]),
-            [0, 2, 1, 3]);
-
-        // 3. Compute attention backward to get gradients for Q, K, V projections
-        double scale = 1.0 / Math.Sqrt(_headDimension);
-        gpuEngine.ScaledDotProductAttentionBackwardGpu(
-            gradOutput4D,
-            _gpuProjectedQueries,
-            _gpuProjectedKeys,
-            _gpuProjectedValues,
-            _gpuAttentionWeightsGpu,
-            scale,
-            out var gradQ4D,
-            out var gradK4D,
-            out var gradV4D);
-
-        // 4. Reshape Q, K, V gradients from [batch, heads, seq, headDim] to [batch, seq, embedding]
-        var gradQ = gpuEngine.ReshapeGpu(
-            gpuEngine.PermuteGpu(gradQ4D, [0, 2, 1, 3]),
-            [batchSize, seqLength, embeddingDimension]);
-        var gradK = gpuEngine.ReshapeGpu(
-            gpuEngine.PermuteGpu(gradK4D, [0, 2, 1, 3]),
-            [batchSize, seqLength, embeddingDimension]);
-        var gradV = gpuEngine.ReshapeGpu(
-            gpuEngine.PermuteGpu(gradV4D, [0, 2, 1, 3]),
-            [batchSize, seqLength, embeddingDimension]);
-
-        // 5. Compute weight gradients: input^T @ grad
-        var inputTransposed = gpuEngine.PermuteGpu(_gpuLastInput, [0, 2, 1]); // [batch, embedding, seq]
-
-        var qWeightsGradBatched = gpuEngine.BatchedMatMulGpu(inputTransposed, gradQ.ToTensor());
-        _gpuQueryWeightsGradient = gpuEngine.ReduceSumGpu(qWeightsGradBatched, [0]);
-        _queryWeightsGradient = _gpuQueryWeightsGradient.ToTensor().Reshape([embeddingDimension, embeddingDimension]);
-
-        var kWeightsGradBatched = gpuEngine.BatchedMatMulGpu(inputTransposed, gradK.ToTensor());
-        _gpuKeyWeightsGradient = gpuEngine.ReduceSumGpu(kWeightsGradBatched, [0]);
-        _keyWeightsGradient = _gpuKeyWeightsGradient.ToTensor().Reshape([embeddingDimension, embeddingDimension]);
-
-        var vWeightsGradBatched = gpuEngine.BatchedMatMulGpu(inputTransposed, gradV.ToTensor());
-        _gpuValueWeightsGradient = gpuEngine.ReduceSumGpu(vWeightsGradBatched, [0]);
-        _valueWeightsGradient = _gpuValueWeightsGradient.ToTensor().Reshape([embeddingDimension, embeddingDimension]);
-
-        // 6. Compute input gradient: gradQ @ Wq^T + gradK @ Wk^T + gradV @ Wv^T
-        var queryWeightsT = _queryWeights.Transpose([1, 0]);
-        var keyWeightsT = _keyWeights.Transpose([1, 0]);
-        var valueWeightsT = _valueWeights.Transpose([1, 0]);
-
-        var inputGradQ = gpuEngine.BatchedMatMulGpu(gradQ, queryWeightsT);
-        var inputGradK = gpuEngine.BatchedMatMulGpu(gradK, keyWeightsT);
-        var inputGradV = gpuEngine.BatchedMatMulGpu(gradV, valueWeightsT);
-
-        var inputGradient = gpuEngine.AddGpu(gpuEngine.AddGpu(inputGradQ, inputGradK), inputGradV);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// GPU-resident parameter update with polymorphic optimizer support.
-    /// Updates all weight tensors directly on GPU using the specified optimizer configuration.
-    /// </summary>
-    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
-    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
-
-        if (_gpuQueryWeightsGradient == null || _gpuKeyWeightsGradient == null ||
-            _gpuValueWeightsGradient == null || _gpuOutputBiasGradient == null)
-            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
-
-        // Ensure GPU weight tensors exist
-        _gpuQueryWeights ??= new GpuTensor<T>(backend, _queryWeights, GpuTensorRole.Weight);
-        _gpuKeyWeights ??= new GpuTensor<T>(backend, _keyWeights, GpuTensorRole.Weight);
-        _gpuValueWeights ??= new GpuTensor<T>(backend, _valueWeights, GpuTensorRole.Weight);
-        _gpuOutputBias ??= new GpuTensor<T>(backend, _outputBias, GpuTensorRole.Bias);
-
-        // Ensure optimizer state buffers exist
-        EnsureSelfAttentionOptimizerState(backend, config.OptimizerType);
-
-        // Apply optimizer updates
-        config.ApplyUpdate(backend, _gpuQueryWeights.Buffer, _gpuQueryWeightsGradient.Buffer,
-            BuildSelfAttentionOptimizerState("query"), _queryWeights.Length);
-        config.ApplyUpdate(backend, _gpuKeyWeights.Buffer, _gpuKeyWeightsGradient.Buffer,
-            BuildSelfAttentionOptimizerState("key"), _keyWeights.Length);
-        config.ApplyUpdate(backend, _gpuValueWeights.Buffer, _gpuValueWeightsGradient.Buffer,
-            BuildSelfAttentionOptimizerState("value"), _valueWeights.Length);
-        config.ApplyUpdate(backend, _gpuOutputBias.Buffer, _gpuOutputBiasGradient.Buffer,
-            BuildSelfAttentionOptimizerState("bias"), _outputBias.Length);
-
-        // Sync back to CPU tensors for compatibility
-        _queryWeights = _gpuQueryWeights.ToTensor();
-        _keyWeights = _gpuKeyWeights.ToTensor();
-        _valueWeights = _gpuValueWeights.ToTensor();
-        _outputBias = _gpuOutputBias.ToTensor();
-    }
-
-    /// <summary>
-    /// Ensures optimizer state tensors are allocated for the given optimizer type.
-    /// </summary>
-    private void EnsureSelfAttentionOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
-    {
-        var weightSize = _embeddingDimension * _embeddingDimension;
-        var biasSize = _embeddingDimension;
-
-        if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
-        {
-            // Velocity tensors for momentum-based optimizers
-            _gpuQueryWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKeyWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuValueWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuOutputBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-        else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW || optimizerType == GpuOptimizerType.Lamb)
-        {
-            // M and V tensors for Adam-family optimizers
-            _gpuQueryWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuQueryWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKeyWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKeyWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuValueWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuValueWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuOutputBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuOutputBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-        else if (optimizerType == GpuOptimizerType.RmsProp)
-        {
-            // Squared average for RMSprop (reuse velocity buffers)
-            _gpuQueryWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKeyWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuValueWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuOutputBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-        else if (optimizerType == GpuOptimizerType.Adagrad)
-        {
-            // Accumulated gradient for Adagrad (reuse velocity buffers)
-            _gpuQueryWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuKeyWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuValueWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuOutputBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-        }
-    }
-
-    /// <summary>
-    /// Builds optimizer state for a specific parameter tensor.
-    /// </summary>
-    private GpuOptimizerState BuildSelfAttentionOptimizerState(string paramName)
-    {
-        return paramName switch
-        {
-            "query" => new GpuOptimizerState
-            {
-                Velocity = _gpuQueryWeightsVelocity?.Buffer,
-                M = _gpuQueryWeightsM?.Buffer,
-                V = _gpuQueryWeightsV?.Buffer,
-                SquaredAvg = _gpuQueryWeightsVelocity?.Buffer,
-                AccumulatedGrad = _gpuQueryWeightsVelocity?.Buffer
-            },
-            "key" => new GpuOptimizerState
-            {
-                Velocity = _gpuKeyWeightsVelocity?.Buffer,
-                M = _gpuKeyWeightsM?.Buffer,
-                V = _gpuKeyWeightsV?.Buffer,
-                SquaredAvg = _gpuKeyWeightsVelocity?.Buffer,
-                AccumulatedGrad = _gpuKeyWeightsVelocity?.Buffer
-            },
-            "value" => new GpuOptimizerState
-            {
-                Velocity = _gpuValueWeightsVelocity?.Buffer,
-                M = _gpuValueWeightsM?.Buffer,
-                V = _gpuValueWeightsV?.Buffer,
-                SquaredAvg = _gpuValueWeightsVelocity?.Buffer,
-                AccumulatedGrad = _gpuValueWeightsVelocity?.Buffer
-            },
-            "bias" => new GpuOptimizerState
-            {
-                Velocity = _gpuOutputBiasVelocity?.Buffer,
-                M = _gpuOutputBiasM?.Buffer,
-                V = _gpuOutputBiasV?.Buffer,
-                SquaredAvg = _gpuOutputBiasVelocity?.Buffer,
-                AccumulatedGrad = _gpuOutputBiasVelocity?.Buffer
-            },
-            _ => new GpuOptimizerState()
-        };
     }
 
     /// <summary>

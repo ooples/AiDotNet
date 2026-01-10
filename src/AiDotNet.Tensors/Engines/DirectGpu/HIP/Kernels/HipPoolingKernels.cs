@@ -180,6 +180,49 @@ extern ""C"" __global__ void global_maxpool2d(
     output[b * channels + c] = maxVal;
 }
 
+// Global Average Pooling 2D Backward
+extern ""C"" __global__ void global_avgpool2d_backward(
+    const float* gradOutput, float* gradInput, int batch, int channels, int height, int width)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int spatialSize = height * width;
+    int totalElements = batch * channels * spatialSize;
+
+    if (idx >= totalElements) return;
+
+    int w = idx % width;
+    int h = (idx / width) % height;
+    int c = (idx / (width * height)) % channels;
+    int b = idx / (channels * height * width);
+
+    // Gradient is divided equally among all spatial positions
+    float scale = 1.0f / (float)spatialSize;
+    gradInput[idx] = gradOutput[b * channels + c] * scale;
+}
+
+// Global Max Pooling 2D Backward with indices
+extern ""C"" __global__ void global_maxpool2d_backward(
+    const float* gradOutput, const int* indices, float* gradInput,
+    int batch, int channels, int height, int width)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalOutputs = batch * channels;
+
+    if (idx >= totalOutputs) return;
+
+    int c = idx % channels;
+    int b = idx / channels;
+    int spatialSize = height * width;
+
+    // Get the gradient value and the index of the max element
+    float grad = gradOutput[idx];
+    int maxIdx = indices[idx];
+
+    // Convert local spatial index to global input index
+    int inputOffset = (b * channels + c) * spatialSize;
+    atomicAdd(&gradInput[inputOffset + maxIdx], grad);
+}
+
 extern ""C"" __global__ void adaptive_avgpool2d(
     const float* input, float* output,
     int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
@@ -358,6 +401,58 @@ extern ""C"" __global__ void nearest_upsample3d_backward(
 
     atomicAdd(&gradInput[inputIdx], gradOutput[outIdx]);
 }
+
+// ===========================================================================
+// 2D NEAREST NEIGHBOR UPSAMPLING
+// ===========================================================================
+
+extern ""C"" __global__ void nearest_neighbor_upsample(
+    const float* input, float* output,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+    int inputIdx = bc * height * width + ih * width + iw;
+
+    output[idx] = input[inputIdx];
+}
+
+extern ""C"" __global__ void nearest_neighbor_upsample_backward(
+    const float* gradOutput, float* gradInput,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+    int inputIdx = bc * height * width + ih * width + iw;
+
+    atomicAdd(&gradInput[inputIdx], gradOutput[idx]);
+}
 ";
     }
 
@@ -366,8 +461,9 @@ extern ""C"" __global__ void nearest_upsample3d_backward(
         return new[]
         {
             "maxpool2d", "maxpool2d_backward", "avgpool2d", "avgpool2d_backward",
-            "global_avgpool2d", "global_maxpool2d", "adaptive_avgpool2d",
-            "maxpool3d", "maxpool3d_backward", "nearest_upsample3d", "nearest_upsample3d_backward"
+            "global_avgpool2d", "global_maxpool2d", "global_avgpool2d_backward", "global_maxpool2d_backward", "adaptive_avgpool2d",
+            "maxpool3d", "maxpool3d_backward", "nearest_upsample3d", "nearest_upsample3d_backward",
+            "nearest_neighbor_upsample", "nearest_neighbor_upsample_backward"
         };
     }
 }

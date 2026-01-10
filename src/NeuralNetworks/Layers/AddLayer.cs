@@ -54,6 +54,10 @@ public class AddLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _lastOutput;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastOutputGpu;
+    private int _lastInputCountGpu;
+
     /// <summary>
     /// Indicates whether this layer has trainable parameters.
     /// </summary>
@@ -118,6 +122,10 @@ public class AddLayer<T> : LayerBase<T>
                 _lastInputs[i] = inputs[i].ToTensor();
             }
             _lastOutput = result.ToTensor();
+
+            // Cache GPU output for GPU backward pass
+            _lastOutputGpu = result;
+            _lastInputCountGpu = inputs.Length;
         }
 
         return result;
@@ -143,6 +151,56 @@ public class AddLayer<T> : LayerBase<T>
 
         // Return the input gradient as GPU tensor
         return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the add layer.
+    /// Computes gradients that flow equally to all inputs.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the first input (per interface).</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastOutputGpu == null || _lastInputCountGpu < 2)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        // For addition: gradient flows equally to all inputs
+        // If there's an activation, compute the activation derivative first
+        IGpuTensor<T> gradientWithActivation;
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            // Apply activation backward based on type
+            gradientWithActivation = ComputeActivationBackwardGpu(gpuEngine, outputGradient, _lastOutputGpu, fusedOp);
+        }
+        else
+        {
+            gradientWithActivation = outputGradient;
+        }
+
+        // For addition, the gradient for each input is the same as the output gradient
+        // Return the gradient for the first input (per interface contract)
+        return gradientWithActivation;
+    }
+
+    /// <summary>
+    /// Computes the activation backward gradient on GPU.
+    /// </summary>
+    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    {
+        return activationType switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, output),
+            _ => gradOutput // Identity or unsupported - pass through
+        };
     }
 
     /// <summary>
@@ -663,5 +721,10 @@ public class AddLayer<T> : LayerBase<T>
     {
         _lastInputs = null;
         _lastOutput = null;
+
+        // Clear GPU cached data
+        _lastOutputGpu?.Dispose();
+        _lastOutputGpu = null;
+        _lastInputCountGpu = 0;
     }
 }

@@ -202,6 +202,51 @@ extern ""C"" __global__ void global_maxpool2d(
     output[b * channels + c] = maxVal;
 }
 
+// Global Average Pooling 2D Backward
+// Each thread handles one output element, broadcasting gradient back to all input positions
+extern ""C"" __global__ void global_avgpool2d_backward(
+    const float* gradOutput, float* gradInput, int batch, int channels, int height, int width)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int spatialSize = height * width;
+    int totalElements = batch * channels * spatialSize;
+
+    if (idx >= totalElements) return;
+
+    int w = idx % width;
+    int h = (idx / width) % height;
+    int c = (idx / (width * height)) % channels;
+    int b = idx / (channels * height * width);
+
+    // Gradient is divided equally among all spatial positions
+    float scale = 1.0f / (float)spatialSize;
+    gradInput[idx] = gradOutput[b * channels + c] * scale;
+}
+
+// Global Max Pooling 2D Backward with indices
+// Each thread handles one output gradient, scattering it to the max input position
+extern ""C"" __global__ void global_maxpool2d_backward(
+    const float* gradOutput, const int* indices, float* gradInput,
+    int batch, int channels, int height, int width)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalOutputs = batch * channels;
+
+    if (idx >= totalOutputs) return;
+
+    int c = idx % channels;
+    int b = idx / channels;
+    int spatialSize = height * width;
+
+    // Get the gradient value and the index of the max element
+    float grad = gradOutput[idx];
+    int maxIdx = indices[idx];
+
+    // Convert local spatial index to global input index
+    int inputOffset = (b * channels + c) * spatialSize;
+    atomicAdd(&gradInput[inputOffset + maxIdx], grad);
+}
+
 // Adaptive Average Pooling 2D
 extern ""C"" __global__ void adaptive_avgpool2d(
     const float* input, float* output,
@@ -332,6 +377,68 @@ extern ""C"" __global__ void maxpool3d_backward(
     atomicAdd(&gradInput[inputIdx], grad);
 }
 
+// ===========================================================================
+// 2D UPSAMPLING KERNELS
+// ===========================================================================
+
+// Nearest Neighbor Upsample 2D
+// Each thread handles one output element
+extern ""C"" __global__ void nearest_neighbor_upsample(
+    const float* input, float* output,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    // Map output coord to input coord (nearest neighbor)
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+
+    int inputIdx = bc * height * width + ih * width + iw;
+    output[idx] = input[inputIdx];
+}
+
+// Nearest Neighbor Upsample 2D backward pass
+// Each thread handles one output gradient element, accumulating to input gradient
+extern ""C"" __global__ void nearest_neighbor_upsample_backward(
+    const float* gradOutput, float* gradInput,
+    int batchChannels, int height, int width,
+    int scaleFactor, int totalOutputSize)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalOutputSize) return;
+
+    int outHeight = height * scaleFactor;
+    int outWidth = width * scaleFactor;
+    int spatialOut = outHeight * outWidth;
+
+    int bc = idx / spatialOut;
+    int spatial = idx % spatialOut;
+    int oh = spatial / outWidth;
+    int ow = spatial % outWidth;
+
+    // Map output coord to input coord
+    int ih = oh / scaleFactor;
+    int iw = ow / scaleFactor;
+
+    int inputIdx = bc * height * width + ih * width + iw;
+    atomicAdd(&gradInput[inputIdx], gradOutput[idx]);
+}
+
+// ===========================================================================
+// 3D UPSAMPLING KERNELS
+// ===========================================================================
+
 // Nearest Neighbor Upsample 3D
 // Upsamples each spatial dimension by integer scale factors
 extern ""C"" __global__ void nearest_upsample3d(
@@ -413,9 +520,13 @@ extern ""C"" __global__ void nearest_upsample3d_backward(
                 "avgpool2d_backward",
                 "global_avgpool2d",
                 "global_maxpool2d",
+                "global_avgpool2d_backward",
+                "global_maxpool2d_backward",
                 "adaptive_avgpool2d",
                 "maxpool3d",
                 "maxpool3d_backward",
+                "nearest_neighbor_upsample",
+                "nearest_neighbor_upsample_backward",
                 "nearest_upsample3d",
                 "nearest_upsample3d_backward"
             };

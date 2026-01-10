@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -53,6 +54,9 @@ public class DenseBlock<T> : LayerBase<T>
     private readonly int _growthRate;
     private readonly int _inputChannels;
     private List<Tensor<T>>? _layerOutputs;
+
+    // GPU cached tensors for backward pass
+    private List<IGpuTensor<T>>? _gpuFeatureMaps;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -154,6 +158,12 @@ public class DenseBlock<T> : LayerBase<T>
 
         var currentFeatures = inputs[0];
 
+        // Cache feature maps for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuFeatureMaps = new List<IGpuTensor<T>>(_numLayers + 1) { currentFeatures };
+        }
+
         foreach (var layer in _layers)
         {
             // Each layer takes ALL previous features as input
@@ -161,6 +171,12 @@ public class DenseBlock<T> : LayerBase<T>
 
             // Concatenate new features with existing features along channel dimension (axis 1)
             currentFeatures = gpuEngine.ConcatGpu(new[] { currentFeatures, layerOutput }, 1);
+
+            // Cache for backward pass
+            if (IsTrainingMode)
+            {
+                _gpuFeatureMaps!.Add(currentFeatures);
+            }
         }
 
         return currentFeatures;
@@ -195,6 +211,61 @@ public class DenseBlock<T> : LayerBase<T>
 
             // Accumulate gradients (add to previous gradient)
             currentGrad = AddGradients(prevGrad, layerInputGrad);
+        }
+
+        // The remaining gradient is for the original input
+        return currentGrad;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated backward pass for the Dense Block.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Processes layers in reverse order, splitting gradients along channel dimension
+    /// and accumulating gradients through dense connections.
+    /// </para>
+    /// </remarks>
+    /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to output.</param>
+    /// <returns>GPU tensor containing gradient with respect to input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuFeatureMaps == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Start with the full gradient (for all concatenated features)
+        var currentGrad = outputGradient;
+
+        // Process layers in reverse order
+        for (int i = _numLayers - 1; i >= 0; i--)
+        {
+            var layer = _layers[i];
+
+            // Calculate input channels to this layer
+            int inputChannelsToLayer = _inputChannels + i * _growthRate;
+
+            // Get batch and spatial dimensions from gradient
+            int batch = currentGrad.Shape[0];
+            int height = currentGrad.Shape.Length > 2 ? currentGrad.Shape[2] : 1;
+            int width = currentGrad.Shape.Length > 3 ? currentGrad.Shape[3] : 1;
+
+            // Split gradient: [grad for previous layers, grad for this layer's output]
+            // Use SliceGpu along channel dimension (axis 1)
+            var prevGrad = gpuEngine.SliceGpu(currentGrad, 1, 0, inputChannelsToLayer);
+            var layerGrad = gpuEngine.SliceGpu(currentGrad, 1, inputChannelsToLayer, inputChannelsToLayer + _growthRate);
+
+            // Backward through this layer
+            var layerInputGrad = layer.BackwardGpu(layerGrad);
+
+            // Accumulate gradients (add to previous gradient)
+            currentGrad = gpuEngine.AddGpu(prevGrad, layerInputGrad);
         }
 
         // The remaining gradient is for the original input
@@ -251,6 +322,7 @@ public class DenseBlock<T> : LayerBase<T>
     public override void ResetState()
     {
         _layerOutputs = null;
+        _gpuFeatureMaps = null;
         foreach (var layer in _layers)
         {
             layer.ResetState();

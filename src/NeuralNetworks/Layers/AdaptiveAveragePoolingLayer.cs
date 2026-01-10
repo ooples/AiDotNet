@@ -1,6 +1,5 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -39,6 +38,13 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     private int[]? _lastInputShape;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private int _gpuBatch;
+    private int _gpuChannels;
+    private int _gpuInputHeight;
+    private int _gpuInputWidth;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -51,9 +57,6 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AdaptiveAveragePoolingLayer{T}"/> class.
@@ -240,6 +243,14 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 
         // Cache for backward pass
         _lastInputShape = shape;
+        if (IsTrainingMode)
+        {
+            _gpuInput = input;
+            _gpuBatch = batch;
+            _gpuChannels = channels;
+            _gpuInputHeight = inputHeight;
+            _gpuInputWidth = inputWidth;
+        }
 
         // Allocate output buffer
         int outputSize = batch * channels * _outputHeight * _outputWidth;
@@ -272,26 +283,57 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
-    /// <inheritdoc/>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    /// <summary>
+    /// Performs the GPU-resident backward pass of adaptive average pooling.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The gradient of the loss with respect to the input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
+        if (_lastInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-        }
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
         var backend = gpuEngine.GetBackend();
-        if (backend is null)
-        {
+        if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
-        }
 
-        // CPU fallback: download gradient, compute via CPU Backward, upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
+        // Calculate the effective pool size and stride for adaptive pooling
+        // For adaptive pooling: poolSize = ceil(inputSize / outputSize), stride = floor(inputSize / outputSize)
+        int poolSizeH = (int)Math.Ceiling((double)_gpuInputHeight / _outputHeight);
+        int poolSizeW = (int)Math.Ceiling((double)_gpuInputWidth / _outputWidth);
+        int strideH = (int)Math.Floor((double)_gpuInputHeight / _outputHeight);
+        int strideW = (int)Math.Floor((double)_gpuInputWidth / _outputWidth);
 
-        // Return the input gradient as GPU tensor
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+        // Ensure minimum stride of 1
+        strideH = Math.Max(1, strideH);
+        strideW = Math.Max(1, strideW);
+
+        // Allocate gradient buffer for input
+        int inputSize = _gpuBatch * _gpuChannels * _gpuInputHeight * _gpuInputWidth;
+        var gradInputBuffer = backend.AllocateBuffer(inputSize);
+
+        // Use AvgPool2DBackward with calculated pool parameters
+        backend.AvgPool2DBackward(
+            outputGradient.Buffer,
+            gradInputBuffer,
+            _gpuBatch,
+            _gpuChannels,
+            _gpuInputHeight,
+            _gpuInputWidth,
+            _outputHeight,
+            _outputWidth,
+            poolSizeH,
+            poolSizeW,
+            strideH,
+            strideW,
+            0, 0,  // no padding
+            true); // count includes padding
+
+        // Build input gradient shape matching original input shape
+        return new GpuTensor<T>(backend, gradInputBuffer, _lastInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -384,6 +426,13 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _lastInputShape = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuBatch = 0;
+        _gpuChannels = 0;
+        _gpuInputHeight = 0;
+        _gpuInputWidth = 0;
     }
 
     /// <summary>

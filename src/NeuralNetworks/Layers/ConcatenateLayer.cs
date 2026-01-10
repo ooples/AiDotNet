@@ -43,6 +43,10 @@ public class ConcatenateLayer<T> : LayerBase<T>
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastOutputGpu;
+    private int[]? _lastInputSizesGpu;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -183,11 +187,14 @@ public class ConcatenateLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInputs = new Tensor<T>[inputs.Length];
+            _lastInputSizesGpu = new int[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
                 _lastInputs[i] = inputs[i].ToTensor();
+                _lastInputSizesGpu[i] = inputs[i].Shape[axis];
             }
             _lastOutput = result.ToTensor();
+            _lastOutputGpu = result;
         }
 
         return result;
@@ -213,6 +220,61 @@ public class ConcatenateLayer<T> : LayerBase<T>
 
         // Return the input gradient as GPU tensor
         return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the concatenate layer.
+    /// Splits the gradient along the concatenation axis.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the first input (per interface).</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastOutputGpu == null || _lastInputSizesGpu == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        // Apply activation backward if needed
+        IGpuTensor<T> gradientWithActivation;
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            gradientWithActivation = ComputeActivationBackwardGpu(gpuEngine, outputGradient, _lastOutputGpu, fusedOp);
+        }
+        else
+        {
+            gradientWithActivation = outputGradient;
+        }
+
+        // Split gradient along the concatenation axis
+        // Return only the first input's gradient (per interface contract)
+        int rank = gradientWithActivation.Shape.Length;
+        int axis = _axis < 0 ? rank + _axis : _axis;
+
+        // Slice for the first input
+        int firstInputSize = _lastInputSizesGpu[0];
+        var firstGradient = gpuEngine.SliceGpu(gradientWithActivation, axis, 0, firstInputSize);
+
+        return firstGradient;
+    }
+
+    /// <summary>
+    /// Computes the activation backward gradient on GPU.
+    /// </summary>
+    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    {
+        return activationType switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, output),
+            _ => gradOutput // Identity or unsupported - pass through
+        };
     }
 
     /// <summary>
@@ -627,6 +689,11 @@ public class ConcatenateLayer<T> : LayerBase<T>
     {
         _lastInputs = null;
         _lastOutput = null;
+
+        // Clear GPU cached data
+        _lastOutputGpu?.Dispose();
+        _lastOutputGpu = null;
+        _lastInputSizesGpu = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

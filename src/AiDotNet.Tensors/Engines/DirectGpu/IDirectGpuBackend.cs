@@ -797,6 +797,26 @@ public interface IDirectGpuBackend : IDisposable
         int outputPadH, int outputPadW);
 
     /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. input.
+    /// </summary>
+    void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. kernel.
+    /// </summary>
+    void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
     /// Performs locally connected 2D convolution where each spatial position has unique weights.
     /// </summary>
     /// <param name="input">Input tensor [batch, inChannels, inHeight, inWidth].</param>
@@ -953,6 +973,20 @@ public interface IDirectGpuBackend : IDisposable
 
     void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
     void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global average pooling.
+    /// Broadcasts gradient to all spatial positions and scales by 1/(height*width).
+    /// gradInput[b,c,h,w] = gradOutput[b,c] / (height * width)
+    /// </summary>
+    void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global max pooling.
+    /// Scatters gradient to the positions that had maximum values.
+    /// gradInput[b,c,h,w] = gradOutput[b,c] if (h,w) was max position, else 0
+    /// </summary>
+    void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width);
     void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth);
 
     /// <summary>
@@ -1084,6 +1118,26 @@ public interface IDirectGpuBackend : IDisposable
 
     void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
         IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon);
+
+    /// <summary>
+    /// Computes the backward pass for Instance Normalization.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the next layer [batch, channels, spatialSize].</param>
+    /// <param name="input">Original input from forward pass [batch, channels, spatialSize].</param>
+    /// <param name="gamma">Scale parameters [channels].</param>
+    /// <param name="saveMean">Saved mean from forward pass [batch, channels].</param>
+    /// <param name="saveInvVar">Saved inverse variance from forward pass [batch, channels].</param>
+    /// <param name="gradInput">Output gradient with respect to input [batch, channels, spatialSize].</param>
+    /// <param name="gradGamma">Output gradient with respect to gamma [channels].</param>
+    /// <param name="gradBeta">Output gradient with respect to beta [channels].</param>
+    /// <param name="batch">Number of samples in the batch.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="spatialSize">Spatial size (H * W for 4D input).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon);
 
     void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
         int batchSize, int normalizedSize, float epsilon);
@@ -1222,6 +1276,18 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="width">Input width.</param>
     /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
     void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor);
+
+    /// <summary>
+    /// Backward pass for 2D nearest neighbor upsampling.
+    /// Accumulates gradients from each output pixel in a scale block back to the corresponding input pixel.
+    /// </summary>
+    /// <param name="gradOutput">Gradient w.r.t. output [batchChannels x (height*scaleFactor) x (width*scaleFactor)].</param>
+    /// <param name="gradInput">Gradient w.r.t. input (output) [batchChannels x height x width].</param>
+    /// <param name="batchChannels">Combined batch and channel dimensions.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
+    void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor);
 
     /// <summary>
     /// Performs 3D nearest-neighbor upsampling on volumetric data.

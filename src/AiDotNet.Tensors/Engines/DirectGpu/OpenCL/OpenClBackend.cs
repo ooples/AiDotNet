@@ -4973,6 +4973,140 @@ KERNEL VARIANTS (A/B testing):
             k.Execute3D(outWidth, outHeight, batch * outChannels, localX, localY, localZ);
         }
 
+        public void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int outputPadH, int outputPadW)
+        {
+            // Fallback: CPU implementation (OpenCL kernel can be added later)
+            var gradOutData = DownloadBuffer(gradOutput);
+            var kernelData = DownloadBuffer(kernel);
+            var gradInputData = new float[batch * inChannels * inHeight * inWidth];
+
+            // Backward pass: dL/dX = conv(dL/dY, W) with padding adjustment
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int ih = 0; ih < inHeight; ih++)
+                    {
+                        for (int iw = 0; iw < inWidth; iw++)
+                        {
+                            float sum = 0;
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                for (int kh = 0; kh < kernelH; kh++)
+                                {
+                                    for (int kw = 0; kw < kernelW; kw++)
+                                    {
+                                        int oh = ih * strideH - padH + kh;
+                                        int ow = iw * strideW - padW + kw;
+                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                        {
+                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                            int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                                            sum += gradOutData[goIdx] * kernelData[kIdx];
+                                        }
+                                    }
+                                }
+                            }
+                            gradInputData[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
+                        }
+                    }
+                }
+            }
+
+            // Upload to GPU
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+            var handle = GCHandle.Alloc(gradInputData, GCHandleType.Pinned);
+            try
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    _context.CommandQueue,
+                    ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle,
+                    1, // blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(gradInputData.Length * sizeof(float)),
+                    handle.AddrOfPinnedObject(),
+                    0, IntPtr.Zero, IntPtr.Zero);
+                if (err != 0)
+                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed: {err}");
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+
+        public void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int outputPadH, int outputPadW)
+        {
+            // Fallback: CPU implementation (OpenCL kernel can be added later)
+            var inputData = DownloadBuffer(input);
+            var gradOutData = DownloadBuffer(gradOutput);
+            var gradKernelData = new float[inChannels * outChannels * kernelH * kernelW];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int oc = 0; oc < outChannels; oc++)
+                    {
+                        for (int kh = 0; kh < kernelH; kh++)
+                        {
+                            for (int kw = 0; kw < kernelW; kw++)
+                            {
+                                float sum = 0;
+                                for (int ih = 0; ih < inHeight; ih++)
+                                {
+                                    for (int iw = 0; iw < inWidth; iw++)
+                                    {
+                                        int oh = ih * strideH - padH + kh;
+                                        int ow = iw * strideW - padW + kw;
+                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                        {
+                                            int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                            sum += inputData[inIdx] * gradOutData[goIdx];
+                                        }
+                                    }
+                                }
+                                int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                                gradKernelData[kIdx] += sum;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Upload to GPU
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+            var handle = GCHandle.Alloc(gradKernelData, GCHandleType.Pinned);
+            try
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    _context.CommandQueue,
+                    ((DirectOpenClGpuBuffer)gradKernel).Buffer.Handle,
+                    1, // blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(gradKernelData.Length * sizeof(float)),
+                    handle.AddrOfPinnedObject(),
+                    0, IntPtr.Zero, IntPtr.Zero);
+                if (err != 0)
+                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed: {err}");
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+
         public void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
             int batch, int inChannels, int inHeight, int inWidth,
             int outChannels, int outHeight, int outWidth,
@@ -5403,6 +5537,40 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
+        public void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        {
+            var k = _kernelCache["global_avgpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            int totalElements = batch * channels * height * width;
+            k.Execute1D(totalElements, Math.Min(64, totalElements));
+        }
+
+        public void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        {
+            // First zero out the gradient input
+            Fill(gradInput, 0f, batch * channels * height * width);
+
+            var k = _kernelCache["global_maxpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            int totalOutputs = batch * channels;
+            k.Execute1D(totalOutputs, Math.Min(64, totalOutputs));
+        }
+
         public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         {
             var k = _kernelCache["adaptive_avgpool2d"];
@@ -5733,6 +5901,126 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, epsilon);
 
             k.Execute1D(batch * channels, Math.Min(64, batch * channels));
+        }
+
+        public void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+            IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+            int batch, int channels, int spatialSize, float epsilon)
+        {
+            // Fallback: implement using CPU operations
+            var gradOutData = DownloadBuffer(gradOutput);
+            var inputData = DownloadBuffer(input);
+            var gammaData = DownloadBuffer(gamma);
+            var meanData = DownloadBuffer(saveMean);
+            var invVarData = DownloadBuffer(saveInvVar);
+            var gradInputData = new float[gradOutData.Length];
+            var gradGammaData = new float[channels];
+            var gradBetaData = new float[channels];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int offset = (b * channels + c) * spatialSize;
+                    float meanVal = meanData[b * channels + c];
+                    float invStd = invVarData[b * channels + c];
+                    float g = gammaData[c];
+
+                    // First pass: compute sums for gradient correction
+                    float sumDelta = 0.0f;
+                    float sumDeltaXNorm = 0.0f;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        gradGammaData[c] += go * xNorm;
+                        gradBetaData[c] += go;
+
+                        sumDelta += delta;
+                        sumDeltaXNorm += delta * xNorm;
+                    }
+
+                    // Second pass: compute gradInput with proper correction terms
+                    float invN = 1.0f / spatialSize;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        // dx = invStd * invN * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+                        gradInputData[offset + s] = invStd * invN * (spatialSize * delta - sumDelta - xNorm * sumDeltaXNorm);
+                    }
+                }
+            }
+
+            // Upload results back to GPU buffers
+            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
+
+            // Upload gradInput to GPU
+            var handleGradInput = GCHandle.Alloc(gradInputData, GCHandleType.Pinned);
+            try
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    _context.CommandQueue,
+                    ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle,
+                    1, // blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(gradInputData.Length * sizeof(float)),
+                    handleGradInput.AddrOfPinnedObject(),
+                    0, IntPtr.Zero, IntPtr.Zero);
+                if (err != 0)
+                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed for gradInput: {err}");
+            }
+            finally
+            {
+                handleGradInput.Free();
+            }
+
+            // Upload gradGamma to GPU
+            var handleGradGamma = GCHandle.Alloc(gradGammaData, GCHandleType.Pinned);
+            try
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    _context.CommandQueue,
+                    ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle,
+                    1, // blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(gradGammaData.Length * sizeof(float)),
+                    handleGradGamma.AddrOfPinnedObject(),
+                    0, IntPtr.Zero, IntPtr.Zero);
+                if (err != 0)
+                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed for gradGamma: {err}");
+            }
+            finally
+            {
+                handleGradGamma.Free();
+            }
+
+            // Upload gradBeta to GPU
+            var handleGradBeta = GCHandle.Alloc(gradBetaData, GCHandleType.Pinned);
+            try
+            {
+                int err = OpenClNativeBindings.EnqueueWriteBuffer(
+                    _context.CommandQueue,
+                    ((DirectOpenClGpuBuffer)gradBeta).Buffer.Handle,
+                    1, // blocking
+                    UIntPtr.Zero,
+                    (UIntPtr)(gradBetaData.Length * sizeof(float)),
+                    handleGradBeta.AddrOfPinnedObject(),
+                    0, IntPtr.Zero, IntPtr.Zero);
+                if (err != 0)
+                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed for gradBeta: {err}");
+            }
+            finally
+            {
+                handleGradBeta.Free();
+            }
         }
 
         public void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
@@ -6276,6 +6564,73 @@ KERNEL VARIANTS (A/B testing):
             // Upload output
             var bufferOut = ((DirectOpenClGpuBuffer)output).Buffer;
             bufferOut.CopyFromHost(outputData);
+        }
+
+        /// <inheritdoc/>
+        public void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+            {
+                NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+                return;
+            }
+
+            var bufferIn = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
+            var bufferOut = ((DirectOpenClGpuBuffer)gradInput).Buffer;
+
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            kernel.SetArg(0, bufferIn.Handle);
+            kernel.SetArg(1, bufferOut.Handle);
+            kernel.SetArg(2, batchChannels);
+            kernel.SetArg(3, height);
+            kernel.SetArg(4, width);
+            kernel.SetArg(5, scaleFactor);
+            kernel.SetArg(6, outputSize);
+
+            kernel.Execute1D(outputSize, Math.Min(256, outputSize));
+        }
+
+        /// <summary>
+        /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+        /// </summary>
+        private void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        {
+            int inputSize = batchChannels * height * width;
+            int outHeight = height * scaleFactor;
+            int outWidth = width * scaleFactor;
+            int outputSize = batchChannels * outHeight * outWidth;
+
+            // Download gradient output
+            var gradOutputData = new float[outputSize];
+            var bufferIn = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
+            bufferIn.CopyToHost(gradOutputData);
+
+            // Perform CPU backward (accumulate gradients)
+            var gradInputData = new float[inputSize];
+            for (int bc = 0; bc < batchChannels; bc++)
+            {
+                for (int oh = 0; oh < outHeight; oh++)
+                {
+                    for (int ow = 0; ow < outWidth; ow++)
+                    {
+                        int ih = oh / scaleFactor;
+                        int iw = ow / scaleFactor;
+                        int inputIdx = bc * height * width + ih * width + iw;
+                        int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                        gradInputData[inputIdx] += gradOutputData[outputIdx];
+                    }
+                }
+            }
+
+            // Upload gradient input
+            var bufferOut = ((DirectOpenClGpuBuffer)gradInput).Buffer;
+            bufferOut.CopyFromHost(gradInputData);
         }
 
         #endregion

@@ -175,6 +175,73 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_originalInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batch = _originalInputShape[0];
+        int time = _originalInputShape[1];
+
+        // Apply activation backward if needed
+        IGpuTensor<T> gradAfterActivation = outputGradient;
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None && _lastOutput != null)
+        {
+            var lastOutputGpu = gpuEngine.UploadToGpu<T>(_lastOutput, GpuTensorRole.Activation);
+            gradAfterActivation = fusedOp switch
+            {
+                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, lastOutputGpu),
+                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, lastOutputGpu),
+                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, lastOutputGpu),
+                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, lastOutputGpu),
+                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, lastOutputGpu),
+                _ => outputGradient
+            };
+            lastOutputGpu.Dispose();
+        }
+
+        // Flatten time dimension for inner layer backward
+        int[] gradShape = gradAfterActivation.Shape;
+        int[] flattenedGradShape = new int[gradShape.Length - 1];
+        flattenedGradShape[0] = batch * time;
+        Array.Copy(gradShape, 2, flattenedGradShape, 1, gradShape.Length - 2);
+
+        var reshapedGrad = gpuEngine.ReshapeGpu(gradAfterActivation, flattenedGradShape);
+
+        // Delegate to inner layer's BackwardGpu if available
+        IGpuTensor<T> innerGrad;
+        var innerLayerType = _innerLayer.GetType();
+        var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (backwardGpuMethod != null)
+        {
+            innerGrad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_innerLayer, new object[] { reshapedGrad })!;
+        }
+        else
+        {
+            // Fallback: Convert to CPU, call CPU backward, convert back
+            var cpuGrad = reshapedGrad.ToTensor();
+            var cpuInnerGrad = _innerLayer.Backward(cpuGrad);
+            innerGrad = gpuEngine.UploadToGpu<T>(cpuInnerGrad, GpuTensorRole.Gradient);
+        }
+
+        // Reshape back to [batch, time, ...]
+        int[] outputGradShape = new int[_originalInputShape.Length];
+        outputGradShape[0] = batch;
+        outputGradShape[1] = time;
+        Array.Copy(_originalInputShape, 2, outputGradShape, 2, _originalInputShape.Length - 2);
+
+        return gpuEngine.ReshapeGpu(innerGrad, outputGradShape);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TimeDistributedLayer{T}"/> class with scalar activation function.
     /// </summary>
     /// <param name="innerLayer">The layer to apply to each time step.</param>

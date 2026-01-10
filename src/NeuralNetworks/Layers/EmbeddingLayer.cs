@@ -1,5 +1,4 @@
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -93,6 +92,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private bool _lastInputWasContinuous;
     private bool? _autoDetectedContinuous;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private int[]? _lastInputGpuShape;
+    private Tensor<int>? _lastIndicesForGpu;
+
     /// <summary>
     /// The gradients for the embedding tensor, computed during backpropagation.
     /// </summary>
@@ -144,53 +148,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last computed embedding regularization loss for diagnostics.
     /// </summary>
     private T _lastEmbeddingRegularizationLoss;
-
-    #region GPU Training Fields
-
-    /// <summary>
-    /// GPU-resident embedding tensor for GPU training.
-    /// </summary>
-    private IGpuTensor<T>? _gpuEmbeddingTensor;
-
-    /// <summary>
-    /// GPU-resident embedding gradient tensor for GPU training.
-    /// </summary>
-    private IGpuTensor<T>? _gpuEmbeddingGradient;
-
-    /// <summary>
-    /// GPU-resident projection weights tensor for GPU training.
-    /// </summary>
-    private IGpuTensor<T>? _gpuProjectionWeights;
-
-    /// <summary>
-    /// GPU-resident projection weights gradient tensor for GPU training.
-    /// </summary>
-    private IGpuTensor<T>? _gpuProjectionWeightsGradient;
-
-    /// <summary>
-    /// Cached flat indices from last forward pass for backward pass.
-    /// </summary>
-    private Tensor<int>? _lastFlatIndices;
-
-    // GPU optimizer state buffers for SGD momentum, NAG, LARS
-    private IGpuTensor<T>? _gpuEmbeddingVelocity;
-    private IGpuTensor<T>? _gpuProjectionVelocity;
-
-    // GPU optimizer state buffers for Adam, AdamW, LAMB
-    private IGpuTensor<T>? _gpuEmbeddingM;
-    private IGpuTensor<T>? _gpuEmbeddingV;
-    private IGpuTensor<T>? _gpuProjectionM;
-    private IGpuTensor<T>? _gpuProjectionV;
-
-    // GPU optimizer state buffers for RMSprop
-    private IGpuTensor<T>? _gpuEmbeddingSquaredAvg;
-    private IGpuTensor<T>? _gpuProjectionSquaredAvg;
-
-    // Adagrad accumulated gradient buffers
-    private IGpuTensor<T>? _gpuEmbeddingAccumulatedGrad;
-    private IGpuTensor<T>? _gpuProjectionAccumulatedGrad;
-
-    #endregion
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (embedding regularization) during training.
@@ -255,11 +212,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <c>true</c> because embedding lookup has efficient GPU support.
     /// </value>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU-resident training.
-    /// </summary>
-    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// Gets the total number of trainable parameters in this layer.
@@ -569,7 +521,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (isContinuousInput)
         {
             // Linear projection for continuous input: input @ _projectionWeights
-            var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
             int inputFeatures = inputTensor.Shape[^1];
 
             // Create projection weights if needed (lazy initialization)
@@ -585,15 +536,16 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 }
             }
 
-            // Cache GPU projection weights for training backward pass
-            if (IsTrainingMode)
-            {
-                _gpuProjectionWeights ??= new GpuTensor<T>(backend, _projectionWeights, GpuTensorRole.Weight);
-            }
-
             // Flatten input to 2D [totalSamples, inputFeatures] for projection
             int totalSamples = inputTensor.Length / inputFeatures;
             var input2D = inputTensor.Reshape([totalSamples, inputFeatures]);
+
+            // Cache GPU input tensor for backward pass
+            if (IsTrainingMode)
+            {
+                _lastInputGpu = gpuEngine.UploadToGpu(input2D, GpuTensorRole.Intermediate);
+                _lastInputGpuShape = inputTensor.Shape;
+            }
 
             // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
             var gpuProjectionOutput = gpuEngine.FusedLinearGpu(input2D, _projectionWeights, null, FusedActivationType.None);
@@ -616,7 +568,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Standard embedding lookup for integer token indices
-        var embedBackend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
         int totalIndices = inputTensor.Length;
         var flatIndices = new Tensor<int>([totalIndices]);
         for (int i = 0; i < totalIndices; i++)
@@ -624,11 +575,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data[i]));
         }
 
-        // Cache flat indices and GPU embedding tensor for backward pass (training only)
+        // Cache indices for backward pass
         if (IsTrainingMode)
         {
-            _lastFlatIndices = flatIndices;
-            _gpuEmbeddingTensor ??= new GpuTensor<T>(embedBackend, _embeddingTensor, GpuTensorRole.Weight);
+            _lastIndicesForGpu = flatIndices;
+            _lastInputGpuShape = inputTensor.Shape;
         }
 
         // Perform GPU embedding lookup - keeps result on GPU
@@ -792,34 +743,92 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// GPU-resident backward pass for embedding layer.
-    /// Computes gradients entirely on GPU without CPU transfers.
+    /// Performs GPU-resident backward pass for the embedding layer.
+    /// Computes gradients for embeddings or projection weights entirely on GPU.
     /// </summary>
     /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient with respect to the input (zero for embeddings).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    /// <returns>GPU-resident gradient to pass to the previous layer (zero for discrete embeddings).</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
     {
-        if (_lastFlatIndices == null || _originalInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
-
-        int vocabSize = _embeddingTensor.Shape[0];
         int embeddingDim = _embeddingTensor.Shape[1];
+        int vocabSize = _embeddingTensor.Shape[0];
 
-        // Compute embedding gradient using GPU backward operation
-        _gpuEmbeddingGradient = gpuEngine.EmbeddingBackwardGpu(outputGradient, _lastFlatIndices, vocabSize, embeddingDim);
+        if (_lastInputWasContinuous)
+        {
+            // Continuous input mode: linear projection backward
+            if (_lastInputGpu == null || _projectionWeights == null || _lastInputGpuShape == null)
+                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (continuous mode).");
 
-        // Also store CPU gradient for compatibility with CPU UpdateParameters
-        _embeddingGradient = _gpuEmbeddingGradient.ToTensor();
+            int inputFeatures = _projectionWeights.Shape[0];
+            int totalSamples = _lastInputGpu.Shape[0];
 
-        // Return zero gradient for input (indices are not differentiable)
-        // Create a GPU tensor filled with zeros matching input shape
-        var inputGradient = Tensor<T>.CreateDefault(_originalInputShape, NumOps.Zero);
-        return new GpuTensor<T>(backend, inputGradient, GpuTensorRole.Gradient);
+            // Reshape gradient to 2D: [totalSamples, embeddingDim]
+            IGpuTensor<T> grad2D;
+            if (outputGradient.Shape.Length != 2)
+            {
+                grad2D = gpuEngine.ReshapeGpu(outputGradient, [totalSamples, embeddingDim]);
+            }
+            else
+            {
+                grad2D = outputGradient;
+            }
+
+            // Compute projection weight gradient: dW = input^T @ grad2D
+            // _lastInputGpu shape: [totalSamples, inputFeatures]
+            var inputTransposed = gpuEngine.TransposeGpu<T>(_lastInputGpu);
+            var projectionGradGpu = gpuEngine.MatMulGpuTensors<T>(inputTransposed, grad2D);
+            _projectionWeightsGradient = projectionGradGpu.ToTensor();
+
+            // Compute input gradient: dInput = grad2D @ projectionWeights^T
+            var weightsGpu = gpuEngine.UploadToGpu(_projectionWeights, GpuTensorRole.Weight);
+            var weightsTransposed = gpuEngine.TransposeGpu<T>(weightsGpu);
+            var inputGrad2D = gpuEngine.MatMulGpuTensors<T>(grad2D, weightsTransposed);
+
+            // Clear embedding gradient (not used in continuous mode)
+            _embeddingGradient = null;
+
+            // Reshape to original input shape if needed
+            if (_lastInputGpuShape.Length != 2)
+            {
+                return gpuEngine.ReshapeGpu(inputGrad2D, _lastInputGpuShape);
+            }
+
+            return inputGrad2D;
+        }
+        else
+        {
+            // Discrete embedding mode: scatter-add gradient to embedding table
+            if (_lastIndicesForGpu == null || _lastInputGpuShape == null)
+                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (embedding mode).");
+
+            int numIndices = _lastIndicesForGpu.Length;
+
+            // Flatten gradient to 2D: [numIndices, embeddingDim]
+            IGpuTensor<T> flatGrad;
+            if (outputGradient.ElementCount != numIndices * embeddingDim)
+            {
+                flatGrad = gpuEngine.ReshapeGpu(outputGradient, [numIndices, embeddingDim]);
+            }
+            else
+            {
+                flatGrad = outputGradient.CreateView(0, [numIndices, embeddingDim]);
+            }
+
+            // Use GPU scatter-add for embedding gradient computation
+            var embeddingGradGpu = gpuEngine.EmbeddingBackwardGpu<T>(flatGrad, _lastIndicesForGpu, vocabSize, embeddingDim);
+
+            // Store gradient for UpdateParameters
+            _embeddingGradient = embeddingGradGpu.ToTensor();
+
+            // For discrete embeddings, input gradient is zero (indices not differentiable)
+            // Return a zero-filled GPU tensor with the original input shape
+            var zeroGrad = gpuEngine.ZerosGpu<T>(_lastInputGpuShape);
+            return zeroGrad;
+        }
     }
 
     /// <summary>
@@ -871,159 +880,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_projectionWeights != null)
         {
             Engine.InvalidatePersistentTensor(_projectionWeights);
-        }
-    }
-
-    /// <summary>
-    /// GPU-resident parameter update using polymorphic optimizer dispatch.
-    /// Supports SGD, Adam, AdamW, RMSprop, and other optimizers via IGpuOptimizerConfig.
-    /// </summary>
-    /// <param name="config">GPU optimizer configuration containing type and hyperparameters.</param>
-    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
-    {
-        if (_gpuEmbeddingGradient == null || _gpuEmbeddingTensor == null)
-            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("UpdateParametersGpu requires a GPU engine to be active.");
-
-        var backend = gpuEngine.DirectGpu?.Backend;
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend is not available.");
-
-        // Ensure optimizer state buffers are allocated
-        EnsureGpuOptimizerState(backend, config.OptimizerType);
-
-        // Get GPU buffers for parameters and gradients
-        var embeddingBuffer = _gpuEmbeddingTensor.Buffer;
-        var embeddingGradBuffer = _gpuEmbeddingGradient.Buffer;
-        int embeddingSize = _embeddingTensor.Length;
-
-        // Build state object for embedding
-        var embeddingState = BuildOptimizerState(config.OptimizerType, isEmbedding: true);
-
-        // Apply optimizer update using polymorphic dispatch
-        config.ApplyUpdate(backend, embeddingBuffer, embeddingGradBuffer, embeddingState, embeddingSize);
-
-        // Handle projection weights if present
-        if (_gpuProjectionWeights != null && _gpuProjectionWeightsGradient != null && _projectionWeights != null)
-        {
-            var projectionBuffer = _gpuProjectionWeights.Buffer;
-            var projectionGradBuffer = _gpuProjectionWeightsGradient.Buffer;
-            int projectionSize = _projectionWeights.Length;
-
-            var projectionState = BuildOptimizerState(config.OptimizerType, isEmbedding: false);
-            config.ApplyUpdate(backend, projectionBuffer, projectionGradBuffer, projectionState, projectionSize);
-
-            // Sync projection weights back to CPU
-            _projectionWeights = _gpuProjectionWeights.ToTensor();
-            Engine.InvalidatePersistentTensor(_projectionWeights);
-        }
-
-        // Sync embedding weights back to CPU for interoperability
-        _embeddingTensor = _gpuEmbeddingTensor.ToTensor();
-        Engine.InvalidatePersistentTensor(_embeddingTensor);
-    }
-
-    /// <summary>
-    /// Builds the GPU optimizer state for embedding or projection weights based on optimizer type.
-    /// </summary>
-    private GpuOptimizerState BuildOptimizerState(GpuOptimizerType optimizerType, bool isEmbedding)
-    {
-        return optimizerType switch
-        {
-            GpuOptimizerType.Sgd or GpuOptimizerType.Nag or GpuOptimizerType.Lars =>
-                new GpuOptimizerState { Velocity = isEmbedding ? _gpuEmbeddingVelocity?.Buffer : _gpuProjectionVelocity?.Buffer },
-
-            GpuOptimizerType.Adam or GpuOptimizerType.AdamW or GpuOptimizerType.Lamb =>
-                new GpuOptimizerState
-                {
-                    M = isEmbedding ? _gpuEmbeddingM?.Buffer : _gpuProjectionM?.Buffer,
-                    V = isEmbedding ? _gpuEmbeddingV?.Buffer : _gpuProjectionV?.Buffer
-                },
-
-            GpuOptimizerType.RmsProp =>
-                new GpuOptimizerState { SquaredAvg = isEmbedding ? _gpuEmbeddingSquaredAvg?.Buffer : _gpuProjectionSquaredAvg?.Buffer },
-
-            GpuOptimizerType.Adagrad =>
-                new GpuOptimizerState { AccumulatedGrad = isEmbedding ? _gpuEmbeddingAccumulatedGrad?.Buffer : _gpuProjectionAccumulatedGrad?.Buffer },
-
-            _ => throw new NotSupportedException($"GPU optimizer type {optimizerType} is not supported.")
-        };
-    }
-
-    /// <summary>
-    /// Ensures GPU optimizer state buffers are allocated for the specified optimizer type.
-    /// </summary>
-    private void EnsureGpuOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
-    {
-        switch (optimizerType)
-        {
-            case GpuOptimizerType.Sgd:
-            case GpuOptimizerType.Nag:
-            case GpuOptimizerType.Lars:
-                // These use velocity buffers
-                if (_gpuEmbeddingVelocity == null)
-                {
-                    var embeddingZeros = Tensor<T>.CreateDefault(_embeddingTensor.Shape, NumOps.Zero);
-                    _gpuEmbeddingVelocity = new GpuTensor<T>(backend, embeddingZeros, GpuTensorRole.OptimizerState);
-
-                    if (_projectionWeights != null)
-                    {
-                        var projectionZeros = Tensor<T>.CreateDefault(_projectionWeights.Shape, NumOps.Zero);
-                        _gpuProjectionVelocity = new GpuTensor<T>(backend, projectionZeros, GpuTensorRole.OptimizerState);
-                    }
-                }
-                break;
-
-            case GpuOptimizerType.Adam:
-            case GpuOptimizerType.AdamW:
-            case GpuOptimizerType.Lamb:
-                // These use m (first moment) and v (second moment) buffers
-                if (_gpuEmbeddingM == null)
-                {
-                    var embeddingZeros = Tensor<T>.CreateDefault(_embeddingTensor.Shape, NumOps.Zero);
-                    _gpuEmbeddingM = new GpuTensor<T>(backend, embeddingZeros, GpuTensorRole.OptimizerState);
-                    _gpuEmbeddingV = new GpuTensor<T>(backend, embeddingZeros, GpuTensorRole.OptimizerState);
-
-                    if (_projectionWeights != null)
-                    {
-                        var projectionZeros = Tensor<T>.CreateDefault(_projectionWeights.Shape, NumOps.Zero);
-                        _gpuProjectionM = new GpuTensor<T>(backend, projectionZeros, GpuTensorRole.OptimizerState);
-                        _gpuProjectionV = new GpuTensor<T>(backend, projectionZeros, GpuTensorRole.OptimizerState);
-                    }
-                }
-                break;
-
-            case GpuOptimizerType.RmsProp:
-                // Uses squared average buffer
-                if (_gpuEmbeddingSquaredAvg == null)
-                {
-                    var embeddingZeros = Tensor<T>.CreateDefault(_embeddingTensor.Shape, NumOps.Zero);
-                    _gpuEmbeddingSquaredAvg = new GpuTensor<T>(backend, embeddingZeros, GpuTensorRole.OptimizerState);
-
-                    if (_projectionWeights != null)
-                    {
-                        var projectionZeros = Tensor<T>.CreateDefault(_projectionWeights.Shape, NumOps.Zero);
-                        _gpuProjectionSquaredAvg = new GpuTensor<T>(backend, projectionZeros, GpuTensorRole.OptimizerState);
-                    }
-                }
-                break;
-
-            case GpuOptimizerType.Adagrad:
-                // Uses accumulated gradient buffer
-                if (_gpuEmbeddingAccumulatedGrad == null)
-                {
-                    var embeddingZeros = Tensor<T>.CreateDefault(_embeddingTensor.Shape, NumOps.Zero);
-                    _gpuEmbeddingAccumulatedGrad = new GpuTensor<T>(backend, embeddingZeros, GpuTensorRole.OptimizerState);
-
-                    if (_projectionWeights != null)
-                    {
-                        var projectionZeros = Tensor<T>.CreateDefault(_projectionWeights.Shape, NumOps.Zero);
-                        _gpuProjectionAccumulatedGrad = new GpuTensor<T>(backend, projectionZeros, GpuTensorRole.OptimizerState);
-                    }
-                }
-                break;
         }
     }
 
@@ -1305,10 +1161,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInputWasContinuous = false;
         _autoDetectedContinuous = null;
 
-        // Clear GPU cached values
-        _lastFlatIndices = null;
-        _gpuEmbeddingGradient = null;
-        _gpuProjectionWeightsGradient = null;
+        // Clear GPU-related cached data
+        _lastInputGpu?.Dispose();
+        _lastInputGpu = null;
+        _lastInputGpuShape = null;
+        _lastIndicesForGpu = null;
     }
 
     /// <summary>

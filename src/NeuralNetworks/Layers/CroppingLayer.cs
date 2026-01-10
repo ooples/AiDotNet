@@ -208,6 +208,7 @@ public class CroppingLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInput = input.ToTensor();
+            _gpuCachedInputShape = (int[])inputShape.Clone();
         }
 
         return result;
@@ -236,7 +237,74 @@ public class CroppingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CroppingLayer{T}"/> class with the specified 
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// The backward pass is the inverse of cropping - it scatters the output gradients back to
+    /// their original positions in the input and fills the cropped regions with zeros.
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int[] inputShape = _gpuCachedInputShape;
+        int[] outputShape = outputGradient.Shape;
+
+        int inputSize = 1;
+        foreach (var dim in inputShape) inputSize *= dim;
+
+        int outputSize = 1;
+        foreach (var dim in outputShape) outputSize *= dim;
+
+        // Generate the same index mapping as forward pass
+        // indices[outputIdx] = inputIdx tells us where each output element came from
+        int[] indices = new int[outputSize];
+        int rank = inputShape.Length;
+        int[] outputStrides = new int[rank];
+        int[] inputStrides = new int[rank];
+
+        outputStrides[rank - 1] = 1;
+        inputStrides[rank - 1] = 1;
+        for (int i = rank - 2; i >= 0; i--)
+        {
+            outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
+            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
+        }
+
+        System.Threading.Tasks.Parallel.For(0, outputSize, i =>
+        {
+            int remaining = i;
+            int inputIdx = 0;
+
+            for (int d = 0; d < rank; d++)
+            {
+                int dimIdx = remaining / outputStrides[d];
+                remaining %= outputStrides[d];
+                inputIdx += (dimIdx + _cropTop[d] + _cropLeft[d]) * inputStrides[d];
+            }
+            indices[i] = inputIdx;
+        });
+
+        using var indicesBuffer = backend.AllocateIntBuffer(indices);
+
+        // Use scatter add to place gradients at original input positions
+        // ScatterAddGpu: dest[indices[i]] += source[i]
+        var gradInput = gpuEngine.ScatterAddGpu(outputGradient, indicesBuffer, inputSize);
+        gradInput = gpuEngine.ReshapeGpu(gradInput, inputShape);
+
+        return gradInput;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CroppingLayer{T}"/> class with the specified
     /// cropping parameters and a scalar activation function.
     /// </summary>
     /// <param name="inputShape">The shape of the input data.</param>
@@ -474,6 +542,11 @@ public class CroppingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Cached input shape for GPU backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
+
+    /// <summary>
     /// Backward pass implementation using automatic differentiation.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -656,8 +729,9 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached input for autodiff
+        // Clear cached data for autodiff and GPU backward
         _lastInput = null;
+        _gpuCachedInputShape = null;
     }
 
     /// <summary>

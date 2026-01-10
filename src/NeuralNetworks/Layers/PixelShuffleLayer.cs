@@ -52,6 +52,16 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalInputShape;
 
+    /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
+
+    /// <summary>
+    /// Whether a batch dimension was added for 3D input in GPU forward.
+    /// </summary>
+    private bool _gpuAdded3DBatch;
+
     #endregion
 
     #region Properties
@@ -329,8 +339,8 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _originalInputShape = shape;
+            _gpuCachedInputShape = (int[])shape.Clone();
+            _gpuAdded3DBatch = added3DBatch;
         }
 
         int outChannels = channels / r2;
@@ -358,6 +368,78 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     #endregion
 
     #region Backward Pass
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">The gradient from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass of pixel shuffle (pixel unshuffle) reverses the forward:
+    /// Reshape [N, C, H*r, W*r] -> [N, C, H, r, W, r] -> Permute (inverse) -> [N, C, r, r, H, W] -> Reshape [N, C*r², H, W]
+    /// </para>
+    /// </remarks>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var gradShape = outputGradient.Shape;
+        int r = _upscaleFactor;
+        int r2 = r * r;
+
+        // Get dimensions from cached input shape
+        int batch, channels, height, width;
+        var grad = outputGradient;
+
+        if (_gpuAdded3DBatch)
+        {
+            // Original was 3D, add batch dimension to gradient
+            batch = 1;
+            channels = gradShape[0] * r2; // output had reduced channels
+            int outHeight = gradShape[1];
+            int outWidth = gradShape[2];
+            height = outHeight / r;
+            width = outWidth / r;
+            grad = gpuEngine.ReshapeGpu(outputGradient, new[] { 1, gradShape[0], outHeight, outWidth });
+        }
+        else
+        {
+            batch = gradShape[0];
+            channels = gradShape[1] * r2; // output had reduced channels
+            int outHeight = gradShape[2];
+            int outWidth = gradShape[3];
+            height = outHeight / r;
+            width = outWidth / r;
+        }
+
+        int outChannels = channels / r2; // = gradShape[1] or gradShape[0] for 3D
+        int outHeight2 = height * r;
+        int outWidth2 = width * r;
+
+        // Step 1: Reshape [N, C, H*r, W*r] -> [N, C, H, r, W, r]
+        var reshaped1 = gpuEngine.ReshapeGpu(grad, new[] { batch, outChannels, height, r, width, r });
+
+        // Step 2: Permute [N, C, H, r, W, r] -> [N, C, r, r, H, W]
+        // Original forward permutation was [0, 1, 4, 2, 5, 3]
+        // Inverse permutation: [0, 1, 3, 5, 2, 4]
+        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 3, 5, 2, 4 });
+
+        // Step 3: Reshape [N, C, r, r, H, W] -> [N, C*r², H, W]
+        var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, channels, height, width });
+
+        // Remove batch dimension if we added it
+        if (_gpuAdded3DBatch)
+        {
+            result = gpuEngine.ReshapeGpu(result, new[] { channels, height, width });
+        }
+
+        return result;
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -430,6 +512,8 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _originalInputShape = null;
+        _gpuCachedInputShape = null;
+        _gpuAdded3DBatch = false;
     }
 
     #endregion

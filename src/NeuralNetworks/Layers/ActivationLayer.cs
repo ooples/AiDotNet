@@ -1,7 +1,5 @@
-using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -32,6 +30,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// and will be null until Forward() is called at least once.
     /// </remarks>
     private Tensor<T>? _lastInput;
+
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
 
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
@@ -559,169 +561,10 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
-        _gpuLastInput?.Dispose();
-        _gpuLastInput = null;
-        _gpuLastOutput?.Dispose();
-        _gpuLastOutput = null;
-    }
 
-    /// <summary>
-    /// GPU-resident input tensor from the last forward pass.
-    /// </summary>
-    private IGpuTensor<T>? _gpuLastInput;
-
-    /// <summary>
-    /// GPU-resident output tensor from the last forward pass (needed for some activations like Sigmoid/Tanh).
-    /// </summary>
-    private IGpuTensor<T>? _gpuLastOutput;
-
-    /// <summary>
-    /// Gets whether this layer supports GPU-resident training.
-    /// </summary>
-    /// <value>
-    /// True if the activation function reports GPU training support via its SupportsGpuTraining property.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// GPU training is supported if the underlying activation function has implemented
-    /// GPU kernels for both forward and backward passes. This is determined by the
-    /// activation function's SupportsGpuTraining property.
-    /// Vector activations like Softmax are not yet supported for GPU training.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsGpuTraining
-    {
-        get
-        {
-            // Vector activations not yet supported for GPU training
-            if (_useVectorActivation)
-                return false;
-
-            // Delegate to the activation function's GPU support property
-            var activation = ScalarActivation;
-            return activation?.SupportsGpuTraining ?? false;
-        }
-    }
-
-    /// <summary>
-    /// Performs the forward pass of the activation layer on GPU.
-    /// </summary>
-    /// <param name="inputs">The GPU-resident input tensor(s).</param>
-    /// <returns>The GPU-resident output tensor with activation applied.</returns>
-    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the activation type is not supported for GPU.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method applies the activation function on GPU, keeping data GPU-resident.
-    /// The input and/or output are cached for the backward pass depending on the activation type.
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-
-        // Get the GPU engine
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
-        }
-
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
-        int size = input.ElementCount;
-
-        // Store GPU input for backward pass
-        _gpuLastInput = input;
-
-        // Use activation function's GPU method if supported
-        if (!_useVectorActivation && ScalarActivation is { SupportsGpuTraining: true })
-        {
-            var outputBuffer = backend.AllocateBuffer(size);
-            ScalarActivation.ForwardGpu(backend, input.Buffer, outputBuffer, size);
-            var gpuOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation);
-            _gpuLastOutput = gpuOutput;
-            return gpuOutput;
-        }
-
-        // Fallback to CPU for unsupported activations
-        var cpuInput = input.ToTensor();
-        var cpuOutput = _useVectorActivation ? ApplyVectorActivation(cpuInput) : ApplyScalarActivation(cpuInput);
-
-        // Store CPU input for backward compatibility
-        _lastInput = cpuInput;
-
-        // Upload result to GPU
-        var gpuOutputFallback = new GpuTensor<T>(backend, cpuOutput, GpuTensorRole.Activation);
-        _gpuLastOutput = gpuOutputFallback;
-
-        return gpuOutputFallback;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the activation layer on GPU.
-    /// </summary>
-    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
-    /// <returns>The GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when ForwardGpu was not called first.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the activation type is not supported for GPU.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method computes the activation gradient on GPU. The activation function's BackwardGpu
-    /// method is called directly, which knows whether it needs the input or output from the
-    /// forward pass based on the specific activation type.
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuLastInput == null)
-        {
-            if (_lastInput != null)
-            {
-                throw new InvalidOperationException(
-                    "BackwardGpu requires ForwardGpu to be called first. " +
-                    "The forward pass was performed on CPU. Use Backward() instead.");
-            }
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-        }
-
-        if (_useVectorActivation)
-        {
-            throw new NotSupportedException(
-                "Vector activations (like Softmax) do not yet support GPU-resident backward pass.");
-        }
-
-        // Get the GPU engine
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
-        }
-
-        var backend = gpuEngine.Backend ?? throw new InvalidOperationException("GPU backend not available");
-        int size = outputGradient.ElementCount;
-
-        // Use activation function's GPU backward method if supported
-        if (ScalarActivation is { SupportsGpuTraining: true })
-        {
-            var gradInputBuffer = backend.AllocateBuffer(size);
-            // Pass both input and output - the activation function knows which one it needs
-            ScalarActivation.BackwardGpu(
-                backend,
-                outputGradient.Buffer,
-                _gpuLastInput?.Buffer,
-                _gpuLastOutput?.Buffer,
-                gradInputBuffer,
-                size);
-            return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient);
-        }
-
-        // Fallback to CPU for unsupported activations
-        var gradOutput = outputGradient.ToTensor();
-        var gradInput = BackwardScalarActivation(gradOutput);
-
-        // Upload result to GPU
-        return new GpuTensor<T>(backend, gradInput, GpuTensorRole.Gradient);
+        // Clear GPU-resident cached tensors
+        _lastInputGpu = null;
+        _lastOutputGpu = null;
     }
 
     /// <summary>
@@ -804,5 +647,142 @@ public class ActivationLayer<T> : LayerBase<T>
                 activation = (IActivationFunction<T>)VectorActivation;
             return activation?.SupportsJitCompilation ?? false;
         }
+    }
+
+    /// <summary>
+    /// Gets whether this layer's activation function supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GPU execution is supported for common scalar activation functions that have
+    /// dedicated GPU kernels: ReLU, LeakyReLU, Sigmoid, Tanh, GELU, and Swish.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the activation function can run on GPU.
+    /// Most common activations like ReLU and Sigmoid have GPU support.
+    /// Exotic or vector activations (like Softmax) may not support GPU execution yet.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsGpuExecution => TryGetFusedActivationType(out _);
+
+    /// <summary>
+    /// Performs the forward pass on GPU using GPU-accelerated activation kernels.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU tensor with the activation function applied.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when GPU execution is not supported for this activation type.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method applies the activation function entirely on the GPU using optimized kernels.
+    /// Supported activations: ReLU, LeakyReLU, Sigmoid, Tanh, GELU, Swish.
+    /// </para>
+    /// <para><b>For Beginners:</b> The GPU version of activation is much faster for large tensors
+    /// because GPUs can process thousands of values in parallel.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        if (!TryGetFusedActivationType(out var fusedType))
+            throw new InvalidOperationException(
+                $"Activation function '{GetActivationTypeName()}' does not support GPU execution. " +
+                $"Use the CPU Forward method instead.");
+
+        var input = inputs[0];
+        var result = gpuEngine.ActivationGpu<T>(input, fusedType);
+
+        // Cache GPU tensors for BackwardGpu
+        if (IsTrainingMode)
+        {
+            _lastInputGpu = input;
+            _lastOutputGpu = result;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the activation layer.
+    /// Computes gradient with respect to input entirely on GPU - no CPU roundtrip.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_lastInputGpu == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        if (!TryGetFusedActivationType(out var fusedType))
+            throw new InvalidOperationException(
+                $"Activation function '{GetActivationTypeName()}' does not support GPU backward pass.");
+
+        // Apply appropriate activation backward based on type
+        return fusedType switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            _ => outputGradient // Fallback: gradient passes through unchanged
+        };
+    }
+
+    /// <summary>
+    /// Attempts to map the configured activation function to a FusedActivationType for GPU execution.
+    /// </summary>
+    private bool TryGetFusedActivationType(out FusedActivationType fusedType)
+    {
+        // Vector activations (like Softmax) are not supported on GPU yet
+        if (_useVectorActivation)
+        {
+            fusedType = FusedActivationType.None;
+            return false;
+        }
+
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null)
+        {
+            fusedType = FusedActivationType.None;
+            return false;
+        }
+
+        // Map activation function types to GPU kernel types
+        fusedType = activation switch
+        {
+            ReLUActivation<T> => FusedActivationType.ReLU,
+            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
+            SigmoidActivation<T> => FusedActivationType.Sigmoid,
+            TanhActivation<T> => FusedActivationType.Tanh,
+            GELUActivation<T> => FusedActivationType.GELU,
+            SwishActivation<T> or SiLUActivation<T> => FusedActivationType.Swish,
+            _ => FusedActivationType.None
+        };
+
+        return fusedType != FusedActivationType.None;
+    }
+
+    /// <summary>
+    /// Gets the name of the activation function type for error messages.
+    /// </summary>
+    private string GetActivationTypeName()
+    {
+        if (_useVectorActivation && VectorActivation != null)
+            return VectorActivation.GetType().Name;
+        if (ScalarActivation != null)
+            return ScalarActivation.GetType().Name;
+        return "Unknown";
     }
 }

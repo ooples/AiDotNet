@@ -56,6 +56,11 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _reluOut;
     private Tensor<T>? _convOut;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuBnOut;
+    private IGpuTensor<T>? _gpuConvOut;
+    private bool _gpuAdded3DBatch;
+
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
@@ -246,6 +251,9 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Cache intermediates for backward during training
         if (IsTrainingMode)
         {
+            _gpuBnOut = bnOutput;
+            _gpuConvOut = convOutput;
+            _gpuAdded3DBatch = added3DBatch;
             _bnOut = bnOutput.ToTensor();
             _reluOut = reluOutput.ToTensor();
             _convOut = convOutput.ToTensor();
@@ -259,6 +267,80 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         return poolOutput;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuBnOut == null || _gpuConvOut == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Handle 3D -> 4D shape conversion if we did it in forward
+        IGpuTensor<T> grad = outputGradient;
+        if (_gpuAdded3DBatch && outputGradient.Shape.Length == 3)
+        {
+            grad = gpuEngine.ReshapeGpu(outputGradient, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+        }
+
+        // Backward through pool
+        var poolType = _pool.GetType();
+        var poolBackwardGpu = poolType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (poolBackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)poolBackwardGpu.Invoke(_pool, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _convOut != null ? AvgPool2DBackward(cpuGrad, _gpuConvOut.Shape) : _pool.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Backward through conv
+        var convType = _conv.GetType();
+        var convBackwardGpu = convType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (convBackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)convBackwardGpu.Invoke(_conv, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _conv.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Backward through ReLU - uses BN output as input
+        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBnOut);
+
+        // Backward through BN
+        var bnType = _bn.GetType();
+        var bnBackwardGpu = bnType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+        if (bnBackwardGpu != null)
+        {
+            grad = (IGpuTensor<T>)bnBackwardGpu.Invoke(_bn, new object[] { grad })!;
+        }
+        else
+        {
+            var cpuGrad = grad.ToTensor();
+            var cpuResult = _bn.Backward(cpuGrad);
+            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+        }
+
+        // Remove batch dimension if we added it
+        if (_gpuAdded3DBatch && grad.Shape.Length == 4)
+        {
+            grad = gpuEngine.ReshapeGpu(grad, new[] { grad.Shape[1], grad.Shape[2], grad.Shape[3] });
+        }
+
+        return grad;
     }
 
     /// <summary>
@@ -408,6 +490,9 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _bnOut = null;
         _reluOut = null;
         _convOut = null;
+        _gpuBnOut = null;
+        _gpuConvOut = null;
+        _gpuAdded3DBatch = false;
 
         _bn.ResetState();
         _conv.ResetState();

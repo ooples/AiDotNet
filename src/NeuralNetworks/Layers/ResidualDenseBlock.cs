@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -104,6 +105,25 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Cached concatenated inputs to each conv layer for backpropagation.
     /// </summary>
     private Tensor<T>[]? _concatInputs;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuConv1Out;
+    private IGpuTensor<T>? _gpuX1Activated;
+    private IGpuTensor<T>? _gpuConcat1;
+    private IGpuTensor<T>? _gpuConv2Out;
+    private IGpuTensor<T>? _gpuX2Activated;
+    private IGpuTensor<T>? _gpuConcat2;
+    private IGpuTensor<T>? _gpuConv3Out;
+    private IGpuTensor<T>? _gpuX3Activated;
+    private IGpuTensor<T>? _gpuConcat3;
+    private IGpuTensor<T>? _gpuConv4Out;
+    private IGpuTensor<T>? _gpuX4Activated;
+    private IGpuTensor<T>? _gpuConcat4;
+    private IGpuTensor<T>? _gpuConv5Out;
+    private int _gpuBatch;
+    private int _gpuHeight;
+    private int _gpuWidth;
 
     #endregion
 
@@ -351,72 +371,81 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         int spatialSize = height * width;
 
+        // Cache dimensions for backward pass
+        if (IsTrainingMode)
+        {
+            _gpuBatch = batch;
+            _gpuHeight = height;
+            _gpuWidth = width;
+            _gpuInput = input;
+        }
+
         // x0 = input
         var x0Buffer = input.Buffer;
 
         // Conv1: x1 = LeakyReLU(Conv(x0))
         var conv1Out = _convLayers[0].ForwardGpu(input);
         int x1Size = batch * _growthChannels * spatialSize;
-        var x1Activated = backend.AllocateBuffer(x1Size);
-        backend.LeakyRelu(conv1Out.Buffer, x1Activated, 0.2f, x1Size);
+        var x1ActivatedBuffer = backend.AllocateBuffer(x1Size);
+        backend.LeakyRelu(conv1Out.Buffer, x1ActivatedBuffer, 0.2f, x1Size);
 
         // Concatenate x0 and x1 for conv2 input: [channels + growthChannels]
         int concat1Channels = _numFeatures + _growthChannels;
         int concat1Size = batch * concat1Channels * spatialSize;
         var concat1Buffer = backend.AllocateBuffer(concat1Size);
-        ConcatenateChannelsGpu(backend, x0Buffer, x1Activated, concat1Buffer,
+        ConcatenateChannelsGpu(backend, x0Buffer, x1ActivatedBuffer, concat1Buffer,
             batch, _numFeatures, _growthChannels, spatialSize);
         var concat1Tensor = new GpuTensor<T>(backend, concat1Buffer,
             shape.Length == 3 ? [concat1Channels, height, width] : [batch, concat1Channels, height, width],
-            GpuTensorRole.Activation, ownsBuffer: true);
+            GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
         // Conv2: x2 = LeakyReLU(Conv(concat(x0, x1)))
         var conv2Out = _convLayers[1].ForwardGpu(concat1Tensor);
         int x2Size = batch * _growthChannels * spatialSize;
-        var x2Activated = backend.AllocateBuffer(x2Size);
-        backend.LeakyRelu(conv2Out.Buffer, x2Activated, 0.2f, x2Size);
+        var x2ActivatedBuffer = backend.AllocateBuffer(x2Size);
+        backend.LeakyRelu(conv2Out.Buffer, x2ActivatedBuffer, 0.2f, x2Size);
 
         // Concatenate concat1 and x2 for conv3 input: [channels + 2*growthChannels]
         int concat2Channels = _numFeatures + 2 * _growthChannels;
         int concat2Size = batch * concat2Channels * spatialSize;
         var concat2Buffer = backend.AllocateBuffer(concat2Size);
-        ConcatenateChannelsGpu(backend, concat1Buffer, x2Activated, concat2Buffer,
+        ConcatenateChannelsGpu(backend, concat1Buffer, x2ActivatedBuffer, concat2Buffer,
             batch, concat1Channels, _growthChannels, spatialSize);
         var concat2Tensor = new GpuTensor<T>(backend, concat2Buffer,
             shape.Length == 3 ? [concat2Channels, height, width] : [batch, concat2Channels, height, width],
-            GpuTensorRole.Activation, ownsBuffer: true);
+            GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
         // Conv3: x3 = LeakyReLU(Conv(concat(x0, x1, x2)))
         var conv3Out = _convLayers[2].ForwardGpu(concat2Tensor);
         int x3Size = batch * _growthChannels * spatialSize;
-        var x3Activated = backend.AllocateBuffer(x3Size);
-        backend.LeakyRelu(conv3Out.Buffer, x3Activated, 0.2f, x3Size);
+        var x3ActivatedBuffer = backend.AllocateBuffer(x3Size);
+        backend.LeakyRelu(conv3Out.Buffer, x3ActivatedBuffer, 0.2f, x3Size);
 
         // Concatenate concat2 and x3 for conv4 input: [channels + 3*growthChannels]
         int concat3Channels = _numFeatures + 3 * _growthChannels;
         int concat3Size = batch * concat3Channels * spatialSize;
         var concat3Buffer = backend.AllocateBuffer(concat3Size);
-        ConcatenateChannelsGpu(backend, concat2Buffer, x3Activated, concat3Buffer,
+        ConcatenateChannelsGpu(backend, concat2Buffer, x3ActivatedBuffer, concat3Buffer,
             batch, concat2Channels, _growthChannels, spatialSize);
         var concat3Tensor = new GpuTensor<T>(backend, concat3Buffer,
             shape.Length == 3 ? [concat3Channels, height, width] : [batch, concat3Channels, height, width],
-            GpuTensorRole.Activation, ownsBuffer: true);
+            GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
         // Conv4: x4 = LeakyReLU(Conv(concat(x0, x1, x2, x3)))
         var conv4Out = _convLayers[3].ForwardGpu(concat3Tensor);
         int x4Size = batch * _growthChannels * spatialSize;
-        var x4Activated = backend.AllocateBuffer(x4Size);
-        backend.LeakyRelu(conv4Out.Buffer, x4Activated, 0.2f, x4Size);
+        var x4ActivatedBuffer = backend.AllocateBuffer(x4Size);
+        backend.LeakyRelu(conv4Out.Buffer, x4ActivatedBuffer, 0.2f, x4Size);
 
         // Concatenate concat3 and x4 for conv5 input: [channels + 4*growthChannels]
         int concat4Channels = _numFeatures + 4 * _growthChannels;
         int concat4Size = batch * concat4Channels * spatialSize;
         var concat4Buffer = backend.AllocateBuffer(concat4Size);
-        ConcatenateChannelsGpu(backend, concat3Buffer, x4Activated, concat4Buffer,
+        ConcatenateChannelsGpu(backend, concat3Buffer, x4ActivatedBuffer, concat4Buffer,
             batch, concat3Channels, _growthChannels, spatialSize);
         var concat4Tensor = new GpuTensor<T>(backend, concat4Buffer,
             shape.Length == 3 ? [concat4Channels, height, width] : [batch, concat4Channels, height, width],
-            GpuTensorRole.Activation, ownsBuffer: true);
+            GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
         // Conv5: x5 = Conv(concat(x0, x1, x2, x3, x4)) - NO activation
         var x5 = _convLayers[4].ForwardGpu(concat4Tensor);
@@ -428,13 +457,37 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         var outputBuffer = backend.AllocateBuffer(x5Size);
         backend.Add(scaledBuffer, x0Buffer, outputBuffer, x5Size);
-
-        // Dispose intermediate activated buffers (concat buffers disposed by GpuTensor)
-        x1Activated.Dispose();
-        x2Activated.Dispose();
-        x3Activated.Dispose();
-        x4Activated.Dispose();
         scaledBuffer.Dispose();
+
+        // Cache tensors for backward pass or dispose
+        if (IsTrainingMode)
+        {
+            int[] activationShape = shape.Length == 3
+                ? [_growthChannels, height, width]
+                : [batch, _growthChannels, height, width];
+
+            _gpuConv1Out = conv1Out;
+            _gpuX1Activated = new GpuTensor<T>(backend, x1ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuConcat1 = concat1Tensor;
+            _gpuConv2Out = conv2Out;
+            _gpuX2Activated = new GpuTensor<T>(backend, x2ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuConcat2 = concat2Tensor;
+            _gpuConv3Out = conv3Out;
+            _gpuX3Activated = new GpuTensor<T>(backend, x3ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuConcat3 = concat3Tensor;
+            _gpuConv4Out = conv4Out;
+            _gpuX4Activated = new GpuTensor<T>(backend, x4ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuConcat4 = concat4Tensor;
+            _gpuConv5Out = x5;
+        }
+        else
+        {
+            // Not training - dispose intermediate buffers
+            x1ActivatedBuffer.Dispose();
+            x2ActivatedBuffer.Dispose();
+            x3ActivatedBuffer.Dispose();
+            x4ActivatedBuffer.Dispose();
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
@@ -526,6 +579,88 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Combine all gradients flowing to x0
         var totalX0Grad = AddTensors(x0GradFromResidual, x0GradFromConcat1);
         totalX0Grad = AddTensors(totalX0Grad, x0GradFromConv1);
+
+        return totalX0Grad;
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU tensor representing the gradient from the next layer.</param>
+    /// <returns>GPU tensor representing the gradient with respect to the input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuConv1Out == null || _gpuX1Activated == null ||
+            _gpuConcat1 == null || _gpuConv2Out == null || _gpuX2Activated == null ||
+            _gpuConcat2 == null || _gpuConv3Out == null || _gpuX3Activated == null ||
+            _gpuConcat3 == null || _gpuConv4Out == null || _gpuX4Activated == null ||
+            _gpuConcat4 == null || _gpuConv5Out == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int spatialSize = _gpuHeight * _gpuWidth;
+        int outputSize = _gpuBatch * _numFeatures * spatialSize;
+
+        // Gradient through residual: d(x5 * scale + x0)/d(x5) = scale, d(...)/d(x0) = 1
+        // Scale outputGradient by residualScale for x5 gradient
+        var x5GradBuffer = backend.AllocateBuffer(outputSize);
+        backend.Scale(outputGradient.Buffer, x5GradBuffer, (float)_residualScale, outputSize);
+        var x5Grad = new GpuTensor<T>(backend, x5GradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        // Keep original outputGradient as x0GradFromResidual (will be accumulated later)
+
+        // Backward through Conv5 (no activation) to get concat4 gradient
+        var concat4Grad = _convLayers[4].BackwardGpu(x5Grad);
+
+        // Split concat4 gradient into [concat3, x4] using SliceGpu (axis=1 for channels)
+        int concat3Channels = _numFeatures + 3 * _growthChannels;
+        var concat3Grad = gpuEngine.SliceGpu<T>(concat4Grad, 1, 0, concat3Channels);
+        var x4Grad = gpuEngine.SliceGpu<T>(concat4Grad, 1, concat3Channels, concat3Channels + _growthChannels);
+
+        // Backward through activation and Conv4
+        var conv4PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x4Grad, _gpuConv4Out, 0.2f);
+        var concat3GradFromConv4 = _convLayers[3].BackwardGpu(conv4PreGrad);
+        concat3Grad = gpuEngine.AddGpu<T>(concat3Grad, concat3GradFromConv4);
+
+        // Split concat3 gradient into [concat2, x3]
+        int concat2Channels = _numFeatures + 2 * _growthChannels;
+        var concat2Grad = gpuEngine.SliceGpu<T>(concat3Grad, 1, 0, concat2Channels);
+        var x3Grad = gpuEngine.SliceGpu<T>(concat3Grad, 1, concat2Channels, concat2Channels + _growthChannels);
+
+        // Backward through activation and Conv3
+        var conv3PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x3Grad, _gpuConv3Out, 0.2f);
+        var concat2GradFromConv3 = _convLayers[2].BackwardGpu(conv3PreGrad);
+        concat2Grad = gpuEngine.AddGpu<T>(concat2Grad, concat2GradFromConv3);
+
+        // Split concat2 gradient into [concat1, x2]
+        int concat1Channels = _numFeatures + _growthChannels;
+        var concat1Grad = gpuEngine.SliceGpu<T>(concat2Grad, 1, 0, concat1Channels);
+        var x2Grad = gpuEngine.SliceGpu<T>(concat2Grad, 1, concat1Channels, concat1Channels + _growthChannels);
+
+        // Backward through activation and Conv2
+        var conv2PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x2Grad, _gpuConv2Out, 0.2f);
+        var concat1GradFromConv2 = _convLayers[1].BackwardGpu(conv2PreGrad);
+        concat1Grad = gpuEngine.AddGpu<T>(concat1Grad, concat1GradFromConv2);
+
+        // Split concat1 gradient into [x0, x1]
+        var x0GradFromConcat1 = gpuEngine.SliceGpu<T>(concat1Grad, 1, 0, _numFeatures);
+        var x1Grad = gpuEngine.SliceGpu<T>(concat1Grad, 1, _numFeatures, _numFeatures + _growthChannels);
+
+        // Backward through activation and Conv1
+        var conv1PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x1Grad, _gpuConv1Out, 0.2f);
+        var x0GradFromConv1 = _convLayers[0].BackwardGpu(conv1PreGrad);
+
+        // Combine all gradients flowing to x0: residual + concat split + conv1 backward
+        var totalX0Grad = gpuEngine.AddGpu<T>(outputGradient, x0GradFromConcat1);
+        totalX0Grad = gpuEngine.AddGpu<T>(totalX0Grad, x0GradFromConv1);
 
         return totalX0Grad;
     }
@@ -799,6 +934,26 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         _convOutputs = null;
         _activationOutputs = null;
         _concatInputs = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuConv1Out = null;
+        _gpuX1Activated = null;
+        _gpuConcat1 = null;
+        _gpuConv2Out = null;
+        _gpuX2Activated = null;
+        _gpuConcat2 = null;
+        _gpuConv3Out = null;
+        _gpuX3Activated = null;
+        _gpuConcat3 = null;
+        _gpuConv4Out = null;
+        _gpuX4Activated = null;
+        _gpuConcat4 = null;
+        _gpuConv5Out = null;
+        _gpuBatch = 0;
+        _gpuHeight = 0;
+        _gpuWidth = 0;
+
         foreach (var conv in _convLayers)
         {
             conv.ResetState();

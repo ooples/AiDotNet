@@ -2879,6 +2879,130 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    public void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // Fallback: CPU implementation (HIP kernel can be added later)
+        var gradOutData = DownloadBuffer(gradOutput);
+        var kernelData = DownloadBuffer(kernel);
+        var gradInputData = new float[batch * inChannels * inHeight * inWidth];
+
+        // Backward pass: dL/dX = conv(dL/dY, W) with padding adjustment
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int ih = 0; ih < inHeight; ih++)
+                {
+                    for (int iw = 0; iw < inWidth; iw++)
+                    {
+                        float sum = 0;
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int oh = ih * strideH - padH + kh;
+                                    int ow = iw * strideW - padW + kw;
+                                    if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                    {
+                                        int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                        int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                                        sum += gradOutData[goIdx] * kernelData[kIdx];
+                                    }
+                                }
+                            }
+                        }
+                        gradInputData[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
+                    }
+                }
+            }
+        }
+
+        // Upload to GPU
+        var handle = GCHandle.Alloc(gradInputData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                gradInput.Handle,
+                handle.AddrOfPinnedObject(),
+                (UIntPtr)(gradInputData.Length * sizeof(float)),
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (ConvTranspose2DBackwardInput)");
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    public void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // Fallback: CPU implementation (HIP kernel can be added later)
+        var inputData = DownloadBuffer(input);
+        var gradOutData = DownloadBuffer(gradOutput);
+        var gradKernelData = new float[inChannels * outChannels * kernelH * kernelW];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    for (int kh = 0; kh < kernelH; kh++)
+                    {
+                        for (int kw = 0; kw < kernelW; kw++)
+                        {
+                            float sum = 0;
+                            for (int ih = 0; ih < inHeight; ih++)
+                            {
+                                for (int iw = 0; iw < inWidth; iw++)
+                                {
+                                    int oh = ih * strideH - padH + kh;
+                                    int ow = iw * strideW - padW + kw;
+                                    if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
+                                    {
+                                        int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                                        int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                                        sum += inputData[inIdx] * gradOutData[goIdx];
+                                    }
+                                }
+                            }
+                            int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                            gradKernelData[kIdx] += sum;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Upload to GPU
+        var handle = GCHandle.Alloc(gradKernelData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                gradKernel.Handle,
+                handle.AddrOfPinnedObject(),
+                (UIntPtr)(gradKernelData.Length * sizeof(float)),
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (ConvTranspose2DBackwardKernel)");
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
     #endregion
 
     #region Pooling Operations
@@ -3114,6 +3238,68 @@ public sealed class HipBackend : IAsyncGpuBackend
             for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
 
             uint grid = (uint)((batch * channels + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: global_avgpool2d_backward");
+
+        var handles = new GCHandle[6];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(height, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(width, GCHandleType.Pinned);
+
+            var args = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalElements = batch * channels * height * width;
+            uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_maxpool2d_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: global_maxpool2d_backward");
+
+        // First zero out the gradient input
+        Fill(gradInput, 0f, batch * channels * height * width);
+
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(indices.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(channels, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(height, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(width, GCHandleType.Pinned);
+
+            var args = new IntPtr[7];
+            for (int i = 0; i < 7; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            int totalOutputs = batch * channels;
+            uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
             LaunchKernel(krnl, grid, DefaultBlockSize, args);
             Synchronize();
         }
@@ -3564,6 +3750,109 @@ public sealed class HipBackend : IAsyncGpuBackend
         finally
         {
             foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+    {
+        // Fallback: implement using CPU operations (same as CudaBackend fallback)
+        var gradOutData = DownloadBuffer(gradOutput);
+        var inputData = DownloadBuffer(input);
+        var gammaData = DownloadBuffer(gamma);
+        var meanData = DownloadBuffer(saveMean);
+        var invVarData = DownloadBuffer(saveInvVar);
+        var gradInputData = new float[gradOutData.Length];
+        var gradGammaData = new float[channels];
+        var gradBetaData = new float[channels];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int offset = (b * channels + c) * spatialSize;
+                float meanVal = meanData[b * channels + c];
+                float invStd = invVarData[b * channels + c];
+                float g = gammaData[c];
+
+                // First pass: compute sums for gradient correction
+                float sumDelta = 0.0f;
+                float sumDeltaXNorm = 0.0f;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    float go = gradOutData[offset + s];
+                    float x = inputData[offset + s];
+                    float xNorm = (x - meanVal) * invStd;
+                    float delta = go * g;
+
+                    gradGammaData[c] += go * xNorm;
+                    gradBetaData[c] += go;
+
+                    sumDelta += delta;
+                    sumDeltaXNorm += delta * xNorm;
+                }
+
+                // Second pass: compute gradInput with proper correction terms
+                float invN = 1.0f / spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    float go = gradOutData[offset + s];
+                    float x = inputData[offset + s];
+                    float xNorm = (x - meanVal) * invStd;
+                    float delta = go * g;
+
+                    // dx = invStd * invN * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+                    gradInputData[offset + s] = invStd * invN * (spatialSize * delta - sumDelta - xNorm * sumDeltaXNorm);
+                }
+            }
+        }
+
+        // Upload results to GPU buffers using hipMemcpy
+        var handle1 = GCHandle.Alloc(gradInputData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                gradInput.Handle,
+                handle1.AddrOfPinnedObject(),
+                (UIntPtr)(gradInputData.Length * sizeof(float)),
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (InstanceNormBackward gradInput)");
+        }
+        finally
+        {
+            handle1.Free();
+        }
+
+        var handle2 = GCHandle.Alloc(gradGammaData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                gradGamma.Handle,
+                handle2.AddrOfPinnedObject(),
+                (UIntPtr)(gradGammaData.Length * sizeof(float)),
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (InstanceNormBackward gradGamma)");
+        }
+        finally
+        {
+            handle2.Free();
+        }
+
+        var handle3 = GCHandle.Alloc(gradBetaData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                gradBeta.Handle,
+                handle3.AddrOfPinnedObject(),
+                (UIntPtr)(gradBetaData.Length * sizeof(float)),
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (InstanceNormBackward gradBeta)");
+        }
+        finally
+        {
+            handle3.Free();
         }
     }
 
@@ -4869,6 +5158,92 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         // Upload output using existing method
         UploadToBuffer(output, outputData);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("HIP backend is not available.");
+
+        // First zero out the gradient input
+        int inputSize = batchChannels * height * width;
+        Fill(gradInput, 0f, inputSize);
+
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+        {
+            NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+
+        int grid = (outputSize + DefaultBlockSize - 1) / DefaultBlockSize;
+
+        var gradOutHandle = ((HipGpuBuffer)gradOutput).Handle;
+        var gradInHandle = ((HipGpuBuffer)gradInput).Handle;
+
+        void*[] args = new void*[7];
+        fixed (void** argsPtr = args)
+        {
+            IntPtr[] handles = [gradOutHandle, gradInHandle];
+            int[] ints = [batchChannels, height, width, scaleFactor, outputSize];
+
+            fixed (IntPtr* h = handles)
+            fixed (int* i = ints)
+            {
+                argsPtr[0] = &h[0];
+                argsPtr[1] = &h[1];
+                argsPtr[2] = &i[0];
+                argsPtr[3] = &i[1];
+                argsPtr[4] = &i[2];
+                argsPtr[5] = &i[3];
+                argsPtr[6] = &i[4];
+
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel,
+                    (uint)grid, 1, 1,
+                    (uint)DefaultBlockSize, 1, 1,
+                    0, _stream, (IntPtr)argsPtr, IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (nearest_neighbor_upsample_backward)");
+            }
+        }
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+    /// </summary>
+    private void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        int outHeight = height * scaleFactor;
+        int outWidth = width * scaleFactor;
+        int outputSize = batchChannels * outHeight * outWidth;
+        int inputSize = batchChannels * height * width;
+
+        // Download gradOutput
+        var gradOutData = DownloadBuffer(gradOutput);
+
+        // Accumulate gradients on CPU
+        var gradInData = new float[inputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    gradInData[inputIdx] += gradOutData[outputIdx];
+                }
+            }
+        }
+
+        // Upload gradInput
+        UploadToBuffer(gradInput, gradInData);
     }
 
     #endregion

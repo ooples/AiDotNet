@@ -177,6 +177,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T>? _gateBiasGradient;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuTransformOutput;
+    private IGpuTensor<T>? _gpuGateOutput;
+    private IGpuTensor<T>? _gpuTransformPreActivation;
+    private IGpuTensor<T>? _gpuGatePreActivation;
+    private int[]? _gpuInputShape;
+
     /// <summary>
     /// The element-wise activation function applied to the transform output.
     /// </summary>
@@ -558,36 +566,60 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _ => FusedActivationType.Sigmoid // Default to sigmoid for gates
         };
 
-        // Transform path: transform = activation(input @ transformWeights + transformBias)
-        // Note: HighwayLayer weights are [inputDim, inputDim], same as FusedLinearGpu expects
-        var transformOutput = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, transformActivationType);
-
-        // Handle vector activations with CPU fallback if needed
-        if (transformActivationType == FusedActivationType.None && _vectorTransformActivation != null)
-        {
-            var cpuTransform = transformOutput.ToTensor();
-            var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
-            transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
-        }
-
-        // Gate path: gate = sigmoid(input @ gateWeights + gateBias)
-        var gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);
-
-        // Handle vector activations with CPU fallback if needed
-        if (gateActivationType == FusedActivationType.None && _vectorGateActivation != null)
-        {
-            var cpuGate = gateOutput.ToTensor();
-            var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
-            gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
-        }
-
-        // Highway output: output = gate * (transform - input) + input
-        // This needs element-wise operations on GPU
         var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
         int size = input.ElementCount;
+
+        // Transform path: transformLinear = input @ transformWeights + transformBias
+        var transformPreActivation = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, FusedActivationType.None);
+
+        // Apply transform activation
+        IGpuTensor<T> transformOutput;
+        if (transformActivationType != FusedActivationType.None)
+        {
+            // Re-run with activation for output (we need pre-activation separately for backward)
+            transformOutput = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, transformActivationType);
+        }
+        else if (_vectorTransformActivation != null)
+        {
+            var cpuTransform = transformPreActivation.ToTensor();
+            var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
+            transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
+        }
+        else
+        {
+            // Apply default tanh
+            var tanhBuffer = backend.AllocateBuffer(size);
+            backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
+            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+
+        // Gate path: gateLinear = input @ gateWeights + gateBias
+        var gatePreActivation = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, FusedActivationType.None);
+
+        // Apply gate activation (sigmoid)
+        IGpuTensor<T> gateOutput;
+        if (gateActivationType != FusedActivationType.None)
+        {
+            gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);
+        }
+        else if (_vectorGateActivation != null)
+        {
+            var cpuGate = gatePreActivation.ToTensor();
+            var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
+            gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
+        }
+        else
+        {
+            // Apply default sigmoid
+            var sigmoidBuffer = backend.AllocateBuffer(size);
+            backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
+            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        }
+
+        // Highway output: output = gate * (transform - input) + input
         var diffBuffer = backend.AllocateBuffer(size);
         var gatedDiffBuffer = backend.AllocateBuffer(size);
         var outputBuffer = backend.AllocateBuffer(size);
@@ -605,13 +637,22 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         diffBuffer.Dispose();
         gatedDiffBuffer.Dispose();
 
-        // Cache state for backward pass only during training
+        // Cache GPU tensors for backward pass during training
         if (IsTrainingMode)
         {
+            _gpuInput = input;
+            _gpuTransformOutput = transformOutput;
+            _gpuGateOutput = gateOutput;
+            _gpuTransformPreActivation = transformPreActivation;
+            _gpuGatePreActivation = gatePreActivation;
+            _gpuInputShape = input.Shape;
+
+            // Also cache CPU tensors for CPU backward compatibility
             _lastInput = input.ToTensor();
             _lastTransformOutput = transformOutput.ToTensor();
             _lastGateOutput = gateOutput.ToTensor();
-            _lastOutput = new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: false).ToTensor();
+            _lastTransformPreActivation = transformPreActivation.ToTensor();
+            _lastGatePreActivation = gatePreActivation.ToTensor();
         }
 
         return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
@@ -687,6 +728,149 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU for the highway layer.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuTransformOutput == null || _gpuGateOutput == null ||
+            _gpuTransformPreActivation == null || _gpuGatePreActivation == null || _gpuInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = outputGradient.ElementCount;
+        int batchSize = _gpuInputShape[0];
+        int inputDim = _gpuInputShape[1];
+
+        // Get activation types for backward computation
+        bool useTanhTransform = _transformActivation is TanhActivation<T> || _transformActivation == null;
+        bool useSigmoidGate = _gateActivation is SigmoidActivation<T> || _gateActivation == null;
+
+        // Step 1: Compute (transform - input) for gate gradient
+        var transformMinusInputBuffer = backend.AllocateBuffer(size);
+        backend.Subtract(_gpuTransformOutput.Buffer, _gpuInput.Buffer, transformMinusInputBuffer, size);
+        var transformMinusInput = new GpuTensor<T>(backend, transformMinusInputBuffer, _gpuInputShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+
+        // Step 2: Gate gradient: dL/dgate = dL/dOutput * (transform - input)
+        var gateGradBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(outputGradient.Buffer, transformMinusInput.Buffer, gateGradBuffer, size);
+        var gateGradPreActivation = new GpuTensor<T>(backend, gateGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        // Apply sigmoid derivative: d(sigmoid)/dx = sigmoid(x) * (1 - sigmoid(x))
+        IGpuTensor<T> gateGradient;
+        if (useSigmoidGate)
+        {
+            gateGradient = gpuEngine.SigmoidBackwardGpu(gateGradPreActivation, _gpuGatePreActivation);
+        }
+        else
+        {
+            // Fallback for other activations
+            var cpuGateGrad = gateGradPreActivation.ToTensor();
+            var cpuGatePreAct = _gpuGatePreActivation.ToTensor();
+            if (_gateActivation != null)
+            {
+                cpuGateGrad = cpuGateGrad.ElementwiseMultiply(cpuGatePreAct.Transform((x, _) => _gateActivation.Derivative(x)));
+            }
+            gateGradient = gpuEngine.UploadToGpu(cpuGateGrad, GpuTensorRole.Gradient);
+        }
+
+        // Step 3: Transform gradient: dL/dtransform = dL/dOutput * gate
+        var transformGradBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(outputGradient.Buffer, _gpuGateOutput.Buffer, transformGradBuffer, size);
+        var transformGradPreActivation = new GpuTensor<T>(backend, transformGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        // Apply tanh derivative: d(tanh)/dx = 1 - tanh(x)^2
+        IGpuTensor<T> transformGradient;
+        if (useTanhTransform)
+        {
+            transformGradient = gpuEngine.TanhBackwardGpu(transformGradPreActivation, _gpuTransformPreActivation);
+        }
+        else if (_transformActivation is ReLUActivation<T>)
+        {
+            transformGradient = gpuEngine.ReluBackwardGpu(transformGradPreActivation, _gpuTransformPreActivation);
+        }
+        else
+        {
+            // Fallback for other activations
+            var cpuTransformGrad = transformGradPreActivation.ToTensor();
+            var cpuTransformPreAct = _gpuTransformPreActivation.ToTensor();
+            if (_transformActivation != null)
+            {
+                cpuTransformGrad = cpuTransformGrad.ElementwiseMultiply(cpuTransformPreAct.Transform((x, _) => _transformActivation.Derivative(x)));
+            }
+            transformGradient = gpuEngine.UploadToGpu(cpuTransformGrad, GpuTensorRole.Gradient);
+        }
+
+        // Step 4: Compute weight gradients
+        // Upload weights to GPU for transpose operations
+        var gpuTransformWeights = gpuEngine.UploadToGpu(_transformWeights, GpuTensorRole.Weight);
+        var gpuGateWeights = gpuEngine.UploadToGpu(_gateWeights, GpuTensorRole.Weight);
+
+        // Transpose input for weight gradient computation: dW = input^T @ gradient
+        var inputT = gpuEngine.TransposeGpu(_gpuInput);
+
+        // Gate weight gradients: _gateWeightsGradient = input^T @ gateGradient
+        var gpuGateWeightsGrad = gpuEngine.MatMulGpuTensors(inputT, gateGradient);
+        _gateWeightsGradient = gpuGateWeightsGrad.ToTensor();
+
+        // Gate bias gradients: sum over batch dimension
+        var gpuGateBiasGrad = gpuEngine.SumAxisGpu(gateGradient, 0);
+        _gateBiasGradient = gpuGateBiasGrad.ToTensor();
+
+        // Transform weight gradients: _transformWeightsGradient = input^T @ transformGradient
+        var gpuTransformWeightsGrad = gpuEngine.MatMulGpuTensors(inputT, transformGradient);
+        _transformWeightsGradient = gpuTransformWeightsGrad.ToTensor();
+
+        // Transform bias gradients: sum over batch dimension
+        var gpuTransformBiasGrad = gpuEngine.SumAxisGpu(transformGradient, 0);
+        _transformBiasGradient = gpuTransformBiasGrad.ToTensor();
+
+        // Step 5: Compute input gradient
+        // dL/dInput = dL/dGateLinear @ W_gate^T + dL/dTransformLinear @ W_transform^T + dL/dOutput * (1 - gate)
+
+        // Transpose weights
+        var gateWeightsT = gpuEngine.TransposeGpu(gpuGateWeights);
+        var transformWeightsT = gpuEngine.TransposeGpu(gpuTransformWeights);
+
+        // Input gradient from gate path
+        var inputGradFromGate = gpuEngine.MatMulGpuTensors(gateGradient, gateWeightsT);
+
+        // Input gradient from transform path
+        var inputGradFromTransform = gpuEngine.MatMulGpuTensors(transformGradient, transformWeightsT);
+
+        // (1 - gate) contribution: bypass gradient = outputGrad * (1 - gate)
+        var oneMinusGateBuffer = backend.AllocateBuffer(size);
+        var onesBuffer = backend.AllocateBuffer(size);
+
+        // Fill onesBuffer with 1.0
+        backend.Fill(onesBuffer, 1.0f, size);
+        backend.Subtract(onesBuffer, _gpuGateOutput.Buffer, oneMinusGateBuffer, size);
+        onesBuffer.Dispose();
+
+        var bypassGradBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(outputGradient.Buffer, oneMinusGateBuffer, bypassGradBuffer, size);
+        oneMinusGateBuffer.Dispose();
+
+        // Sum all input gradients: inputGrad = inputGradFromGate + inputGradFromTransform + bypassGrad
+        var inputGradPartial = backend.AllocateBuffer(size);
+        backend.Add(inputGradFromGate.Buffer, inputGradFromTransform.Buffer, inputGradPartial, size);
+
+        var inputGradBuffer = backend.AllocateBuffer(size);
+        backend.Add(inputGradPartial, bypassGradBuffer, inputGradBuffer, size);
+        inputGradPartial.Dispose();
+        bypassGradBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, inputGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
 
@@ -1079,6 +1263,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuTransformOutput = null;
+        _gpuGateOutput = null;
+        _gpuTransformPreActivation = null;
+        _gpuGatePreActivation = null;
+        _gpuInputShape = null;
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -110,6 +109,9 @@ public class FlattenLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastInput;
+
+    // GPU-resident cached tensors for GPU training pipeline
+    private int[]? _lastInputGpuShape;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -412,7 +414,7 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
-        _gpuInputShape = null;
+        _lastInputGpuShape = null;
     }
 
     /// <summary>
@@ -422,6 +424,76 @@ public class FlattenLayer<T> : LayerBase<T>
     /// Always <c>true</c> because flatten is a simple reshape operation that can be JIT compiled.
     /// </value>
     public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because flatten is a zero-copy reshape that can be done via GPU tensor view.
+    /// </value>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs the forward pass on GPU using a zero-copy view reshape.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU tensor view with the flattened shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements GPU-resident flatten by creating a view into the input tensor
+    /// with the flattened shape. No data is copied - only the shape interpretation changes.
+    /// </para>
+    /// <para><b>For Beginners:</b> The GPU version of flatten is very efficient because:
+    /// - It doesn't move any data
+    /// - It just tells the GPU "interpret this same data with a different shape"
+    /// - This is called a "view" operation
+    ///
+    /// For example, if input has shape [32, 7, 7, 64], the view will have shape [32, 3136]
+    /// but still points to the exact same memory on the GPU.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Cache input shape for BackwardGpu
+        if (IsTrainingMode)
+        {
+            _lastInputGpuShape = input.Shape.ToArray();
+        }
+
+        // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)
+        if (input.Shape.Length <= 3)
+        {
+            // Unbatched input: flatten to 1D vector
+            return input.CreateView(0, [input.ElementCount]);
+        }
+
+        // Batched input: flatten spatial dimensions keeping batch dimension
+        int batchSize = input.Shape[0];
+        int flattenedSize = input.ElementCount / batchSize;
+        return input.CreateView(0, [batchSize, flattenedSize]);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the flatten layer.
+    /// Reshapes the gradient back to the original input shape.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_lastInputGpuShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Flatten backward is just reshaping the gradient back to original shape
+        // No computation needed, just a view with the original shape
+        return outputGradient.CreateView(0, _lastInputGpuShape);
+    }
 
     /// <summary>
     /// Exports the flatten layer's forward pass as a JIT-compilable computation graph.
@@ -453,113 +525,5 @@ public class FlattenLayer<T> : LayerBase<T>
         var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
 
         return outputNode;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports GPU-resident training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because flatten/reshape operations can be done efficiently on GPU.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Flatten layers support GPU training because reshaping a tensor on GPU is just
-    /// a metadata change - no data movement is required.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsGpuTraining => true;
-
-    /// <summary>
-    /// The GPU-resident input tensor shape from the forward pass.
-    /// </summary>
-    private int[]? _gpuInputShape;
-
-    /// <summary>
-    /// Performs the forward pass of the flatten layer on GPU.
-    /// </summary>
-    /// <param name="inputs">The GPU-resident input tensor(s).</param>
-    /// <returns>The GPU-resident flattened output tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs flatten entirely on GPU:
-    /// - Creates a view with reshaped dimensions
-    /// - No data movement required
-    /// - Stores the original shape for backward pass
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-        _gpuInputShape = input.Shape.ToArray();
-
-        // Get the GPU engine
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("ForwardGpu requires a GPU engine to be active.");
-        }
-
-        // Calculate flattened shape
-        int[] flattenedShape;
-        if (input.Shape.Length <= 3)
-        {
-            // Unbatched input: flatten to 1D vector
-            flattenedShape = [input.ElementCount];
-        }
-        else
-        {
-            // Batched input: flatten spatial dimensions keeping batch dimension
-            int batchSize = input.Shape[0];
-            int actualOutputSize = 1;
-            for (int i = 1; i < input.Shape.Length; i++)
-            {
-                actualOutputSize *= input.Shape[i];
-            }
-            flattenedShape = [batchSize, actualOutputSize];
-        }
-
-        // Reshape on GPU (just changes metadata, no data movement)
-        return gpuEngine.ReshapeGpu(input, flattenedShape);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the flatten layer on GPU.
-    /// </summary>
-    /// <param name="outputGradient">The GPU-resident gradient from the next layer.</param>
-    /// <returns>The GPU-resident gradient reshaped to the original input shape.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when BackwardGpu is called before ForwardGpu.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// This method reshapes the gradient back to the original input shape:
-    /// - Uses the stored input shape from ForwardGpu
-    /// - No data movement required, just metadata change
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInputShape == null)
-        {
-            if (_lastInput != null)
-            {
-                throw new InvalidOperationException(
-                    "BackwardGpu requires ForwardGpu to be called first. " +
-                    "The forward pass was performed on CPU. Use Backward() instead.");
-            }
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-        }
-
-        // Get the GPU engine
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("BackwardGpu requires a GPU engine to be active.");
-        }
-
-        // Reshape gradient back to original input shape
-        return gpuEngine.ReshapeGpu(outputGradient, _gpuInputShape);
     }
 }

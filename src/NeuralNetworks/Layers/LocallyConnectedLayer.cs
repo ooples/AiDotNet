@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -112,6 +113,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// Stores the gradients for the biases calculated during the backward pass.
     /// </summary>
     private Tensor<T>? _biasGradients;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuOutput;
+    private int[]? _gpuInputShape4D;
+    private bool _gpuAddedBatchDimension;
 
     /// <summary>
     /// The height of the input tensor.
@@ -669,6 +676,15 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             _stride, _stride,      // strideH, strideW
             fusedActivation);
 
+        // Cache tensors for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuInput = input4D;
+            _gpuOutput = result;
+            _gpuInputShape4D = input4D.Shape.ToArray();
+            _gpuAddedBatchDimension = rank == 3;
+        }
+
         // Restore original shape if needed
         if (_originalInputShape != null && _originalInputShape.Length > 4)
         {
@@ -691,6 +707,154 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient tensor.</param>
+    /// <returns>GPU-resident input gradient tensor.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_gpuInput == null || _gpuInputShape4D == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 4D for computation
+        IGpuTensor<T> gradient4D;
+        if (outputGradient.Shape.Length == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            gradient4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+        else if (outputGradient.Shape.Length == 4)
+        {
+            gradient4D = outputGradient;
+        }
+        else
+        {
+            // Flatten ND gradient to 4D
+            int flatBatch = 1;
+            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
+        }
+
+        // Apply activation backward if we have a fused activation
+        var fusedActivation = MapActivationToFused();
+        IGpuTensor<T> activationGradient;
+        if (fusedActivation != FusedActivationType.None && _gpuOutput != null)
+        {
+            activationGradient = ComputeActivationGradientGpu(gpuEngine, gradient4D, _gpuOutput, fusedActivation);
+        }
+        else
+        {
+            activationGradient = gradient4D;
+        }
+
+        // Get dimensions for backward pass
+        int batch = _gpuInputShape4D[0];
+        int inChannels = _gpuInputShape4D[1];
+        int inHeight = _gpuInputShape4D[2];
+        int inWidth = _gpuInputShape4D[3];
+        int outHeight = activationGradient.Shape[2];
+        int outWidth = activationGradient.Shape[3];
+
+        // Weights shape is [oh, ow, oc, kh, kw, ic] -> need [oh, ow, oc, ic, kh, kw] for backend
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
+        float[] weightsData = DirectGpuEngine.ToFloatArray<T>(weightsPermuted.Data);
+        using var weightsBuffer = backend.AllocateBuffer(weightsData);
+
+        // Step 1: Compute input gradient
+        int inputGradSize = batch * inChannels * inHeight * inWidth;
+        var inputGradBuffer = backend.AllocateBuffer(inputGradSize);
+
+        backend.LocallyConnectedConv2DBackwardInput(
+            activationGradient.Buffer,
+            weightsBuffer,
+            inputGradBuffer,
+            batch, inChannels, inHeight, inWidth,
+            _outputChannels, outHeight, outWidth,
+            _kernelSize, _kernelSize,
+            _stride, _stride);
+
+        // Step 2: Compute weight gradients
+        int weightGradSize = weightsPermuted.Length;
+        var weightGradBuffer = backend.AllocateBuffer(weightGradSize);
+
+        backend.LocallyConnectedConv2DBackwardWeights(
+            activationGradient.Buffer,
+            _gpuInput.Buffer,
+            weightGradBuffer,
+            batch, inChannels, inHeight, inWidth,
+            _outputChannels, outHeight, outWidth,
+            _kernelSize, _kernelSize,
+            _stride, _stride);
+
+        // Download and permute weight gradients back to [oh, ow, oc, kh, kw, ic]
+        float[] weightGradData = backend.DownloadBuffer(weightGradBuffer);
+        weightGradBuffer.Dispose();
+        var weightGradPermuted = new Tensor<T>(weightsPermuted.Shape,
+            new Vector<T>(DirectGpuEngine.FromFloatArray<T>(weightGradData)));
+        _weightGradients = weightGradPermuted.Transpose([0, 1, 2, 4, 5, 3]);
+
+        // Step 3: Compute bias gradients
+        int biasGradSize = _outputChannels;
+        var biasGradBuffer = backend.AllocateBuffer(biasGradSize);
+
+        backend.LocallyConnectedConv2DBackwardBias(
+            activationGradient.Buffer,
+            biasGradBuffer,
+            batch, _outputChannels, outHeight, outWidth);
+
+        float[] biasGradData = backend.DownloadBuffer(biasGradBuffer);
+        biasGradBuffer.Dispose();
+        _biasGradients = new Tensor<T>([_outputChannels],
+            new Vector<T>(DirectGpuEngine.FromFloatArray<T>(biasGradData)));
+
+        // Create input gradient tensor
+        var inputGradient = new GpuTensor<T>(backend, inputGradBuffer, _gpuInputShape4D, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        // Reshape input gradient back to original shape if needed
+        if (_gpuAddedBatchDimension)
+        {
+            // Input was 3D [C, H, W], gradient should also be 3D
+            return inputGradient.CreateView(0, [inChannels, inHeight, inWidth]);
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes the activation gradient on GPU for locally connected layer backward pass.
+    /// </summary>
+    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activation)
+    {
+        // Flatten tensors for element-wise activation backward
+        int totalElements = gradOutput.ElementCount;
+        var flat2DShape = new[] { totalElements, 1 };
+        var flatGrad = gradOutput.CreateView(0, flat2DShape);
+        var flatOutput = output.CreateView(0, flat2DShape);
+
+        IGpuTensor<T> flatResult = activation switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(flatGrad, flatOutput, 0.01f),
+            _ => flatGrad
+        };
+
+        // Reshape back to 4D
+        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1060,6 +1224,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _lastOutput = null;
         _weightGradients = null;
         _biasGradients = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuOutput = null;
+        _gpuInputShape4D = null;
+        _gpuAddedBatchDimension = false;
     }
 
     /// <summary>
