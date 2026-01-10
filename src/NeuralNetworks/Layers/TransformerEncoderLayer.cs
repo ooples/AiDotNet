@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -773,6 +774,26 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _feedForward1.UpdateParameters(learningRate);
         _feedForward2.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// Updates layer parameters using GPU-resident optimizer.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to each sublayer's UpdateParametersGpu method.
+    /// All sublayers (self-attention, layer norms, feed-forward) are updated.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // Update parameters for each sub-layer using GPU optimizer
+        _selfAttention.UpdateParametersGpu(config);
+        _norm1.UpdateParametersGpu(config);
+        _feedForward1.UpdateParametersGpu(config);
+        _feedForward2.UpdateParametersGpu(config);
+        _norm2.UpdateParametersGpu(config);
     }
 
     /// <summary>

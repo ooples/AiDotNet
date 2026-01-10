@@ -74,6 +74,28 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     private IGpuTensor<T>? _gpuInput;
     private int[]? _gpuInputShape;
 
+    #region GPU Weight Storage Fields
+
+    // GPU weight tensors for GPU-resident training (octonions stored as flat arrays)
+    private GpuTensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient tensors from BackwardGpu
+    private GpuTensor<T>? _gpuWeightGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+
+    // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    private GpuTensor<T>? _gpuWeightVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+
+    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    private GpuTensor<T>? _gpuWeightM;
+    private GpuTensor<T>? _gpuWeightV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
+
+    #endregion
+
     /// <summary>
     /// Gets the number of input features (octonion-valued).
     /// </summary>
@@ -522,6 +544,14 @@ public class OctonionLinearLayer<T> : LayerBase<T>
                 bgIdx += 8;
             }
 
+            // Store gradients as GPU tensors for UpdateParametersGpu
+            var weightsGradientTensor = new Tensor<T>([OutputFeatures * InputFeatures * 8],
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(weightsGradFlat)));
+            var biasesGradientTensor = new Tensor<T>([OutputFeatures * 8],
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(biasesGradFlat)));
+            _gpuWeightGradient = new GpuTensor<T>(backend, weightsGradientTensor, GpuTensorRole.Gradient);
+            _gpuBiasGradient = new GpuTensor<T>(backend, biasesGradientTensor, GpuTensorRole.Gradient);
+
             // Create output gradient tensor with proper shape
             var inputGradient = new GpuTensor<T>(backend, gradInputBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
 
@@ -962,4 +992,150 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 
         return result;
     }
+
+    #region GPU Parameter Updates
+
+    /// <summary>
+    /// Updates parameters using GPU-based optimizer.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuWeightGradient == null || _gpuBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Convert weights and biases to flat tensors for GPU operations (8 components per octonion)
+        int weightSize = OutputFeatures * InputFeatures * 8;
+        int biasSize = OutputFeatures * 8;
+        var weightTensor = new Tensor<T>([weightSize]);
+        var biasTensor = new Tensor<T>([biasSize]);
+
+        int wIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                var oct = _weights[o, i];
+                weightTensor.Data[wIdx++] = oct.Scalar;
+                weightTensor.Data[wIdx++] = oct.E1;
+                weightTensor.Data[wIdx++] = oct.E2;
+                weightTensor.Data[wIdx++] = oct.E3;
+                weightTensor.Data[wIdx++] = oct.E4;
+                weightTensor.Data[wIdx++] = oct.E5;
+                weightTensor.Data[wIdx++] = oct.E6;
+                weightTensor.Data[wIdx++] = oct.E7;
+            }
+        }
+
+        int bIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            var oct = _biases[o];
+            biasTensor.Data[bIdx++] = oct.Scalar;
+            biasTensor.Data[bIdx++] = oct.E1;
+            biasTensor.Data[bIdx++] = oct.E2;
+            biasTensor.Data[bIdx++] = oct.E3;
+            biasTensor.Data[bIdx++] = oct.E4;
+            biasTensor.Data[bIdx++] = oct.E5;
+            biasTensor.Data[bIdx++] = oct.E6;
+            biasTensor.Data[bIdx++] = oct.E7;
+        }
+
+        // Ensure GPU weight tensors exist
+        _gpuWeights ??= new GpuTensor<T>(backend, weightTensor, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, biasTensor, GpuTensorRole.Bias);
+
+        // Ensure optimizer state buffers exist
+        EnsureOctonionOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        config.ApplyUpdate(backend, _gpuWeights.Buffer, _gpuWeightGradient.Buffer, BuildOctonionOptimizerState("weights"), weightSize);
+        config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildOctonionOptimizerState("biases"), biasSize);
+
+        // Sync back to CPU octonion arrays for compatibility
+        var updatedWeights = _gpuWeights.ToTensor();
+        var updatedBiases = _gpuBiases.ToTensor();
+
+        wIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                _weights[o, i] = new Octonion<T>(
+                    updatedWeights.Data[wIdx], updatedWeights.Data[wIdx + 1],
+                    updatedWeights.Data[wIdx + 2], updatedWeights.Data[wIdx + 3],
+                    updatedWeights.Data[wIdx + 4], updatedWeights.Data[wIdx + 5],
+                    updatedWeights.Data[wIdx + 6], updatedWeights.Data[wIdx + 7]);
+                wIdx += 8;
+            }
+        }
+
+        bIdx = 0;
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            _biases[o] = new Octonion<T>(
+                updatedBiases.Data[bIdx], updatedBiases.Data[bIdx + 1],
+                updatedBiases.Data[bIdx + 2], updatedBiases.Data[bIdx + 3],
+                updatedBiases.Data[bIdx + 4], updatedBiases.Data[bIdx + 5],
+                updatedBiases.Data[bIdx + 6], updatedBiases.Data[bIdx + 7]);
+            bIdx += 8;
+        }
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers exist for all octonion parameters.
+    /// </summary>
+    private void EnsureOctonionOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int weightSize = OutputFeatures * InputFeatures * 8;
+        int biasSize = OutputFeatures * 8;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Velocity buffers
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // M and V buffers for Adam-family
+                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // Squared average buffers (reuse velocity fields)
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for a specific octonion parameter.
+    /// </summary>
+    private GpuOptimizerState BuildOctonionOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "weights" => new GpuOptimizerState { Velocity = _gpuWeightVelocity?.Buffer, M = _gpuWeightM?.Buffer, V = _gpuWeightV?.Buffer, SquaredAvg = _gpuWeightVelocity?.Buffer, AccumulatedGrad = _gpuWeightVelocity?.Buffer },
+            "biases" => new GpuOptimizerState { Velocity = _gpuBiasVelocity?.Buffer, M = _gpuBiasM?.Buffer, V = _gpuBiasV?.Buffer, SquaredAvg = _gpuBiasVelocity?.Buffer, AccumulatedGrad = _gpuBiasVelocity?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 }

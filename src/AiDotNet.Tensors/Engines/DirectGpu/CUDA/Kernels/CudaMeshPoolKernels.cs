@@ -46,13 +46,13 @@ extern ""C"" __global__ void mesh_pool_compute_scores(
 
 // Gather pooled features based on kept indices
 // input: [numEdges, inputChannels] - original edge features
-// keptIndices: [numKept] - indices of edges to keep
+// keptIndices: [numKept] - indices of edges to keep (must be valid indices in [0, numEdges))
 // output: [numKept, inputChannels] - pooled features
 extern ""C"" __global__ void mesh_pool_gather(
     const float* input,
     const int* keptIndices,
     float* output,
-    int numKept, int inputChannels)
+    int numKept, int numEdges, int inputChannels)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = numKept * inputChannels;
@@ -63,6 +63,11 @@ extern ""C"" __global__ void mesh_pool_gather(
     int channel = gid % inputChannels;
 
     int origIdx = keptIndices[keptIdx];
+    // Bounds check: ensure origIdx is valid
+    if (origIdx < 0 || origIdx >= numEdges) {
+        output[keptIdx * inputChannels + channel] = 0.0f;
+        return;
+    }
     output[keptIdx * inputChannels + channel] = input[origIdx * inputChannels + channel];
 }
 
@@ -72,7 +77,7 @@ extern ""C"" __global__ void mesh_pool_gather(
 
 // Backward pass: scatter-add gradients back to original edge positions
 // gradOutput: [numKept, inputChannels] - gradient from downstream
-// keptIndices: [numKept] - indices of edges that were kept
+// keptIndices: [numKept] - indices of edges that were kept (must be valid indices in [0, numEdges))
 // gradInput: [numEdges, inputChannels] - gradient to input (output, zero-initialized)
 extern ""C"" __global__ void mesh_pool_backward(
     const float* gradOutput,
@@ -89,6 +94,9 @@ extern ""C"" __global__ void mesh_pool_backward(
     int channel = gid % inputChannels;
 
     int origIdx = keptIndices[keptIdx];
+    // Bounds check: ensure origIdx is valid before writing to gradInput
+    if (origIdx < 0 || origIdx >= numEdges) return;
+
     float gradVal = gradOutput[keptIdx * inputChannels + channel];
 
     // Atomic add to handle potential duplicate indices
@@ -98,14 +106,14 @@ extern ""C"" __global__ void mesh_pool_backward(
 // Backward pass: compute gradient for importance weights
 // gradOutput: [numKept, inputChannels] - gradient from downstream
 // input: [numEdges, inputChannels] - original edge features
-// keptIndices: [numKept] - indices of edges that were kept
+// keptIndices: [numKept] - indices of edges that were kept (must be valid indices in [0, numEdges))
 // gradImportanceWeights: [inputChannels] - gradient for importance weights (output, zero-initialized)
 extern ""C"" __global__ void mesh_pool_importance_backward(
     const float* gradOutput,
     const float* input,
     const int* keptIndices,
     float* gradImportanceWeights,
-    int numKept, int inputChannels)
+    int numKept, int numEdges, int inputChannels)
 {
     int channel = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -118,6 +126,8 @@ extern ""C"" __global__ void mesh_pool_importance_backward(
     // through the edge features of kept edges
     for (int k = 0; k < numKept; k++) {
         int origIdx = keptIndices[k];
+        // Bounds check: skip invalid indices
+        if (origIdx < 0 || origIdx >= numEdges) continue;
 
         // Sum gradients across channels for this edge
         float gradSum = 0.0f;
@@ -148,60 +158,222 @@ extern ""C"" __global__ void mesh_pool_zero_grad(
     gradInput[idx] = 0.0f;
 }
 
-// Apply softmax to importance scores for differentiable edge selection
-// scores: [numEdges] - raw importance scores
-// softmaxScores: [numEdges] - softmax normalized scores
-// temperature: temperature parameter for softmax sharpness
+// ===========================================================================
+// MESH POOL SOFTMAX - MULTI-KERNEL APPROACH
+// Correct implementation using separate kernels for global synchronization
+// ===========================================================================
+
+// Step 1: Parallel reduction to find maximum score
+// Uses block-level reduction with shared memory
+// Caller must launch enough blocks to cover all edges
+// partialMax output should have size = num_blocks
+extern ""C"" __global__ void mesh_pool_softmax_find_max(
+    const float* scores,
+    float* partialMax,
+    int numEdges)
+{
+    extern __shared__ float scratch[];
+
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int blockSize = blockDim.x;
+
+    // Each thread loads its value (or -INFINITY if out of bounds)
+    float val = (gid < numEdges) ? scores[gid] : -1e30f;
+    scratch[tid] = val;
+    __syncthreads();
+
+    // Parallel reduction within block
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] = fmaxf(scratch[tid], scratch[tid + stride]);
+        }
+        __syncthreads();
+    }
+
+    // Thread 0 writes the result for this block
+    if (tid == 0) {
+        partialMax[blockIdx.x] = scratch[0];
+    }
+}
+
+// Step 2: Final max reduction (single block)
+// Reduces partialMax array to a single global max value
+extern ""C"" __global__ void mesh_pool_softmax_final_max(
+    const float* partialMax,
+    float* globalMax,
+    int numPartials)
+{
+    extern __shared__ float scratch[];
+
+    int tid = threadIdx.x;
+    int blockSize = blockDim.x;
+
+    // Load partial max values
+    float val = (tid < numPartials) ? partialMax[tid] : -1e30f;
+    scratch[tid] = val;
+    __syncthreads();
+
+    // Parallel reduction
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] = fmaxf(scratch[tid], scratch[tid + stride]);
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        globalMax[0] = scratch[0];
+    }
+}
+
+// Step 3: Compute exp values and partial sums
+// Each thread computes exp((score - max) / temperature)
+// Blocks compute partial sums
+extern ""C"" __global__ void mesh_pool_softmax_exp_sum(
+    const float* scores,
+    const float* globalMax,
+    float* expValues,
+    float* partialSum,
+    float temperature,
+    int numEdges)
+{
+    extern __shared__ float scratch[];
+
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int blockSize = blockDim.x;
+
+    float maxVal = globalMax[0];
+    float expVal = 0.0f;
+
+    if (gid < numEdges) {
+        expVal = expf((scores[gid] - maxVal) / temperature);
+        expValues[gid] = expVal;
+    }
+
+    scratch[tid] = expVal;
+    __syncthreads();
+
+    // Parallel sum reduction within block
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] += scratch[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        partialSum[blockIdx.x] = scratch[0];
+    }
+}
+
+// Step 4: Final sum reduction (single block)
+extern ""C"" __global__ void mesh_pool_softmax_final_sum(
+    const float* partialSum,
+    float* globalSum,
+    int numPartials)
+{
+    extern __shared__ float scratch[];
+
+    int tid = threadIdx.x;
+    int blockSize = blockDim.x;
+
+    float val = (tid < numPartials) ? partialSum[tid] : 0.0f;
+    scratch[tid] = val;
+    __syncthreads();
+
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] += scratch[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        globalSum[0] = scratch[0];
+    }
+}
+
+// Step 5: Normalize exp values by the global sum
+extern ""C"" __global__ void mesh_pool_softmax_normalize(
+    const float* expValues,
+    const float* globalSum,
+    float* softmaxScores,
+    int numEdges)
+{
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (gid >= numEdges) return;
+
+    float sum = globalSum[0];
+    softmaxScores[gid] = expValues[gid] / (sum + EPSILON);
+}
+
+// Legacy wrapper: Single block softmax for small numEdges
+// IMPORTANT: Must be launched with exactly ONE block where blockDim.x >= numEdges
+// For larger numEdges, use the multi-kernel approach above
 extern ""C"" __global__ void mesh_pool_softmax_scores(
     const float* scores,
     float* softmaxScores,
     float temperature,
     int numEdges)
 {
-    // First pass: find max for numerical stability
-    __shared__ float maxScore;
-    if (threadIdx.x == 0) {
-        maxScore = -1e30f;
-        for (int i = 0; i < numEdges; i++) {
-            if (scores[i] > maxScore) maxScore = scores[i];
+    extern __shared__ float scratch[];
+
+    int tid = threadIdx.x;
+    int blockSize = blockDim.x;
+
+    // Load scores into shared memory (padding with -INFINITY for reduction)
+    float val = (tid < numEdges) ? scores[tid] : -1e30f;
+    scratch[tid] = val;
+    __syncthreads();
+
+    // Step 1: Find max using parallel reduction
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] = fmaxf(scratch[tid], scratch[tid + stride]);
         }
+        __syncthreads();
     }
+    float maxVal = scratch[0];
     __syncthreads();
 
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= numEdges) return;
-
-    // Compute exp((score - max) / temperature)
-    float expVal = expf((scores[idx] - maxScore) / temperature);
-    softmaxScores[idx] = expVal;
-
+    // Step 2: Compute exp and store, then reduce sum
+    float expVal = 0.0f;
+    if (tid < numEdges) {
+        expVal = expf((scores[tid] - maxVal) / temperature);
+        softmaxScores[tid] = expVal;
+    }
+    scratch[tid] = expVal;
     __syncthreads();
 
-    // Second pass: compute sum
-    __shared__ float sumExp;
-    if (threadIdx.x == 0) {
-        sumExp = 0.0f;
-        for (int i = 0; i < numEdges; i++) {
-            sumExp += softmaxScores[i];
+    // Sum reduction
+    for (int stride = blockSize / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            scratch[tid] += scratch[tid + stride];
         }
+        __syncthreads();
     }
+    float sumExp = scratch[0];
     __syncthreads();
 
-    // Normalize
-    softmaxScores[idx] = softmaxScores[idx] / (sumExp + EPSILON);
+    // Step 3: Normalize
+    if (tid < numEdges) {
+        softmaxScores[tid] = softmaxScores[tid] / (sumExp + EPSILON);
+    }
 }
 
 // Weighted gather using importance scores
 // input: [numEdges, inputChannels]
 // scores: [numEdges] - importance weights
-// keptIndices: [numKept]
+// keptIndices: [numKept] - must be valid indices in [0, numEdges)
 // output: [numKept, inputChannels]
 extern ""C"" __global__ void mesh_pool_weighted_gather(
     const float* input,
     const float* scores,
     const int* keptIndices,
     float* output,
-    int numKept, int inputChannels)
+    int numKept, int numEdges, int inputChannels)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = numKept * inputChannels;
@@ -212,6 +384,11 @@ extern ""C"" __global__ void mesh_pool_weighted_gather(
     int channel = gid % inputChannels;
 
     int origIdx = keptIndices[keptIdx];
+    // Bounds check: ensure origIdx is valid
+    if (origIdx < 0 || origIdx >= numEdges) {
+        output[keptIdx * inputChannels + channel] = 0.0f;
+        return;
+    }
     float weight = scores[origIdx];
     output[keptIdx * inputChannels + channel] = input[origIdx * inputChannels + channel] * weight;
 }
@@ -219,7 +396,7 @@ extern ""C"" __global__ void mesh_pool_weighted_gather(
 // Weighted scatter-add with importance scores for backward pass
 // gradOutput: [numKept, inputChannels]
 // scores: [numEdges]
-// keptIndices: [numKept]
+// keptIndices: [numKept] - must be valid indices in [0, numEdges)
 // gradInput: [numEdges, inputChannels]
 extern ""C"" __global__ void mesh_pool_weighted_backward(
     const float* gradOutput,
@@ -237,6 +414,9 @@ extern ""C"" __global__ void mesh_pool_weighted_backward(
     int channel = gid % inputChannels;
 
     int origIdx = keptIndices[keptIdx];
+    // Bounds check: ensure origIdx is valid before writing to gradInput
+    if (origIdx < 0 || origIdx >= numEdges) return;
+
     float weight = scores[origIdx];
     float gradVal = gradOutput[keptIdx * inputChannels + channel] * weight;
 
@@ -296,6 +476,13 @@ extern ""C"" __global__ void mesh_pool_scores_backward(
             "mesh_pool_backward",
             "mesh_pool_importance_backward",
             "mesh_pool_zero_grad",
+            // Multi-kernel softmax approach (for large numEdges)
+            "mesh_pool_softmax_find_max",
+            "mesh_pool_softmax_final_max",
+            "mesh_pool_softmax_exp_sum",
+            "mesh_pool_softmax_final_sum",
+            "mesh_pool_softmax_normalize",
+            // Single block softmax (for small numEdges, legacy compatibility)
             "mesh_pool_softmax_scores",
             "mesh_pool_weighted_gather",
             "mesh_pool_weighted_backward",

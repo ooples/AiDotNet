@@ -37,14 +37,16 @@ This document tracks the implementation status of GPU-resident training for all 
 ## Architecture Overview
 
 ### Current State (ForwardGpu Only)
-```
+
+```plaintext
 CPU Tensor → Upload → ForwardGpu Layer 1 → ForwardGpu Layer 2 → ... → Download → CPU Tensor
                            ↓                      ↓
                     (Training mode falls back to CPU)
 ```
 
 ### Target State (Full GPU Training)
-```
+
+```plaintext
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                           GPU-RESIDENT TRAINING LOOP                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -163,7 +165,6 @@ The following methods have been added to LayerBase:
 
 | Optimizer | Kernel Status | Integration Status | Notes |
 |-----------|---------------|-------------------|-------|
-| **Fully Wired ✅** |
 | SGD | ✅ `sgd_update` | ✅ Wired | Complete |
 | Adam | ✅ `adam_update` | ✅ Wired | Complete |
 | AdamW | ✅ `adamw_update` | ✅ Wired | Complete |
@@ -277,22 +278,22 @@ Additional loss functions that could be added in the future:
 | GlobalPoolingLayer | ✅ | ✅ | Broadcast gradient |
 | MaxPool3DLayer | ✅ | ✅ | Already implemented |
 | MaxPoolingLayer | ✅ | ✅ | Already implemented |
-| MeshPoolLayer | ✅ | ❌ | Graph pooling backward |
+| MeshPoolLayer | ✅ | ✅ | Graph pooling via scatter ops |
 
 ### Upsampling Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | Notes |
 |-------|------------|-------------|-----------|-------|
-| PixelShuffleLayer | ✅ | ❌ | ➖ | Inverse shuffle |
-| SubpixelConvolutionalLayer | ✅ | ❌ | ❌ | Has weights |
+| PixelShuffleLayer | ✅ | ✅ | ➖ | Inverse shuffle via reshape/permute |
+| SubpixelConvolutionalLayer | ✅ | ✅ | ❌ | Conv backward with activation |
 | Upsample3DLayer | ✅ | ✅ | ➖ | Already implemented |
-| UpsamplingLayer | ✅ | ❌ | ➖ | Nearest/bilinear |
+| UpsamplingLayer | ✅ | ✅ | ➖ | Nearest-neighbor gradient aggregation |
 
 ### Dense/Linear Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | DenseLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | FullyConnectedLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
-| LocallyConnectedLayer | ✅ | ❌ | ❌ | ❌ | Per-position weights |
+| LocallyConnectedLayer | ✅ | ✅ | ❌ | ❌ | Per-position weight gradients |
 | HyperbolicLinearLayer | ✅ | ✅ | ❌ | ❌ | Hyperbolic geometry, Poincaré ball gradients |
 | OctonionLinearLayer | ✅ | ✅ | ❌ | ❌ | Octonion algebra, Jacobian-based gradients |
 
@@ -302,7 +303,7 @@ Additional loss functions that could be added in the future:
 | ConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** |
 | Conv3DLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** 3D convolution |
 | DeconvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Transposed conv |
-| DeformableConvolutionalLayer | ✅ | ❌ | ❌ | ❌ | Learned offsets |
+| DeformableConvolutionalLayer | ✅ | ✅ | ❌ | ❌ | Learned offsets, deformable conv backward |
 | DepthwiseSeparableConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** MobileNet style |
 | DilatedConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Atrous convolution |
 | SeparableConvolutionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Xception style |
@@ -320,7 +321,7 @@ Additional loss functions that could be added in the future:
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | BidirectionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Wraps recurrent layers |
-| ConvLSTMLayer | ✅ | ❌ | ❌ | ❌ | Issue #700 - Spatiotemporal |
+| ConvLSTMLayer | ✅ | ✅ | ❌ | ❌ | BPTT through spatial gates |
 | GRULayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
 | LSTMLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
 | RecurrentLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Simple RNN |
@@ -336,12 +337,12 @@ Additional loss functions that could be added in the future:
 ### Transformer Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
-| DecoderLayer | ✅ | ❌ | ❌ | ❌ | Decoder block |
+| DecoderLayer | ✅ | ✅ | ❌ | ❌ | Backward through sublayers |
 | FeedForwardLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** FFN in transformer |
-| PatchEmbeddingLayer | ✅ | ❌ | ❌ | ❌ | ViT patches |
-| PositionalEncodingLayer | ✅ | ❌ | ➖ | ➖ | Fixed encodings |
-| TransformerDecoderLayer | ✅ | ❌ | ❌ | ❌ | Full decoder |
-| TransformerEncoderLayer | ✅ | ❌ | ❌ | ❌ | Full encoder |
+| PatchEmbeddingLayer | ✅ | ✅ | ❌ | ❌ | Conv2D backward for patches |
+| PositionalEncodingLayer | ✅ | ✅ | ➖ | ➖ | Pass-through gradient |
+| TransformerDecoderLayer | ✅ | ✅ | ❌ | ❌ | Backward through attention + FFN |
+| TransformerEncoderLayer | ✅ | ✅ | ❌ | ❌ | Backward through attention + FFN |
 
 ### Embedding Layers
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |

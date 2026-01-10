@@ -81,6 +81,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private readonly ulong[] _maxWorkItemSizes;
         private readonly bool _supportsFp16;
         private readonly bool _supportsSubgroups;
+        private bool _mixedPrecisionKernelsAvailable;
 
         /// <summary>
         /// Gets whether OpenCL is available on this system.
@@ -324,24 +325,37 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"[OpenClBackend] Neural network kernels compiled: {NeuralNetKernels.GetKernelNames().Length} kernels");
 
                 // Compile mixed precision kernels only if device actually supports FP16
+                // This is non-fatal - if compilation fails, we fall back to no FP16 support
+                _mixedPrecisionKernelsAvailable = false;
                 if (_supportsFp16)
                 {
-                    Console.WriteLine("[OpenClBackend] Compiling mixed precision kernels...");
-                    var mixedPrecisionSource = string.Join("\n\n",
-                        MixedPrecisionKernels.ConvertFp32ToFp16,
-                        MixedPrecisionKernels.ConvertFp16ToFp32,
-                        MixedPrecisionKernels.MixedPrecisionForward,
-                        MixedPrecisionKernels.MixedPrecisionBackward,
-                        MixedPrecisionKernels.AccumulateGradientFp32);
-                    var mpProgram = new DirectOpenClProgram(_context, mixedPrecisionSource);
-                    mpProgram.Build(optimizationFlags);
-                    _programs.Add(mpProgram);
-                    _kernelCache["convert_fp32_to_fp16"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp32_to_fp16");
-                    _kernelCache["convert_fp16_to_fp32"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp16_to_fp32");
-                    _kernelCache["mixed_precision_forward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_forward");
-                    _kernelCache["mixed_precision_backward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_backward");
-                    _kernelCache["accumulate_gradient_fp32"] = new DirectOpenClKernel(_context, mpProgram, "accumulate_gradient_fp32");
-                    Console.WriteLine("[OpenClBackend] Mixed precision kernels compiled: 5 kernels");
+                    try
+                    {
+                        Console.WriteLine("[OpenClBackend] Compiling mixed precision kernels...");
+                        var mixedPrecisionSource = string.Join("\n\n",
+                            MixedPrecisionKernels.ConvertFp32ToFp16,
+                            MixedPrecisionKernels.ConvertFp16ToFp32,
+                            MixedPrecisionKernels.MixedPrecisionForward,
+                            MixedPrecisionKernels.MixedPrecisionBackward,
+                            MixedPrecisionKernels.AccumulateGradientFp32);
+                        var mpProgram = new DirectOpenClProgram(_context, mixedPrecisionSource);
+                        mpProgram.Build(optimizationFlags);
+                        _programs.Add(mpProgram);
+                        _kernelCache["convert_fp32_to_fp16"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp32_to_fp16");
+                        _kernelCache["convert_fp16_to_fp32"] = new DirectOpenClKernel(_context, mpProgram, "convert_fp16_to_fp32");
+                        _kernelCache["mixed_precision_forward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_forward");
+                        _kernelCache["mixed_precision_backward"] = new DirectOpenClKernel(_context, mpProgram, "mixed_precision_backward");
+                        _kernelCache["accumulate_gradient_fp32"] = new DirectOpenClKernel(_context, mpProgram, "accumulate_gradient_fp32");
+                        _mixedPrecisionKernelsAvailable = true;
+                        Console.WriteLine("[OpenClBackend] Mixed precision kernels compiled: 5 kernels");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Mixed precision compilation failed - this is non-fatal
+                        // Device may report FP16 support but have driver issues with these kernels
+                        Console.WriteLine($"[OpenClBackend] Warning: Mixed precision kernel compilation failed (non-fatal): {ex.Message}");
+                        Console.WriteLine("[OpenClBackend] Continuing without mixed precision support.");
+                    }
                 }
                 else
                 {
@@ -424,6 +438,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, specializedProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Specialized kernels compiled: {SpecializedKernels.GetKernelNames().Length} kernels");
+
+                // Compile FP16 conversion kernels (half-precision float conversion)
+                Console.WriteLine("[OpenClBackend] Compiling FP16 conversion kernels...");
+                var fp16Program = new DirectOpenClProgram(_context, Fp16Kernels.GetSource());
+                fp16Program.Build(optimizationFlags);
+                _programs.Add(fp16Program);
+                foreach (var name in Fp16Kernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, fp16Program, name);
+                }
+                Console.WriteLine($"[OpenClBackend] FP16 conversion kernels compiled: {Fp16Kernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -4980,64 +5005,33 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int outputPadH, int outputPadW)
         {
-            // Fallback: CPU implementation (OpenCL kernel can be added later)
-            var gradOutData = DownloadBuffer(gradOutput);
-            var kernelData = DownloadBuffer(kernel);
-            var gradInputData = new float[batch * inChannels * inHeight * inWidth];
+            int totalInput = batch * inChannels * inHeight * inWidth;
 
-            // Backward pass: dL/dX = conv(dL/dY, W) with padding adjustment
-            for (int b = 0; b < batch; b++)
-            {
-                for (int ic = 0; ic < inChannels; ic++)
-                {
-                    for (int ih = 0; ih < inHeight; ih++)
-                    {
-                        for (int iw = 0; iw < inWidth; iw++)
-                        {
-                            float sum = 0;
-                            for (int oc = 0; oc < outChannels; oc++)
-                            {
-                                for (int kh = 0; kh < kernelH; kh++)
-                                {
-                                    for (int kw = 0; kw < kernelW; kw++)
-                                    {
-                                        int oh = ih * strideH - padH + kh;
-                                        int ow = iw * strideW - padW + kw;
-                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
-                                        {
-                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
-                                            int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
-                                            sum += gradOutData[goIdx] * kernelData[kIdx];
-                                        }
-                                    }
-                                }
-                            }
-                            gradInputData[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
-                        }
-                    }
-                }
-            }
+            var k = _kernelCache["conv_transpose2d_backward_input"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, outputPadH);
+            k.SetArg(arg++, outputPadW);
+            k.SetArg(arg++, totalInput);
 
-            // Upload to GPU
-            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
-            var handle = GCHandle.Alloc(gradInputData, GCHandleType.Pinned);
-            try
-            {
-                int err = OpenClNativeBindings.EnqueueWriteBuffer(
-                    _context.CommandQueue,
-                    ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle,
-                    1, // blocking
-                    UIntPtr.Zero,
-                    (UIntPtr)(gradInputData.Length * sizeof(float)),
-                    handle.AddrOfPinnedObject(),
-                    0, IntPtr.Zero, IntPtr.Zero);
-                if (err != 0)
-                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed: {err}");
-            }
-            finally
-            {
-                handle.Free();
-            }
+            int blockSize = 256;
+            int numBlocks = (totalInput + blockSize - 1) / blockSize;
+            k.Execute1D(numBlocks * blockSize, blockSize);
         }
 
         public void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
@@ -5047,64 +5041,36 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int outputPadH, int outputPadW)
         {
-            // Fallback: CPU implementation (OpenCL kernel can be added later)
-            var inputData = DownloadBuffer(input);
-            var gradOutData = DownloadBuffer(gradOutput);
-            var gradKernelData = new float[inChannels * outChannels * kernelH * kernelW];
+            int totalKernel = inChannels * outChannels * kernelH * kernelW;
 
-            for (int b = 0; b < batch; b++)
-            {
-                for (int ic = 0; ic < inChannels; ic++)
-                {
-                    for (int oc = 0; oc < outChannels; oc++)
-                    {
-                        for (int kh = 0; kh < kernelH; kh++)
-                        {
-                            for (int kw = 0; kw < kernelW; kw++)
-                            {
-                                float sum = 0;
-                                for (int ih = 0; ih < inHeight; ih++)
-                                {
-                                    for (int iw = 0; iw < inWidth; iw++)
-                                    {
-                                        int oh = ih * strideH - padH + kh;
-                                        int ow = iw * strideW - padW + kw;
-                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
-                                        {
-                                            int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
-                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
-                                            sum += inputData[inIdx] * gradOutData[goIdx];
-                                        }
-                                    }
-                                }
-                                int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
-                                gradKernelData[kIdx] += sum;
-                            }
-                        }
-                    }
-                }
-            }
+            // Zero the gradient buffer first (kernel uses atomic add to accumulate)
+            Fill(gradKernel, 0.0f, totalKernel);
 
-            // Upload to GPU
-            if (_context == null) throw new InvalidOperationException("OpenCL context not available");
-            var handle = GCHandle.Alloc(gradKernelData, GCHandleType.Pinned);
-            try
-            {
-                int err = OpenClNativeBindings.EnqueueWriteBuffer(
-                    _context.CommandQueue,
-                    ((DirectOpenClGpuBuffer)gradKernel).Buffer.Handle,
-                    1, // blocking
-                    UIntPtr.Zero,
-                    (UIntPtr)(gradKernelData.Length * sizeof(float)),
-                    handle.AddrOfPinnedObject(),
-                    0, IntPtr.Zero, IntPtr.Zero);
-                if (err != 0)
-                    throw new InvalidOperationException($"OpenCL EnqueueWriteBuffer failed: {err}");
-            }
-            finally
-            {
-                handle.Free();
-            }
+            var k = _kernelCache["conv_transpose2d_backward_weights"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradKernel).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, outputPadH);
+            k.SetArg(arg++, outputPadW);
+            k.SetArg(arg++, totalKernel);
+
+            int blockSize = 256;
+            int numBlocks = (totalKernel + blockSize - 1) / blockSize;
+            k.Execute1D(numBlocks * blockSize, blockSize);
         }
 
         public void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
@@ -5435,7 +5401,8 @@ KERNEL VARIANTS (A/B testing):
             int kernelH, int kernelW,
             int strideH, int strideW, int padH, int padW)
         {
-            var k = _kernelCache["maxpool2d_backward"];
+            if (!_kernelCache.TryGetValue("maxpool2d_backward", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: maxpool2d_backward");
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
@@ -5487,7 +5454,8 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             bool countIncludePad)
         {
-            var k = _kernelCache["avgpool2d_backward"];
+            if (!_kernelCache.TryGetValue("avgpool2d_backward", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: avgpool2d_backward");
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
@@ -5539,7 +5507,8 @@ KERNEL VARIANTS (A/B testing):
 
         public void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
         {
-            var k = _kernelCache["global_avgpool2d_backward"];
+            if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: global_avgpool2d_backward");
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
@@ -5554,10 +5523,11 @@ KERNEL VARIANTS (A/B testing):
 
         public void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
         {
+            if (!_kernelCache.TryGetValue("global_maxpool2d_backward", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: global_maxpool2d_backward");
+
             // First zero out the gradient input
             Fill(gradInput, 0f, batch * channels * height * width);
-
-            var k = _kernelCache["global_maxpool2d_backward"];
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
@@ -6578,12 +6548,12 @@ KERNEL VARIANTS (A/B testing):
                 return;
             }
 
+            int inputSize = batchChannels * height * width;
+
+            // Kernel iterates over input elements, accumulating from scaleFactor x scaleFactor output regions
+            // No zeroing needed - kernel writes directly (not +=)
             var bufferIn = ((DirectOpenClGpuBuffer)gradOutput).Buffer;
             var bufferOut = ((DirectOpenClGpuBuffer)gradInput).Buffer;
-
-            int outHeight = height * scaleFactor;
-            int outWidth = width * scaleFactor;
-            int outputSize = batchChannels * outHeight * outWidth;
 
             kernel.SetArg(0, bufferIn.Handle);
             kernel.SetArg(1, bufferOut.Handle);
@@ -6591,9 +6561,9 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(3, height);
             kernel.SetArg(4, width);
             kernel.SetArg(5, scaleFactor);
-            kernel.SetArg(6, outputSize);
+            kernel.SetArg(6, inputSize);
 
-            kernel.Execute1D(outputSize, Math.Min(256, outputSize));
+            kernel.Execute1D(inputSize, Math.Min(256, inputSize));
         }
 
         /// <summary>
@@ -7524,6 +7494,7 @@ KERNEL VARIANTS (A/B testing):
             float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
         {
             var k = _kernelCache["lamb_update"];
+            float trustRatio = 1.0f; // Default: no layer-wise scaling (degenerates to AdamW)
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
@@ -7534,6 +7505,7 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, beta2);
             k.SetArg(arg++, epsilon);
             k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, trustRatio);
             k.SetArg(arg++, step);
             k.SetArg(arg++, size);
 
@@ -8032,9 +8004,12 @@ KERNEL VARIANTS (A/B testing):
             if (_context == null)
                 throw new InvalidOperationException("OpenCL context not available");
             if (!_supportsFp16)
-                throw new NotSupportedException("FP16 conversion is not supported on this device.");
+                throw new NotSupportedException("FP16 conversion is not supported on this device (device does not support FP16).");
+            if (!_mixedPrecisionKernelsAvailable)
+                throw new NotSupportedException("FP16 conversion is not available (mixed precision kernel compilation failed).");
+            if (!_kernelCache.TryGetValue("convert_fp32_to_fp16", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: convert_fp32_to_fp16. FP16 conversion requires a proper GPU kernel.");
 
-            var k = _kernelCache["convert_fp32_to_fp16"];
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
@@ -8047,9 +8022,12 @@ KERNEL VARIANTS (A/B testing):
             if (_context == null)
                 throw new InvalidOperationException("OpenCL context not available");
             if (!_supportsFp16)
-                throw new NotSupportedException("FP16 conversion is not supported on this device.");
+                throw new NotSupportedException("FP32 conversion from FP16 is not supported on this device (device does not support FP16).");
+            if (!_mixedPrecisionKernelsAvailable)
+                throw new NotSupportedException("FP32 conversion from FP16 is not available (mixed precision kernel compilation failed).");
+            if (!_kernelCache.TryGetValue("convert_fp16_to_fp32", out var k))
+                throw new InvalidOperationException("OpenCL kernel not found: convert_fp16_to_fp32. FP32 conversion requires a proper GPU kernel.");
 
-            var k = _kernelCache["convert_fp16_to_fp32"];
             uint arg = 0;
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
             k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
@@ -8344,7 +8322,8 @@ KERNEL VARIANTS (A/B testing):
             if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_biases", out var kernel))
                 throw new InvalidOperationException("OpenCL kernel not found: hyperbolic_linear_backward_biases");
 
-            int totalThreads = outputFeatures * inputFeatures;
+            // Bias gradients: one per output feature (not outputFeatures * inputFeatures)
+            int totalThreads = outputFeatures;
             int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
             kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
             kernel.SetArg(1u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);

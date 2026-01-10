@@ -74,6 +74,136 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
     private readonly SigmoidActivation<T> _sigmoidActivation = new();
 
+    #region GPU Training Caching Fields
+
+    /// <summary>
+    /// Cached GPU input for backward pass.
+    /// </summary>
+    private IGpuTensor<T>? _gpuInput;
+
+    /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
+    /// Cached input slices (NCHW) for each timestep - needed for weight gradients.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuInputSlices;
+
+    /// <summary>
+    /// Cached hidden states for each timestep - needed for hidden weight gradients.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuHiddenStates;
+
+    /// <summary>
+    /// Cached cell states for each timestep - needed for cell gradient computation.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuCellStates;
+
+    /// <summary>
+    /// Cached forget gate values for each timestep.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuForgetGates;
+
+    /// <summary>
+    /// Cached input gate values for each timestep.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuInputGates;
+
+    /// <summary>
+    /// Cached output gate values for each timestep.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuOutputGates;
+
+    /// <summary>
+    /// Cached candidate cell values for each timestep.
+    /// </summary>
+    private List<IGpuBuffer>? _gpuCandidateCells;
+
+    /// <summary>
+    /// GPU state dimensions cached during forward pass.
+    /// </summary>
+    private int _gpuBatchSize;
+    private int _gpuTimeSteps;
+    private int _gpuHeight;
+    private int _gpuWidth;
+    private int _gpuChannels;
+
+    #endregion
+
+    #region GPU Weight Storage Fields
+
+    // GPU weight tensors for GPU-resident training
+    private GpuTensor<T>? _gpuWeightsFi;
+    private GpuTensor<T>? _gpuWeightsIi;
+    private GpuTensor<T>? _gpuWeightsCi;
+    private GpuTensor<T>? _gpuWeightsOi;
+    private GpuTensor<T>? _gpuWeightsFh;
+    private GpuTensor<T>? _gpuWeightsIh;
+    private GpuTensor<T>? _gpuWeightsCh;
+    private GpuTensor<T>? _gpuWeightsOh;
+    private GpuTensor<T>? _gpuBiasF;
+    private GpuTensor<T>? _gpuBiasI;
+    private GpuTensor<T>? _gpuBiasC;
+    private GpuTensor<T>? _gpuBiasO;
+
+    // GPU gradient tensors from BackwardGpu
+    private GpuTensor<T>? _gpuWeightsFiGradient;
+    private GpuTensor<T>? _gpuWeightsIiGradient;
+    private GpuTensor<T>? _gpuWeightsCiGradient;
+    private GpuTensor<T>? _gpuWeightsOiGradient;
+    private GpuTensor<T>? _gpuWeightsFhGradient;
+    private GpuTensor<T>? _gpuWeightsIhGradient;
+    private GpuTensor<T>? _gpuWeightsChGradient;
+    private GpuTensor<T>? _gpuWeightsOhGradient;
+    private GpuTensor<T>? _gpuBiasFGradient;
+    private GpuTensor<T>? _gpuBiasIGradient;
+    private GpuTensor<T>? _gpuBiasCGradient;
+    private GpuTensor<T>? _gpuBiasOGradient;
+
+    // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    private GpuTensor<T>? _gpuWeightsFiVelocity;
+    private GpuTensor<T>? _gpuWeightsIiVelocity;
+    private GpuTensor<T>? _gpuWeightsCiVelocity;
+    private GpuTensor<T>? _gpuWeightsOiVelocity;
+    private GpuTensor<T>? _gpuWeightsFhVelocity;
+    private GpuTensor<T>? _gpuWeightsIhVelocity;
+    private GpuTensor<T>? _gpuWeightsChVelocity;
+    private GpuTensor<T>? _gpuWeightsOhVelocity;
+    private GpuTensor<T>? _gpuBiasFVelocity;
+    private GpuTensor<T>? _gpuBiasIVelocity;
+    private GpuTensor<T>? _gpuBiasCVelocity;
+    private GpuTensor<T>? _gpuBiasOVelocity;
+
+    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    private GpuTensor<T>? _gpuWeightsFiM;
+    private GpuTensor<T>? _gpuWeightsFiV;
+    private GpuTensor<T>? _gpuWeightsIiM;
+    private GpuTensor<T>? _gpuWeightsIiV;
+    private GpuTensor<T>? _gpuWeightsCiM;
+    private GpuTensor<T>? _gpuWeightsCiV;
+    private GpuTensor<T>? _gpuWeightsOiM;
+    private GpuTensor<T>? _gpuWeightsOiV;
+    private GpuTensor<T>? _gpuWeightsFhM;
+    private GpuTensor<T>? _gpuWeightsFhV;
+    private GpuTensor<T>? _gpuWeightsIhM;
+    private GpuTensor<T>? _gpuWeightsIhV;
+    private GpuTensor<T>? _gpuWeightsChM;
+    private GpuTensor<T>? _gpuWeightsChV;
+    private GpuTensor<T>? _gpuWeightsOhM;
+    private GpuTensor<T>? _gpuWeightsOhV;
+    private GpuTensor<T>? _gpuBiasFM;
+    private GpuTensor<T>? _gpuBiasFV;
+    private GpuTensor<T>? _gpuBiasIM;
+    private GpuTensor<T>? _gpuBiasIV;
+    private GpuTensor<T>? _gpuBiasCM;
+    private GpuTensor<T>? _gpuBiasCV;
+    private GpuTensor<T>? _gpuBiasOM;
+    private GpuTensor<T>? _gpuBiasOV;
+
+    #endregion
+
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
@@ -527,15 +657,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
                 "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
         }
 
-        // During training, fall back to CPU forward to ensure backward pass has required state
-        // GPU backward is not yet implemented - see GitHub issue #700
-        if (IsTrainingMode)
-        {
-            var cpuInput = inputs[0].ToTensor();
-            var cpuOutput = Forward(cpuInput);
-            return gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-        }
-
         var backend = gpuEngine.GetBackend();
         if (backend is null)
             throw new InvalidOperationException("GPU backend unavailable.");
@@ -613,6 +734,39 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         int outputSize = batchSize * timeSteps * outHeight * outWidth * _filters;
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
+        // Initialize GPU caching for backward pass if in training mode
+        if (IsTrainingMode)
+        {
+            // Clear any previous cached buffers
+            ClearGpuCache();
+
+            // Cache dimensions
+            _gpuBatchSize = batchSize;
+            _gpuTimeSteps = timeSteps;
+            _gpuHeight = height;
+            _gpuWidth = width;
+            _gpuChannels = channels;
+            _gpuInput = input;
+            _gpuInputShape = shape.ToArray();
+
+            // Initialize lists to store intermediate states
+            _gpuInputSlices = new List<IGpuBuffer>(timeSteps);
+            _gpuHiddenStates = new List<IGpuBuffer>(timeSteps + 1);
+            _gpuCellStates = new List<IGpuBuffer>(timeSteps + 1);
+            _gpuForgetGates = new List<IGpuBuffer>(timeSteps);
+            _gpuInputGates = new List<IGpuBuffer>(timeSteps);
+            _gpuOutputGates = new List<IGpuBuffer>(timeSteps);
+            _gpuCandidateCells = new List<IGpuBuffer>(timeSteps);
+
+            // Store initial states (h0, c0)
+            var h0 = backend.AllocateBuffer(stateSize);
+            var c0 = backend.AllocateBuffer(stateSize);
+            backend.Fill(h0, 0.0f, stateSize);
+            backend.Fill(c0, 0.0f, stateSize);
+            _gpuHiddenStates.Add(h0);
+            _gpuCellStates.Add(c0);
+        }
+
         // Temporary buffers for gate computations
         using var convTemp1 = backend.AllocateBuffer(stateSize);
         using var convTemp2 = backend.AllocateBuffer(stateSize);
@@ -638,10 +792,15 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
                 // For ConvLSTM, we need to work in NCHW format for GPU convolutions
                 // Since the input is NHWC, we need to permute it
-                // Use a temporary buffer for the NCHW version
-                using var inputSliceNCHW = backend.AllocateBuffer(inputSliceSize);
+                var inputSliceNCHW = backend.AllocateBuffer(inputSliceSize);
                 // Permute NHWC -> NCHW: [B, H, W, C] -> [B, C, H, W]
                 backend.Permute(inputSliceNHWC.Buffer, inputSliceNCHW, [batchSize, height, width, channels], [0, 3, 1, 2]);
+
+                // Cache input slice for backward pass if training
+                if (IsTrainingMode && _gpuInputSlices != null)
+                {
+                    _gpuInputSlices.Add(inputSliceNCHW);
+                }
 
                 // Forget Gate: f = sigmoid(conv(x, Wfi) + conv(h, Wfh) + bf)
                 backend.Conv2D(inputSliceNCHW, wFiBuffer, convTemp1,
@@ -687,6 +846,35 @@ public class ConvLSTMLayer<T> : LayerBase<T>
                 backend.Conv2DBiasAdd(gateTemp, bOBuffer, batchSize, _filters, outHeight * outWidth);
                 backend.Sigmoid(gateTemp, outputGate, stateSize);
 
+                // Cache gate values for backward pass if training
+                if (IsTrainingMode)
+                {
+                    if (_gpuForgetGates != null)
+                    {
+                        var fgCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(forgetGate, fgCache, stateSize);
+                        _gpuForgetGates.Add(fgCache);
+                    }
+                    if (_gpuInputGates != null)
+                    {
+                        var igCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(inputGate, igCache, stateSize);
+                        _gpuInputGates.Add(igCache);
+                    }
+                    if (_gpuOutputGates != null)
+                    {
+                        var ogCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(outputGate, ogCache, stateSize);
+                        _gpuOutputGates.Add(ogCache);
+                    }
+                    if (_gpuCandidateCells != null)
+                    {
+                        var ccCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(candidateCell, ccCache, stateSize);
+                        _gpuCandidateCells.Add(ccCache);
+                    }
+                }
+
                 // New Cell State: c_t = f * c_{t-1} + i * c_tilde
                 backend.Multiply(forgetGate, cellBuffer, convTemp1, stateSize);
                 backend.Multiply(inputGate, candidateCell, convTemp2, stateSize);
@@ -695,6 +883,23 @@ public class ConvLSTMLayer<T> : LayerBase<T>
                 // New Hidden State: h_t = o * tanh(c_t)
                 backend.Tanh(newCellBuffer, convTemp1, stateSize);
                 backend.Multiply(outputGate, convTemp1, newHiddenBuffer, stateSize);
+
+                // Cache states for backward pass if training
+                if (IsTrainingMode)
+                {
+                    if (_gpuCellStates != null)
+                    {
+                        var csCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(newCellBuffer, csCache, stateSize);
+                        _gpuCellStates.Add(csCache);
+                    }
+                    if (_gpuHiddenStates != null)
+                    {
+                        var hsCache = backend.AllocateBuffer(stateSize);
+                        backend.Copy(newHiddenBuffer, hsCache, stateSize);
+                        _gpuHiddenStates.Add(hsCache);
+                    }
+                }
 
                 // Swap state buffers
                 var tempCell = cellBuffer;
@@ -712,6 +917,12 @@ public class ConvLSTMLayer<T> : LayerBase<T>
                 // Permute NCHW -> NHWC: [B, C, H, W] -> [B, H, W, C]
                 backend.Permute(hiddenBuffer, outputSliceNHWC, [batchSize, _filters, outHeight, outWidth], [0, 2, 3, 1]);
                 backend.Copy2DStrided(outputSliceNHWC, outputBuffer, 1, stateSize, outputSize, outputOffset);
+
+                // Dispose input slice if not training (training mode caches it)
+                if (!IsTrainingMode)
+                {
+                    inputSliceNCHW.Dispose();
+                }
             }
 
             // Cleanup state buffers
@@ -863,6 +1074,361 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         return UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated backward pass for ConvLSTM using Backpropagation Through Time (BPTT).
+    /// </summary>
+    /// <param name="outputGradient">GPU tensor with gradient from next layer [batch, timesteps, H, W, filters].</param>
+    /// <returns>GPU tensor with input gradients [batch, timesteps, H, W, channels].</returns>
+    /// <exception cref="InvalidOperationException">Thrown when ForwardGpu has not been called in training mode.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method implements full BPTT on GPU, computing gradients through all timesteps
+    /// in reverse order. It uses the cached gate values, hidden states, and cell states
+    /// from the forward pass.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        // Validate cached states exist
+        if (_gpuInputSlices == null || _gpuHiddenStates == null || _gpuCellStates == null)
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+
+        if (_gpuForgetGates == null || _gpuInputGates == null || _gpuOutputGates == null || _gpuCandidateCells == null)
+            throw new InvalidOperationException("Gate values not cached. Ensure ForwardGpu was called in training mode.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Retrieve cached dimensions
+        int batchSize = _gpuBatchSize;
+        int timeSteps = _gpuTimeSteps;
+        int height = _gpuHeight;
+        int width = _gpuWidth;
+        int channels = _gpuChannels;
+        int outHeight = height;
+        int outWidth = width;
+
+        int stateSize = batchSize * _filters * outHeight * outWidth;
+        int inputSliceSize = batchSize * channels * height * width;
+        int outputGradSize = outputGradient.Shape.Aggregate(1, (a, b) => a * b);
+
+        // Prepare NCHW-format weight buffers for backward convolutions
+        var weightsFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
+        var weightsIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
+        var weightsCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
+        var weightsOiNCHW = _weightsOi.Transpose([3, 2, 0, 1]);
+        var weightsFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
+        var weightsIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
+        var weightsChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
+        var weightsOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
+
+        // Upload weights to GPU
+        using var wFiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFiNCHW.ToArray()));
+        using var wIiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIiNCHW.ToArray()));
+        using var wCiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsCiNCHW.ToArray()));
+        using var wOiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOiNCHW.ToArray()));
+        using var wFhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsFhNCHW.ToArray()));
+        using var wIhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsIhNCHW.ToArray()));
+        using var wChBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsChNCHW.ToArray()));
+        using var wOhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weightsOhNCHW.ToArray()));
+
+        // Allocate gradient buffers for weights (accumulate over timesteps)
+        using var gradWFi = backend.AllocateBuffer(_weightsFi.Length);
+        using var gradWIi = backend.AllocateBuffer(_weightsIi.Length);
+        using var gradWCi = backend.AllocateBuffer(_weightsCi.Length);
+        using var gradWOi = backend.AllocateBuffer(_weightsOi.Length);
+        using var gradWFh = backend.AllocateBuffer(_weightsFh.Length);
+        using var gradWIh = backend.AllocateBuffer(_weightsIh.Length);
+        using var gradWCh = backend.AllocateBuffer(_weightsCh.Length);
+        using var gradWOh = backend.AllocateBuffer(_weightsOh.Length);
+
+        // Allocate gradient buffers for biases
+        using var gradBF = backend.AllocateBuffer(_filters);
+        using var gradBI = backend.AllocateBuffer(_filters);
+        using var gradBC = backend.AllocateBuffer(_filters);
+        using var gradBO = backend.AllocateBuffer(_filters);
+
+        // Initialize all gradient buffers to zero
+        backend.Fill(gradWFi, 0.0f, _weightsFi.Length);
+        backend.Fill(gradWIi, 0.0f, _weightsIi.Length);
+        backend.Fill(gradWCi, 0.0f, _weightsCi.Length);
+        backend.Fill(gradWOi, 0.0f, _weightsOi.Length);
+        backend.Fill(gradWFh, 0.0f, _weightsFh.Length);
+        backend.Fill(gradWIh, 0.0f, _weightsIh.Length);
+        backend.Fill(gradWCh, 0.0f, _weightsCh.Length);
+        backend.Fill(gradWOh, 0.0f, _weightsOh.Length);
+        backend.Fill(gradBF, 0.0f, _filters);
+        backend.Fill(gradBI, 0.0f, _filters);
+        backend.Fill(gradBC, 0.0f, _filters);
+        backend.Fill(gradBO, 0.0f, _filters);
+
+        // Allocate input gradient buffer [batch, timesteps, H, W, channels]
+        int inputGradSize = batchSize * timeSteps * height * width * channels;
+        var inputGradBuffer = backend.AllocateBuffer(inputGradSize);
+        backend.Fill(inputGradBuffer, 0.0f, inputGradSize);
+
+        // Temporary buffers for BPTT
+        using var dHNext = backend.AllocateBuffer(stateSize);
+        using var dCNext = backend.AllocateBuffer(stateSize);
+        using var dH = backend.AllocateBuffer(stateSize);
+        using var dC = backend.AllocateBuffer(stateSize);
+        using var temp1 = backend.AllocateBuffer(stateSize);
+        using var temp2 = backend.AllocateBuffer(stateSize);
+        using var dO = backend.AllocateBuffer(stateSize);
+        using var dF = backend.AllocateBuffer(stateSize);
+        using var dI = backend.AllocateBuffer(stateSize);
+        using var dCTilde = backend.AllocateBuffer(stateSize);
+        using var tanhC = backend.AllocateBuffer(stateSize);
+        using var gradInputNCHW = backend.AllocateBuffer(inputSliceSize);
+        using var gradTempWi = backend.AllocateBuffer(_weightsFi.Length);
+        using var gradTempWh = backend.AllocateBuffer(_weightsFh.Length);
+
+        // Initialize dHNext and dCNext to zero
+        backend.Fill(dHNext, 0.0f, stateSize);
+        backend.Fill(dCNext, 0.0f, stateSize);
+
+        try
+        {
+            // BPTT loop - process timesteps in reverse order
+            for (int t = timeSteps - 1; t >= 0; t--)
+            {
+                // Get output gradient slice for this timestep
+                // Output is [batch, timesteps, H, W, filters] - NHWC format
+                int outputOffset = t * batchSize * outHeight * outWidth * _filters;
+                var outGradSlice = outputGradient.CreateView(outputOffset, [batchSize, outHeight, outWidth, _filters]);
+
+                // Convert output gradient to NCHW
+                using var outGradNCHW = backend.AllocateBuffer(stateSize);
+                backend.Permute(outGradSlice.Buffer, outGradNCHW, [batchSize, outHeight, outWidth, _filters], [0, 3, 1, 2]);
+
+                // Add incoming gradients: dH = dOut + dHNext
+                backend.Add(outGradNCHW, dHNext, dH, stateSize);
+
+                // Get cached values for this timestep
+                var forgetGate = _gpuForgetGates[t];
+                var inputGate = _gpuInputGates[t];
+                var outputGate = _gpuOutputGates[t];
+                var candidateCell = _gpuCandidateCells[t];
+                var cellState = _gpuCellStates[t + 1]; // t+1 because we have h0, c0 at index 0
+                var prevCellState = _gpuCellStates[t];
+                var prevHiddenState = _gpuHiddenStates[t];
+                var inputSlice = _gpuInputSlices[t];
+
+                // Compute tanh(c_t) for output gate gradient
+                backend.Tanh(cellState, tanhC, stateSize);
+
+                // dO = dH * tanh(c_t) * sigmoid_deriv(o)
+                // sigmoid_deriv(o) = o * (1 - o)
+                backend.Multiply(dH, tanhC, temp1, stateSize);
+                backend.SigmoidBackward(outputGate, temp1, dO, stateSize);
+
+                // dC += dH * o * tanh_deriv(c_t) + dCNext
+                // tanh_deriv(c) = 1 - tanh(c)^2
+                backend.TanhBackward(tanhC, temp1, temp2, stateSize); // temp2 = dH * o * tanh'(c)
+                backend.Multiply(dH, outputGate, temp1, stateSize);
+                backend.Multiply(temp1, temp2, dC, stateSize);
+                backend.Add(dC, dCNext, dC, stateSize);
+
+                // dF = dC * c_{t-1} * sigmoid_deriv(f)
+                backend.Multiply(dC, prevCellState, temp1, stateSize);
+                backend.SigmoidBackward(forgetGate, temp1, dF, stateSize);
+
+                // dI = dC * c_tilde * sigmoid_deriv(i)
+                backend.Multiply(dC, candidateCell, temp1, stateSize);
+                backend.SigmoidBackward(inputGate, temp1, dI, stateSize);
+
+                // dC_tilde = dC * i * tanh_deriv(c_tilde)
+                backend.Multiply(dC, inputGate, temp1, stateSize);
+                backend.TanhBackward(candidateCell, temp1, dCTilde, stateSize);
+
+                // Compute gradients for input weights using Conv2DBackwardKernel
+                // dW_fi += Conv2DBackward(dF, x_t)
+                backend.Conv2DBackwardKernel(inputSlice, dF, gradTempWi,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWFi, gradTempWi, gradWFi, _weightsFi.Length);
+
+                // dW_ii += Conv2DBackward(dI, x_t)
+                backend.Conv2DBackwardKernel(inputSlice, dI, gradTempWi,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWIi, gradTempWi, gradWIi, _weightsIi.Length);
+
+                // dW_ci += Conv2DBackward(dC_tilde, x_t)
+                backend.Conv2DBackwardKernel(inputSlice, dCTilde, gradTempWi,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWCi, gradTempWi, gradWCi, _weightsCi.Length);
+
+                // dW_oi += Conv2DBackward(dO, x_t)
+                backend.Conv2DBackwardKernel(inputSlice, dO, gradTempWi,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWOi, gradTempWi, gradWOi, _weightsOi.Length);
+
+                // Compute gradients for hidden weights using Conv2DBackwardKernel
+                // dW_fh += Conv2DBackward(dF, h_{t-1})
+                backend.Conv2DBackwardKernel(prevHiddenState, dF, gradTempWh,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWFh, gradTempWh, gradWFh, _weightsFh.Length);
+
+                // dW_ih += Conv2DBackward(dI, h_{t-1})
+                backend.Conv2DBackwardKernel(prevHiddenState, dI, gradTempWh,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWIh, gradTempWh, gradWIh, _weightsIh.Length);
+
+                // dW_ch += Conv2DBackward(dC_tilde, h_{t-1})
+                backend.Conv2DBackwardKernel(prevHiddenState, dCTilde, gradTempWh,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWCh, gradTempWh, gradWCh, _weightsCh.Length);
+
+                // dW_oh += Conv2DBackward(dO, h_{t-1})
+                backend.Conv2DBackwardKernel(prevHiddenState, dO, gradTempWh,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradWOh, gradTempWh, gradWOh, _weightsOh.Length);
+
+                // Compute bias gradients by summing over batch and spatial dimensions
+                backend.LocallyConnectedConv2DBackwardBias(dF, gradBF, batchSize, _filters, outHeight, outWidth);
+                backend.LocallyConnectedConv2DBackwardBias(dI, gradBI, batchSize, _filters, outHeight, outWidth);
+                backend.LocallyConnectedConv2DBackwardBias(dCTilde, gradBC, batchSize, _filters, outHeight, outWidth);
+                backend.LocallyConnectedConv2DBackwardBias(dO, gradBO, batchSize, _filters, outHeight, outWidth);
+
+                // Compute input gradient using Conv2DBackwardInput
+                backend.Fill(gradInputNCHW, 0.0f, inputSliceSize);
+
+                // dX += Conv2DBackwardInput(dF, W_fi)
+                using var tempInputGrad = backend.AllocateBuffer(inputSliceSize);
+                backend.Conv2DBackwardInput(dF, wFiBuffer, tempInputGrad,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
+
+                // dX += Conv2DBackwardInput(dI, W_ii)
+                backend.Conv2DBackwardInput(dI, wIiBuffer, tempInputGrad,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
+
+                // dX += Conv2DBackwardInput(dC_tilde, W_ci)
+                backend.Conv2DBackwardInput(dCTilde, wCiBuffer, tempInputGrad,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
+
+                // dX += Conv2DBackwardInput(dO, W_oi)
+                backend.Conv2DBackwardInput(dO, wOiBuffer, tempInputGrad,
+                    batchSize, channels, height, width, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(gradInputNCHW, tempInputGrad, gradInputNCHW, inputSliceSize);
+
+                // Convert input gradient from NCHW to NHWC and store
+                int inputOffset = t * batchSize * height * width * channels;
+                using var gradInputNHWC = backend.AllocateBuffer(inputSliceSize);
+                backend.Permute(gradInputNCHW, gradInputNHWC, [batchSize, channels, height, width], [0, 2, 3, 1]);
+                backend.Copy2DStrided(gradInputNHWC, inputGradBuffer, 1, inputSliceSize, inputGradSize, inputOffset);
+
+                // Compute dHNext for previous timestep
+                // dH_prev = sum of Conv2DBackwardInput for all gates with hidden weights
+                backend.Fill(dHNext, 0.0f, stateSize);
+                using var tempHGrad = backend.AllocateBuffer(stateSize);
+
+                backend.Conv2DBackwardInput(dF, wFhBuffer, tempHGrad,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
+
+                backend.Conv2DBackwardInput(dI, wIhBuffer, tempHGrad,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
+
+                backend.Conv2DBackwardInput(dCTilde, wChBuffer, tempHGrad,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
+
+                backend.Conv2DBackwardInput(dO, wOhBuffer, tempHGrad,
+                    batchSize, _filters, outHeight, outWidth, _filters, outHeight, outWidth,
+                    _kernelSize, _kernelSize, _strides, _strides, _padding, _padding, 1, 1);
+                backend.Add(dHNext, tempHGrad, dHNext, stateSize);
+
+                // Compute dCNext for previous timestep
+                // dC_prev = dC * f
+                backend.Multiply(dC, forgetGate, dCNext, stateSize);
+            }
+
+            // Store gradients as GPU tensors for UpdateParametersGpu
+            // Note: Gradients are in NCHW format [outC, inC, kH, kW]
+            int inputWeightSize = _filters * channels * _kernelSize * _kernelSize;
+            int hiddenWeightSize = _filters * _filters * _kernelSize * _kernelSize;
+            _gpuWeightsFiGradient = new GpuTensor<T>(backend, gradWFi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsIiGradient = new GpuTensor<T>(backend, gradWIi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsCiGradient = new GpuTensor<T>(backend, gradWCi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsOiGradient = new GpuTensor<T>(backend, gradWOi, [_filters, channels, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsFhGradient = new GpuTensor<T>(backend, gradWFh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsIhGradient = new GpuTensor<T>(backend, gradWIh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsChGradient = new GpuTensor<T>(backend, gradWCh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightsOhGradient = new GpuTensor<T>(backend, gradWOh, [_filters, _filters, _kernelSize, _kernelSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBiasFGradient = new GpuTensor<T>(backend, gradBF, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBiasIGradient = new GpuTensor<T>(backend, gradBI, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBiasCGradient = new GpuTensor<T>(backend, gradBC, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBiasOGradient = new GpuTensor<T>(backend, gradBO, [_filters], GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Also download to CPU for _gradients dictionary compatibility
+            var gradWFiData = backend.DownloadBuffer(gradWFi);
+            var gradWIiData = backend.DownloadBuffer(gradWIi);
+            var gradWCiData = backend.DownloadBuffer(gradWCi);
+            var gradWOiData = backend.DownloadBuffer(gradWOi);
+            var gradWFhData = backend.DownloadBuffer(gradWFh);
+            var gradWIhData = backend.DownloadBuffer(gradWIh);
+            var gradWChData = backend.DownloadBuffer(gradWCh);
+            var gradWOhData = backend.DownloadBuffer(gradWOh);
+            var gradBFData = backend.DownloadBuffer(gradBF);
+            var gradBIData = backend.DownloadBuffer(gradBI);
+            var gradBCData = backend.DownloadBuffer(gradBC);
+            var gradBOData = backend.DownloadBuffer(gradBO);
+
+            // Convert back to NHWC format for weights [kH, kW, inC, outC] from [outC, inC, kH, kW]
+            // and store in gradients dictionary
+            _gradients = new Dictionary<string, object>
+            {
+                ["weightsFi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFiData), _weightsFi.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsIi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIiData), _weightsIi.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsCi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWCiData), _weightsCi.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsOi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOiData), _weightsOi.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsFh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFhData), _weightsFh.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsIh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIhData), _weightsIh.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsCh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWChData), _weightsCh.Shape).Transpose([2, 3, 1, 0]),
+                ["weightsOh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOhData), _weightsOh.Shape).Transpose([2, 3, 1, 0]),
+                ["biasF"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBFData), _biasF.Shape),
+                ["biasI"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBIData), _biasI.Shape),
+                ["biasC"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBCData), _biasC.Shape),
+                ["biasO"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBOData), _biasO.Shape)
+            };
+
+            // Clear GPU cache
+            ClearGpuCache();
+
+            // Determine output shape
+            int[] inputGradShape = _gpuInputShape ?? [batchSize, timeSteps, height, width, channels];
+
+            return new GpuTensor<T>(backend, inputGradBuffer, inputGradShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        catch
+        {
+            inputGradBuffer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -1766,6 +2332,74 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         // Clear gradients
         _gradients.Clear();
+
+        // Clear GPU cached tensors
+        ClearGpuCache();
+    }
+
+    /// <summary>
+    /// Clears all cached GPU buffers from the forward pass.
+    /// </summary>
+    private void ClearGpuCache()
+    {
+        _gpuInput = null;
+        _gpuInputShape = null;
+
+        // Dispose and clear input slices
+        if (_gpuInputSlices != null)
+        {
+            foreach (var buffer in _gpuInputSlices)
+                buffer?.Dispose();
+            _gpuInputSlices = null;
+        }
+
+        // Dispose and clear hidden states
+        if (_gpuHiddenStates != null)
+        {
+            foreach (var buffer in _gpuHiddenStates)
+                buffer?.Dispose();
+            _gpuHiddenStates = null;
+        }
+
+        // Dispose and clear cell states
+        if (_gpuCellStates != null)
+        {
+            foreach (var buffer in _gpuCellStates)
+                buffer?.Dispose();
+            _gpuCellStates = null;
+        }
+
+        // Dispose and clear forget gates
+        if (_gpuForgetGates != null)
+        {
+            foreach (var buffer in _gpuForgetGates)
+                buffer?.Dispose();
+            _gpuForgetGates = null;
+        }
+
+        // Dispose and clear input gates
+        if (_gpuInputGates != null)
+        {
+            foreach (var buffer in _gpuInputGates)
+                buffer?.Dispose();
+            _gpuInputGates = null;
+        }
+
+        // Dispose and clear output gates
+        if (_gpuOutputGates != null)
+        {
+            foreach (var buffer in _gpuOutputGates)
+                buffer?.Dispose();
+            _gpuOutputGates = null;
+        }
+
+        // Dispose and clear candidate cells
+        if (_gpuCandidateCells != null)
+        {
+            foreach (var buffer in _gpuCandidateCells)
+                buffer?.Dispose();
+            _gpuCandidateCells = null;
+        }
     }
 
     /// <summary>
@@ -1952,4 +2586,184 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
 
+    #region GPU Parameter Update
+
+    /// <summary>
+    /// GPU-resident parameter update with polymorphic optimizer support.
+    /// Updates all weight tensors directly on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuWeightsFiGradient == null || _gpuWeightsIiGradient == null ||
+            _gpuWeightsCiGradient == null || _gpuWeightsOiGradient == null ||
+            _gpuWeightsFhGradient == null || _gpuWeightsIhGradient == null ||
+            _gpuWeightsChGradient == null || _gpuWeightsOhGradient == null ||
+            _gpuBiasFGradient == null || _gpuBiasIGradient == null ||
+            _gpuBiasCGradient == null || _gpuBiasOGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Convert weights to NCHW format for GPU operations (same as gradients)
+        var wFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
+        var wIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
+        var wCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
+        var wOiNCHW = _weightsOi.Transpose([3, 2, 0, 1]);
+        var wFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
+        var wIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
+        var wChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
+        var wOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
+
+        // Ensure GPU weight tensors exist
+        _gpuWeightsFi ??= new GpuTensor<T>(backend, wFiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsIi ??= new GpuTensor<T>(backend, wIiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsCi ??= new GpuTensor<T>(backend, wCiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsOi ??= new GpuTensor<T>(backend, wOiNCHW, GpuTensorRole.Weight);
+        _gpuWeightsFh ??= new GpuTensor<T>(backend, wFhNCHW, GpuTensorRole.Weight);
+        _gpuWeightsIh ??= new GpuTensor<T>(backend, wIhNCHW, GpuTensorRole.Weight);
+        _gpuWeightsCh ??= new GpuTensor<T>(backend, wChNCHW, GpuTensorRole.Weight);
+        _gpuWeightsOh ??= new GpuTensor<T>(backend, wOhNCHW, GpuTensorRole.Weight);
+        _gpuBiasF ??= new GpuTensor<T>(backend, _biasF, GpuTensorRole.Bias);
+        _gpuBiasI ??= new GpuTensor<T>(backend, _biasI, GpuTensorRole.Bias);
+        _gpuBiasC ??= new GpuTensor<T>(backend, _biasC, GpuTensorRole.Bias);
+        _gpuBiasO ??= new GpuTensor<T>(backend, _biasO, GpuTensorRole.Bias);
+
+        // Ensure optimizer state buffers exist
+        EnsureConvLstmOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        config.ApplyUpdate(backend, _gpuWeightsFi.Buffer, _gpuWeightsFiGradient.Buffer, BuildConvLstmOptimizerState("Wfi"), _weightsFi.Length);
+        config.ApplyUpdate(backend, _gpuWeightsIi.Buffer, _gpuWeightsIiGradient.Buffer, BuildConvLstmOptimizerState("Wii"), _weightsIi.Length);
+        config.ApplyUpdate(backend, _gpuWeightsCi.Buffer, _gpuWeightsCiGradient.Buffer, BuildConvLstmOptimizerState("Wci"), _weightsCi.Length);
+        config.ApplyUpdate(backend, _gpuWeightsOi.Buffer, _gpuWeightsOiGradient.Buffer, BuildConvLstmOptimizerState("Woi"), _weightsOi.Length);
+        config.ApplyUpdate(backend, _gpuWeightsFh.Buffer, _gpuWeightsFhGradient.Buffer, BuildConvLstmOptimizerState("Wfh"), _weightsFh.Length);
+        config.ApplyUpdate(backend, _gpuWeightsIh.Buffer, _gpuWeightsIhGradient.Buffer, BuildConvLstmOptimizerState("Wih"), _weightsIh.Length);
+        config.ApplyUpdate(backend, _gpuWeightsCh.Buffer, _gpuWeightsChGradient.Buffer, BuildConvLstmOptimizerState("Wch"), _weightsCh.Length);
+        config.ApplyUpdate(backend, _gpuWeightsOh.Buffer, _gpuWeightsOhGradient.Buffer, BuildConvLstmOptimizerState("Woh"), _weightsOh.Length);
+        config.ApplyUpdate(backend, _gpuBiasF.Buffer, _gpuBiasFGradient.Buffer, BuildConvLstmOptimizerState("Bf"), _biasF.Length);
+        config.ApplyUpdate(backend, _gpuBiasI.Buffer, _gpuBiasIGradient.Buffer, BuildConvLstmOptimizerState("Bi"), _biasI.Length);
+        config.ApplyUpdate(backend, _gpuBiasC.Buffer, _gpuBiasCGradient.Buffer, BuildConvLstmOptimizerState("Bc"), _biasC.Length);
+        config.ApplyUpdate(backend, _gpuBiasO.Buffer, _gpuBiasOGradient.Buffer, BuildConvLstmOptimizerState("Bo"), _biasO.Length);
+
+        // Sync back to CPU tensors for compatibility (convert back to NHWC)
+        _weightsFi = _gpuWeightsFi.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsIi = _gpuWeightsIi.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsCi = _gpuWeightsCi.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsOi = _gpuWeightsOi.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsFh = _gpuWeightsFh.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsIh = _gpuWeightsIh.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsCh = _gpuWeightsCh.ToTensor().Transpose([2, 3, 1, 0]);
+        _weightsOh = _gpuWeightsOh.ToTensor().Transpose([2, 3, 1, 0]);
+        _biasF = _gpuBiasF.ToTensor();
+        _biasI = _gpuBiasI.ToTensor();
+        _biasC = _gpuBiasC.ToTensor();
+        _biasO = _gpuBiasO.ToTensor();
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers exist for all ConvLSTM parameters.
+    /// </summary>
+    private void EnsureConvLstmOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int inputWeightSize = _weightsFi.Length;
+        int hiddenWeightSize = _weightsFh.Length;
+        int biasSize = _biasF.Length;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Velocity buffers
+                _gpuWeightsFiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // M and V buffers for Adam-family
+                _gpuWeightsFiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // SquaredAvg buffers for RMSprop/Adagrad
+                _gpuWeightsFiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsCiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOiVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsFhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsIhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsChVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsOhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasFVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasIVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasCVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasOVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for a specific ConvLSTM parameter.
+    /// </summary>
+    private GpuOptimizerState BuildConvLstmOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "Wfi" => new GpuOptimizerState { Velocity = _gpuWeightsFiVelocity?.Buffer, M = _gpuWeightsFiM?.Buffer, V = _gpuWeightsFiV?.Buffer, SquaredAvg = _gpuWeightsFiVelocity?.Buffer, AccumulatedGrad = _gpuWeightsFiVelocity?.Buffer },
+            "Wii" => new GpuOptimizerState { Velocity = _gpuWeightsIiVelocity?.Buffer, M = _gpuWeightsIiM?.Buffer, V = _gpuWeightsIiV?.Buffer, SquaredAvg = _gpuWeightsIiVelocity?.Buffer, AccumulatedGrad = _gpuWeightsIiVelocity?.Buffer },
+            "Wci" => new GpuOptimizerState { Velocity = _gpuWeightsCiVelocity?.Buffer, M = _gpuWeightsCiM?.Buffer, V = _gpuWeightsCiV?.Buffer, SquaredAvg = _gpuWeightsCiVelocity?.Buffer, AccumulatedGrad = _gpuWeightsCiVelocity?.Buffer },
+            "Woi" => new GpuOptimizerState { Velocity = _gpuWeightsOiVelocity?.Buffer, M = _gpuWeightsOiM?.Buffer, V = _gpuWeightsOiV?.Buffer, SquaredAvg = _gpuWeightsOiVelocity?.Buffer, AccumulatedGrad = _gpuWeightsOiVelocity?.Buffer },
+            "Wfh" => new GpuOptimizerState { Velocity = _gpuWeightsFhVelocity?.Buffer, M = _gpuWeightsFhM?.Buffer, V = _gpuWeightsFhV?.Buffer, SquaredAvg = _gpuWeightsFhVelocity?.Buffer, AccumulatedGrad = _gpuWeightsFhVelocity?.Buffer },
+            "Wih" => new GpuOptimizerState { Velocity = _gpuWeightsIhVelocity?.Buffer, M = _gpuWeightsIhM?.Buffer, V = _gpuWeightsIhV?.Buffer, SquaredAvg = _gpuWeightsIhVelocity?.Buffer, AccumulatedGrad = _gpuWeightsIhVelocity?.Buffer },
+            "Wch" => new GpuOptimizerState { Velocity = _gpuWeightsChVelocity?.Buffer, M = _gpuWeightsChM?.Buffer, V = _gpuWeightsChV?.Buffer, SquaredAvg = _gpuWeightsChVelocity?.Buffer, AccumulatedGrad = _gpuWeightsChVelocity?.Buffer },
+            "Woh" => new GpuOptimizerState { Velocity = _gpuWeightsOhVelocity?.Buffer, M = _gpuWeightsOhM?.Buffer, V = _gpuWeightsOhV?.Buffer, SquaredAvg = _gpuWeightsOhVelocity?.Buffer, AccumulatedGrad = _gpuWeightsOhVelocity?.Buffer },
+            "Bf" => new GpuOptimizerState { Velocity = _gpuBiasFVelocity?.Buffer, M = _gpuBiasFM?.Buffer, V = _gpuBiasFV?.Buffer, SquaredAvg = _gpuBiasFVelocity?.Buffer, AccumulatedGrad = _gpuBiasFVelocity?.Buffer },
+            "Bi" => new GpuOptimizerState { Velocity = _gpuBiasIVelocity?.Buffer, M = _gpuBiasIM?.Buffer, V = _gpuBiasIV?.Buffer, SquaredAvg = _gpuBiasIVelocity?.Buffer, AccumulatedGrad = _gpuBiasIVelocity?.Buffer },
+            "Bc" => new GpuOptimizerState { Velocity = _gpuBiasCVelocity?.Buffer, M = _gpuBiasCM?.Buffer, V = _gpuBiasCV?.Buffer, SquaredAvg = _gpuBiasCVelocity?.Buffer, AccumulatedGrad = _gpuBiasCVelocity?.Buffer },
+            "Bo" => new GpuOptimizerState { Velocity = _gpuBiasOVelocity?.Buffer, M = _gpuBiasOM?.Buffer, V = _gpuBiasOV?.Buffer, SquaredAvg = _gpuBiasOVelocity?.Buffer, AccumulatedGrad = _gpuBiasOVelocity?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 }

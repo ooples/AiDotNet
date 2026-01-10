@@ -434,8 +434,10 @@ extern ""C"" __global__ void adam_step(
     m[idx] = mVal;
     v[idx] = vVal;
 
-    float mHat = mVal / (1.0f - powf(beta1, (float)t));
-    float vHat = vVal / (1.0f - powf(beta2, (float)t));
+    // Guard against t==0 which causes division by zero
+    int safe_t = t < 1 ? 1 : t;
+    float mHat = mVal / (1.0f - powf(beta1, (float)safe_t));
+    float vHat = vVal / (1.0f - powf(beta2, (float)safe_t));
 
     param[idx] -= learningRate * mHat / (sqrtf(vHat) + epsilon);
 }
@@ -455,8 +457,10 @@ extern ""C"" __global__ void adamw_step(
     m[idx] = mVal;
     v[idx] = vVal;
 
-    float mHat = mVal / (1.0f - powf(beta1, (float)t));
-    float vHat = vVal / (1.0f - powf(beta2, (float)t));
+    // Guard against t==0 which causes division by zero
+    int safe_t = t < 1 ? 1 : t;
+    float mHat = mVal / (1.0f - powf(beta1, (float)safe_t));
+    float vHat = vVal / (1.0f - powf(beta2, (float)safe_t));
 
     // AdamW: decoupled weight decay
     param[idx] -= learningRate * (mHat / (sqrtf(vHat) + epsilon) + weightDecay * param[idx]);
@@ -570,8 +574,10 @@ extern ""C"" __global__ void lamb_step(
     v[idx] = vVal;
 
     // Bias correction
-    float mHat = mVal / (1.0f - powf(beta1, (float)t));
-    float vHat = vVal / (1.0f - powf(beta2, (float)t));
+    // Guard against t==0 which causes division by zero
+    int safe_t = t < 1 ? 1 : t;
+    float mHat = mVal / (1.0f - powf(beta1, (float)safe_t));
+    float vHat = vVal / (1.0f - powf(beta2, (float)safe_t));
 
     // LAMB: Adam update direction with weight decay
     float adamUpdate = mHat / (sqrtf(vHat) + epsilon);
@@ -857,7 +863,7 @@ extern ""C"" __global__ void lbfgs_dot_product_reduce(
 }
 
 // Final reduction of block partial sums to single value
-// Call with 1 block, numBlocks threads (or loop if numBlocks > 1024)
+// Call with 1 block; handles numBlocks > blockDim.x via strided loop
 extern ""C"" __global__ void lbfgs_reduce_partials(
     const float* blockPartials, float* result, int numBlocks)
 {
@@ -865,11 +871,16 @@ extern ""C"" __global__ void lbfgs_reduce_partials(
 
     unsigned int tid = threadIdx.x;
 
-    // Load partial sums
-    sdata[tid] = (tid < numBlocks) ? blockPartials[tid] : 0.0f;
+    // Each thread accumulates multiple partials if numBlocks > blockDim.x
+    // This handles the case where we have more partial blocks than threads
+    float sum = 0.0f;
+    for (int i = tid; i < numBlocks; i += blockDim.x) {
+        sum += blockPartials[i];
+    }
+    sdata[tid] = sum;
     __syncthreads();
 
-    // Parallel reduction
+    // Parallel reduction in shared memory
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sdata[tid] += sdata[tid + s];
@@ -1534,6 +1545,7 @@ extern ""C"" __global__ void scatter_mean_normalize(
 
 // Group normalization backward - Pass 1: Compute group-wise sums
 // This kernel accumulates sum(dy * gamma) and sum(dy * gamma * xHat) for each group
+// REQUIREMENT: C must be evenly divisible by G (C % G == 0)
 extern ""C"" __global__ void groupnorm_backward_sums(
     const float* gradOutput,   // [N, C, H, W]
     const float* input,        // [N, C, H, W]
@@ -1549,6 +1561,9 @@ extern ""C"" __global__ void groupnorm_backward_sums(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
+
+    // Validate divisibility assumption (only first thread checks to avoid divergence)
+    if (idx == 0 && C % G != 0) return; // Invalid configuration - C must be divisible by G
 
     int c = (idx / (W * H)) % C;
     int n = idx / (W * H * C);
@@ -1576,7 +1591,9 @@ extern ""C"" __global__ void groupnorm_backward_sums(
 }
 
 // Group normalization backward - Pass 2: Compute final input gradients
-// Uses the group-wise sums to compute: dX = invStd * (dy*gamma - (1/N)*(sumDy + xHat*sumDyXhat))
+// Uses the group-wise sums to compute: dX = invStd * (dy*gamma - (1/groupSize)*(sumDy + xHat*sumDyXhat))
+// where groupSize = channelsPerGroup * H * W is the number of elements in each group
+// REQUIREMENT: C must be evenly divisible by G (C % G == 0)
 extern ""C"" __global__ void groupnorm_backward(
     const float* gradOutput,   // [N, C, H, W]
     const float* input,        // [N, C, H, W]
@@ -1591,6 +1608,9 @@ extern ""C"" __global__ void groupnorm_backward(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
+
+    // Validate divisibility assumption (only first thread checks to avoid divergence)
+    if (idx == 0 && C % G != 0) return; // Invalid configuration - C must be divisible by G
 
     int c = (idx / (W * H)) % C;
     int n = idx / (W * H * C);

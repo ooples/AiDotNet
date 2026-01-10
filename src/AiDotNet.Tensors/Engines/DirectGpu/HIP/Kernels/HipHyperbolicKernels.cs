@@ -15,7 +15,10 @@ internal static class HipHyperbolicKernels
 #include <hip/hip_runtime.h>
 #include <math.h>
 
-#define EPSILON 1e-15f
+// Epsilon for division safety (preventing divide-by-zero)
+#define EPSILON_DIV 1e-10f
+// Epsilon for boundary clamping (float precision: 1.0f - 1e-6f != 1.0f)
+#define EPSILON_BOUNDARY 1e-6f
 #define MAX_NORM_FACTOR 0.99999f
 #define MAX_DIM 128
 
@@ -44,7 +47,7 @@ __device__ float dot_product(const float* a, const float* b, int dim) {
 }
 
 __device__ float safe_arctanh(float x) {
-    x = fmaxf(-1.0f + EPSILON, fminf(1.0f - EPSILON, x));
+    x = fmaxf(-1.0f + EPSILON_BOUNDARY, fminf(1.0f - EPSILON_BOUNDARY, x));
     return 0.5f * logf((1.0f + x) / (1.0f - x));
 }
 
@@ -61,7 +64,7 @@ __device__ void project_to_ball(float* point, int dim, float c) {
 
 __device__ float conformal_factor(const float* x, int dim, float c) {
     float normSq = compute_norm_sq(x, dim);
-    return 2.0f / fmaxf(1.0f - c * normSq, EPSILON);
+    return 2.0f / fmaxf(1.0f - c * normSq, EPSILON_DIV);
 }
 
 __device__ void mobius_add(const float* x, const float* y, float* result, int dim, float c) {
@@ -70,7 +73,7 @@ __device__ void mobius_add(const float* x, const float* y, float* result, int di
     float xyDot = dot_product(x, y, dim);
 
     float denom = 1.0f + 2.0f * c * xyDot + c * c * xNormSq * yNormSq;
-    denom = fmaxf(fabsf(denom), EPSILON);
+    denom = fmaxf(fabsf(denom), EPSILON_DIV);
 
     float coeff1 = 1.0f + 2.0f * c * xyDot + c * yNormSq;
     float coeff2 = 1.0f - c * xNormSq;
@@ -92,14 +95,14 @@ __device__ float poincare_distance(const float* x, const float* y, int dim, floa
     float diffNorm = compute_norm(diff, dim);
     float sqrtC = sqrtf(c);
     float arg = sqrtC * diffNorm;
-    arg = fminf(arg, 1.0f - EPSILON);
+    arg = fminf(arg, 1.0f - EPSILON_BOUNDARY);
 
     return (2.0f / sqrtC) * safe_arctanh(arg);
 }
 
 __device__ void poincare_exp_map(const float* basePoint, const float* tangentVec, float* result, int dim, float c) {
     float vNorm = compute_norm(tangentVec, dim);
-    if (vNorm < EPSILON) {
+    if (vNorm < EPSILON_DIV) {
         for (int i = 0; i < dim; i++) {
             result[i] = basePoint[i];
         }
@@ -107,13 +110,13 @@ __device__ void poincare_exp_map(const float* basePoint, const float* tangentVec
     }
 
     float xNormSq = compute_norm_sq(basePoint, dim);
-    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON);
+    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON_DIV);
 
     float sqrtC = sqrtf(c);
     float scaledNorm = sqrtC * lambdaX * vNorm / 2.0f;
     scaledNorm = fminf(scaledNorm, 20.0f);
     float tanhVal = tanhf(scaledNorm);
-    float coeff = tanhVal / (sqrtC * vNorm + EPSILON);
+    float coeff = tanhVal / (sqrtC * vNorm + EPSILON_DIV);
 
     float scaledV[MAX_DIM];
     for (int i = 0; i < dim; i++) {
@@ -134,7 +137,7 @@ __device__ void poincare_log_map(const float* x, const float* y, float* result, 
     mobius_add(negX, y, diff, dim, c);
 
     float diffNorm = compute_norm(diff, dim);
-    if (diffNorm < EPSILON) {
+    if (diffNorm < EPSILON_DIV) {
         for (int i = 0; i < dim; i++) {
             result[i] = 0.0f;
         }
@@ -142,11 +145,11 @@ __device__ void poincare_log_map(const float* x, const float* y, float* result, 
     }
 
     float xNormSq = compute_norm_sq(x, dim);
-    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON);
+    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON_DIV);
 
     float sqrtC = sqrtf(c);
     float arg = sqrtC * diffNorm;
-    arg = fminf(arg, 1.0f - EPSILON);
+    arg = fminf(arg, 1.0f - EPSILON_BOUNDARY);
     float arctanhVal = safe_arctanh(arg);
 
     float coeff = (2.0f / (lambdaX * sqrtC)) * arctanhVal / diffNorm;
@@ -174,7 +177,7 @@ extern ""C"" __global__ void hyperbolic_linear_forward(
     if (b >= batch || o >= outputFeatures) return;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     float projectedInput[MAX_DIM];
     for (int i = 0; i < inputFeatures && i < MAX_DIM; i++) {
@@ -227,7 +230,7 @@ extern ""C"" __global__ void hyperbolic_linear_backward_input(
     if (b >= batch || i >= inputFeatures) return;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     float projectedInput[MAX_DIM];
     for (int j = 0; j < inputFeatures && j < MAX_DIM; j++) {
@@ -251,6 +254,8 @@ extern ""C"" __global__ void hyperbolic_linear_backward_input(
     gradInput[b * inputFeatures + i] = gradSum;
 }
 
+// Parallelized weight gradient kernel - each thread handles one (batch, output, input) element
+// and uses atomicAdd for accumulation. Caller must zero gradWeights before invoking.
 extern ""C"" __global__ void hyperbolic_linear_backward_weights(
     const float* gradOutput,
     const float* input,
@@ -258,36 +263,40 @@ extern ""C"" __global__ void hyperbolic_linear_backward_weights(
     int batch, int inputFeatures, int outputFeatures, float curvature)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
-    int o = gid / inputFeatures;
-    int i = gid % inputFeatures;
+    int totalElements = batch * outputFeatures * inputFeatures;
 
-    if (o >= outputFeatures || i >= inputFeatures) return;
+    if (gid >= totalElements) return;
+
+    // Decompose gid into (b, o, i)
+    int b = gid / (outputFeatures * inputFeatures);
+    int remainder = gid % (outputFeatures * inputFeatures);
+    int o = remainder / inputFeatures;
+    int i = remainder % inputFeatures;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
-    float gradSum = 0.0f;
-    for (int b = 0; b < batch; b++) {
-        float projectedInput[MAX_DIM];
-        for (int j = 0; j < inputFeatures && j < MAX_DIM; j++) {
-            projectedInput[j] = input[b * inputFeatures + j];
-        }
-        project_to_ball(projectedInput, inputFeatures, c);
-
-        float squaredNorm = compute_norm_sq(projectedInput, inputFeatures);
-        float cNormSquared = c * squaredNorm;
-        float oneMinusCNorm = 1.0f - cNormSquared;
-        float conformalFactor = (oneMinusCNorm * oneMinusCNorm) / 4.0f;
-
-        float gradOut = gradOutput[b * outputFeatures + o];
-        float riemannianGrad = gradOut * conformalFactor;
-
-        gradSum += riemannianGrad * projectedInput[i];
+    // Load and project input for this batch element
+    float projectedInput[MAX_DIM];
+    for (int j = 0; j < inputFeatures && j < MAX_DIM; j++) {
+        projectedInput[j] = input[b * inputFeatures + j];
     }
+    project_to_ball(projectedInput, inputFeatures, c);
 
-    gradWeights[o * inputFeatures + i] = gradSum;
+    float squaredNorm = compute_norm_sq(projectedInput, inputFeatures);
+    float cNormSquared = c * squaredNorm;
+    float oneMinusCNorm = 1.0f - cNormSquared;
+    float conformalFactor = (oneMinusCNorm * oneMinusCNorm) / 4.0f;
+
+    float gradOut = gradOutput[b * outputFeatures + o];
+    float riemannianGrad = gradOut * conformalFactor;
+
+    // Use atomic add to accumulate gradient from all batch elements
+    atomicAdd(&gradWeights[o * inputFeatures + i], riemannianGrad * projectedInput[i]);
 }
 
+// Parallelized bias gradient kernel - each thread handles one (batch, output, input) element
+// and uses atomicAdd for accumulation. Caller must zero gradBiases before invoking.
 extern ""C"" __global__ void hyperbolic_linear_backward_biases(
     const float* gradOutput,
     const float* input,
@@ -295,34 +304,37 @@ extern ""C"" __global__ void hyperbolic_linear_backward_biases(
     int batch, int inputFeatures, int outputFeatures, float curvature)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
-    int o = gid / inputFeatures;
-    int i = gid % inputFeatures;
+    int totalElements = batch * outputFeatures * inputFeatures;
 
-    if (o >= outputFeatures || i >= inputFeatures) return;
+    if (gid >= totalElements) return;
+
+    // Decompose gid into (b, o, i)
+    int b = gid / (outputFeatures * inputFeatures);
+    int remainder = gid % (outputFeatures * inputFeatures);
+    int o = remainder / inputFeatures;
+    int i = remainder % inputFeatures;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
-    float gradSum = 0.0f;
-    for (int b = 0; b < batch; b++) {
-        float projectedInput[MAX_DIM];
-        for (int j = 0; j < inputFeatures && j < MAX_DIM; j++) {
-            projectedInput[j] = input[b * inputFeatures + j];
-        }
-        project_to_ball(projectedInput, inputFeatures, c);
-
-        float squaredNorm = compute_norm_sq(projectedInput, inputFeatures);
-        float cNormSquared = c * squaredNorm;
-        float oneMinusCNorm = 1.0f - cNormSquared;
-        float conformalFactor = (oneMinusCNorm * oneMinusCNorm) / 4.0f;
-
-        float gradOut = gradOutput[b * outputFeatures + o];
-        float riemannianGrad = gradOut * conformalFactor;
-
-        gradSum += riemannianGrad / (float)inputFeatures;
+    // Load and project input for this batch element
+    float projectedInput[MAX_DIM];
+    for (int j = 0; j < inputFeatures && j < MAX_DIM; j++) {
+        projectedInput[j] = input[b * inputFeatures + j];
     }
+    project_to_ball(projectedInput, inputFeatures, c);
 
-    gradBiases[o * inputFeatures + i] = gradSum;
+    float squaredNorm = compute_norm_sq(projectedInput, inputFeatures);
+    float cNormSquared = c * squaredNorm;
+    float oneMinusCNorm = 1.0f - cNormSquared;
+    float conformalFactor = (oneMinusCNorm * oneMinusCNorm) / 4.0f;
+
+    float gradOut = gradOutput[b * outputFeatures + o];
+    float riemannianGrad = gradOut * conformalFactor;
+
+    // Use atomic add to accumulate gradient from all batch elements
+    // Bias gradient is distributed across input features
+    atomicAdd(&gradBiases[o * inputFeatures + i], riemannianGrad / (float)inputFeatures);
 }
 
 extern ""C"" __global__ void hyperbolic_mobius_add_backward(
@@ -340,7 +352,7 @@ extern ""C"" __global__ void hyperbolic_mobius_add_backward(
     if (batch >= size / dim || d >= dim) return;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     int baseIdx = batch * dim;
 
@@ -355,7 +367,7 @@ extern ""C"" __global__ void hyperbolic_mobius_add_backward(
     float xyDot = dot_product(xLocal, yLocal, dim);
 
     float denom = 1.0f + 2.0f * c * xyDot + c * c * xNormSq * yNormSq;
-    denom = fmaxf(fabsf(denom), EPSILON);
+    denom = fmaxf(fabsf(denom), EPSILON_DIV);
     float denomSq = denom * denom;
 
     float coeff1 = 1.0f + 2.0f * c * xyDot + c * yNormSq;
@@ -396,7 +408,7 @@ extern ""C"" __global__ void hyperbolic_exp_map_backward(
     if (batch >= size / dim || d >= dim) return;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     int baseIdx = batch * dim;
 
@@ -408,13 +420,13 @@ extern ""C"" __global__ void hyperbolic_exp_map_backward(
     }
 
     float vNorm = compute_norm(vLocal, dim);
-    if (vNorm < EPSILON) {
+    if (vNorm < EPSILON_DIV) {
         gradTangent[baseIdx + d] = gradOutput[baseIdx + d];
         return;
     }
 
     float xNormSq = compute_norm_sq(xLocal, dim);
-    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON);
+    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON_DIV);
     float sqrtC = sqrtf(c);
 
     float scaledNorm = sqrtC * lambdaX * vNorm / 2.0f;
@@ -423,13 +435,13 @@ extern ""C"" __global__ void hyperbolic_exp_map_backward(
     float tanhVal = tanhf(scaledNorm);
     float sech2 = 1.0f - tanhVal * tanhVal;
 
-    float coeff = tanhVal / (sqrtC * vNorm + EPSILON);
+    float coeff = tanhVal / (sqrtC * vNorm + EPSILON_DIV);
 
-    float dVNorm_dvd = vLocal[d] / (vNorm + EPSILON);
+    float dVNorm_dvd = vLocal[d] / (vNorm + EPSILON_DIV);
     float dScaledNorm_dvd = sqrtC * lambdaX * dVNorm_dvd / 2.0f;
 
     float dCoeff_dvd = (sech2 * dScaledNorm_dvd * sqrtC * vNorm - tanhVal * sqrtC * dVNorm_dvd)
-                       / (sqrtC * sqrtC * vNorm * vNorm + EPSILON);
+                       / (sqrtC * sqrtC * vNorm * vNorm + EPSILON_DIV);
 
     float gradOutD = gradOutput[baseIdx + d];
     gradTangent[baseIdx + d] = gradOutD * (coeff + vLocal[d] * dCoeff_dvd);
@@ -450,7 +462,7 @@ extern ""C"" __global__ void hyperbolic_log_map_backward(
     if (batch >= size / dim || d >= dim) return;
 
     float c = fabsf(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     int baseIdx = batch * dim;
 
@@ -469,18 +481,18 @@ extern ""C"" __global__ void hyperbolic_log_map_backward(
     mobius_add(negX, yLocal, diff, dim, c);
 
     float diffNorm = compute_norm(diff, dim);
-    if (diffNorm < EPSILON) {
+    if (diffNorm < EPSILON_DIV) {
         gradX[baseIdx + d] = 0.0f;
         gradY[baseIdx + d] = gradOutput[baseIdx + d];
         return;
     }
 
     float xNormSq = compute_norm_sq(xLocal, dim);
-    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON);
+    float lambdaX = 2.0f / fmaxf(1.0f - c * xNormSq, EPSILON_DIV);
     float sqrtC = sqrtf(c);
 
     float arg = sqrtC * diffNorm;
-    arg = fminf(arg, 1.0f - EPSILON);
+    arg = fminf(arg, 1.0f - EPSILON_BOUNDARY);
     float arctanhVal = safe_arctanh(arg);
 
     float coeff = (2.0f / (lambdaX * sqrtC)) * arctanhVal / diffNorm;

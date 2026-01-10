@@ -16,7 +16,10 @@ internal static class HyperbolicKernels
 // HYPERBOLIC GEOMETRY HELPER FUNCTIONS
 // ===========================================================================
 
-#define EPSILON 1e-15f
+// Epsilon for division safety (preventing divide-by-zero)
+#define EPSILON_DIV 1e-10f
+// Epsilon for boundary clamping (float precision: 1.0f - 1e-6f != 1.0f)
+#define EPSILON_BOUNDARY 1e-6f
 #define MAX_NORM_FACTOR 0.99999f
 #define MAX_DIM 128
 
@@ -63,7 +66,7 @@ inline float dot_product_local(float* a, float* b, int dim) {
 
 // Arctanh with numerical stability
 inline float safe_arctanh(float x) {
-    x = fmax(-1.0f + EPSILON, fmin(1.0f - EPSILON, x));
+    x = fmax(-1.0f + EPSILON_BOUNDARY, fmin(1.0f - EPSILON_BOUNDARY, x));
     return 0.5f * log((1.0f + x) / (1.0f - x));
 }
 
@@ -86,7 +89,7 @@ inline void mobius_add_local(float* x, float* y, float* result, int dim, float c
     float xyDot = dot_product_local(x, y, dim);
 
     float denom = 1.0f + 2.0f * c * xyDot + c * c * xNormSq * yNormSq;
-    denom = fmax(fabs(denom), EPSILON);
+    denom = fmax(fabs(denom), EPSILON_DIV);
 
     float coeff1 = 1.0f + 2.0f * c * xyDot + c * yNormSq;
     float coeff2 = 1.0f - c * xNormSq;
@@ -109,7 +112,7 @@ inline float poincare_distance_local(float* x, float* y, int dim, float c) {
     float diffNorm = compute_norm_local(diff, dim);
     float sqrtC = sqrt(c);
     float arg = sqrtC * diffNorm;
-    arg = fmin(arg, 1.0f - EPSILON);
+    arg = fmin(arg, 1.0f - EPSILON_BOUNDARY);
 
     return (2.0f / sqrtC) * safe_arctanh(arg);
 }
@@ -117,7 +120,7 @@ inline float poincare_distance_local(float* x, float* y, int dim, float c) {
 // Poincare exponential map (local arrays)
 inline void poincare_exp_map_local(float* basePoint, float* tangentVec, float* result, int dim, float c) {
     float vNorm = compute_norm_local(tangentVec, dim);
-    if (vNorm < EPSILON) {
+    if (vNorm < EPSILON_DIV) {
         for (int i = 0; i < dim; i++) {
             result[i] = basePoint[i];
         }
@@ -126,14 +129,14 @@ inline void poincare_exp_map_local(float* basePoint, float* tangentVec, float* r
 
     // Compute lambda_x = 2 / (1 - c * ||x||^2)
     float xNormSq = compute_norm_sq_local(basePoint, dim);
-    float lambdaX = 2.0f / fmax(1.0f - c * xNormSq, EPSILON);
+    float lambdaX = 2.0f / fmax(1.0f - c * xNormSq, EPSILON_DIV);
 
     // Compute tanh(sqrt(c) * lambda_x * ||v|| / 2) / (sqrt(c) * ||v||)
     float sqrtC = sqrt(c);
     float scaledNorm = sqrtC * lambdaX * vNorm / 2.0f;
     scaledNorm = fmin(scaledNorm, 20.0f); // Prevent overflow
     float tanhVal = tanh(scaledNorm);
-    float coeff = tanhVal / (sqrtC * vNorm + EPSILON);
+    float coeff = tanhVal / (sqrtC * vNorm + EPSILON_DIV);
 
     // Compute scaled tangent vector
     float scaledV[MAX_DIM];
@@ -166,7 +169,7 @@ __kernel void hyperbolic_linear_forward(
     if (b >= batch || o >= outputFeatures) return;
 
     float c = fabs(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     // Copy input to local array and project
     float projectedInput[MAX_DIM];
@@ -227,7 +230,7 @@ __kernel void hyperbolic_linear_backward_input(
     if (b >= batch || i >= inputFeatures) return;
 
     float c = fabs(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     // Copy input to local array and project
     float projectedInput[MAX_DIM];
@@ -268,7 +271,7 @@ __kernel void hyperbolic_linear_backward_weights(
     if (o >= outputFeatures || i >= inputFeatures) return;
 
     float c = fabs(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     // Accumulate weight gradient over batch
     float gradSum = 0.0f;
@@ -308,7 +311,7 @@ __kernel void hyperbolic_linear_backward_biases(
     if (o >= outputFeatures || i >= inputFeatures) return;
 
     float c = fabs(curvature);
-    if (c < EPSILON) c = 1.0f;
+    if (c < EPSILON_DIV) c = 1.0f;
 
     // Accumulate bias gradient over batch
     float gradSum = 0.0f;

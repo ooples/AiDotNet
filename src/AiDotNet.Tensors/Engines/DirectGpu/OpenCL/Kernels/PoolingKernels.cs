@@ -591,6 +591,8 @@ __kernel void nearest_neighbor_upsample(
 }
 
 // Nearest Neighbor Upsample 2D backward
+// Iterates over INPUT elements to avoid race conditions
+// Each work-item accumulates gradients from the scaleFactor x scaleFactor output region
 __kernel void nearest_neighbor_upsample_backward(
     __global const float* gradOutput,
     __global float* gradInput,
@@ -598,26 +600,38 @@ __kernel void nearest_neighbor_upsample_backward(
     const int height,
     const int width,
     const int scaleFactor,
-    const int totalOutputSize)
+    const int totalInputSize)
 {
     const int idx = get_global_id(0);
-    if (idx >= totalOutputSize) return;
+    if (idx >= totalInputSize) return;
 
     const int outHeight = height * scaleFactor;
     const int outWidth = width * scaleFactor;
+    const int spatialIn = height * width;
     const int spatialOut = outHeight * outWidth;
 
-    const int bc = idx / spatialOut;
-    const int spatial = idx % spatialOut;
-    const int oh = spatial / outWidth;
-    const int ow = spatial % outWidth;
+    // Decompose input index into batch-channel and spatial components
+    const int bc = idx / spatialIn;
+    const int spatial = idx % spatialIn;
+    const int ih = spatial / width;
+    const int iw = spatial % width;
 
-    const int ih = oh / scaleFactor;
-    const int iw = ow / scaleFactor;
-    const int inputIdx = bc * height * width + ih * width + iw;
+    // Compute the top-left corner in output space
+    const int oh_start = ih * scaleFactor;
+    const int ow_start = iw * scaleFactor;
 
-    // Note: This is not atomic - for production use OpenCL 2.0 atomics
-    gradInput[inputIdx] += gradOutput[idx];
+    // Accumulate gradients from the scaleFactor x scaleFactor output region
+    float grad_sum = 0.0f;
+    for (int dy = 0; dy < scaleFactor; dy++) {
+        for (int dx = 0; dx < scaleFactor; dx++) {
+            const int oh = oh_start + dy;
+            const int ow = ow_start + dx;
+            const int outIdx = bc * spatialOut + oh * outWidth + ow;
+            grad_sum += gradOutput[outIdx];
+        }
+    }
+
+    gradInput[idx] = grad_sum;
 }
 ";
         }

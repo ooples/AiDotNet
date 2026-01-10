@@ -321,7 +321,7 @@ __kernel void depthwise_conv2d(
     output[((b * channels + c) * outHeight + oh) * outWidth + ow] = sum;
 }
 
-// Transposed Conv2D (deconvolution)
+// Transposed Conv2D (deconvolution) with output padding support
 __kernel void conv_transpose2d(
     __global const float* input,
     __global const float* weights,
@@ -338,7 +338,9 @@ __kernel void conv_transpose2d(
     const int strideH,
     const int strideW,
     const int padH,
-    const int padW)
+    const int padW,
+    const int outputPadH,
+    const int outputPadW)
 {
     const int ow = get_global_id(0);
     const int oh = get_global_id(1);
@@ -372,6 +374,116 @@ __kernel void conv_transpose2d(
     }
 
     output[((b * outChannels + oc) * outHeight + oh) * outWidth + ow] = sum;
+}
+
+// Transposed Conv2D backward pass for input gradients
+__kernel void conv_transpose2d_backward_input(
+    __global const float* gradOutput,
+    __global const float* weights,
+    __global float* gradInput,
+    const int batch,
+    const int inChannels,
+    const int inHeight,
+    const int inWidth,
+    const int outChannels,
+    const int outHeight,
+    const int outWidth,
+    const int kernelH,
+    const int kernelW,
+    const int strideH,
+    const int strideW,
+    const int padH,
+    const int padW,
+    const int outputPadH,
+    const int outputPadW,
+    const int totalInput)
+{
+    const int idx = get_global_id(0);
+    if (idx >= totalInput) return;
+
+    const int iw = idx % inWidth;
+    const int ih = (idx / inWidth) % inHeight;
+    const int ic = (idx / (inWidth * inHeight)) % inChannels;
+    const int b = idx / (inWidth * inHeight * inChannels);
+
+    // Effective output dimensions excluding output padding
+    const int outHeight_eff = outHeight - outputPadH;
+    const int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+
+    for (int oc = 0; oc < outChannels; oc++) {
+        for (int kh = 0; kh < kernelH; kh++) {
+            for (int kw = 0; kw < kernelW; kw++) {
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                    sum += gradOutput[goIdx] * weights[kIdx];
+                }
+            }
+        }
+    }
+
+    gradInput[idx] = sum;
+}
+
+// Transposed Conv2D backward pass for kernel gradients
+__kernel void conv_transpose2d_backward_weights(
+    __global const float* input,
+    __global const float* gradOutput,
+    __global float* gradWeights,
+    const int batch,
+    const int inChannels,
+    const int inHeight,
+    const int inWidth,
+    const int outChannels,
+    const int outHeight,
+    const int outWidth,
+    const int kernelH,
+    const int kernelW,
+    const int strideH,
+    const int strideW,
+    const int padH,
+    const int padW,
+    const int outputPadH,
+    const int outputPadW,
+    const int totalKernel)
+{
+    const int idx = get_global_id(0);
+    if (idx >= totalKernel) return;
+
+    const int kw = idx % kernelW;
+    const int kh = (idx / kernelW) % kernelH;
+    const int oc = (idx / (kernelW * kernelH)) % outChannels;
+    const int ic = idx / (kernelW * kernelH * outChannels);
+
+    // Effective output dimensions excluding output padding
+    const int outHeight_eff = outHeight - outputPadH;
+    const int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+
+    for (int b = 0; b < batch; b++) {
+        for (int ih = 0; ih < inHeight; ih++) {
+            for (int iw = 0; iw < inWidth; iw++) {
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    sum += input[inIdx] * gradOutput[goIdx];
+                }
+            }
+        }
+    }
+
+    gradWeights[idx] = sum;
 }
 
 // Conv3D for volumetric data
@@ -450,6 +562,8 @@ __kernel void conv3d_direct(
                 "conv2d_backward_weights",
                 "depthwise_conv2d",
                 "conv_transpose2d",
+                "conv_transpose2d_backward_input",
+                "conv_transpose2d_backward_weights",
                 "conv3d_direct"
             };
         }

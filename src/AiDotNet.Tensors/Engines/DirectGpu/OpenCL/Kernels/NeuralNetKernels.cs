@@ -20,12 +20,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 // ===========================================================================
 
 // Atomic float add using compare-and-swap loop (OpenCL 1.x compatible)
-inline void atomic_add_float(__global float *ptr, float val) {
-    union { float f; int i; } next, curr;
+// Uses as_int/as_float for robust type reinterpretation instead of union
+// volatile qualifier ensures memory visibility across work-items
+inline void atomic_add_float(volatile __global float *ptr, float val) {
+    int oldVal, newVal;
     do {
-        curr.f = *ptr;
-        next.f = curr.f + val;
-    } while (atomic_cmpxchg((__global int *)ptr, curr.i, next.i) != curr.i);
+        oldVal = *(volatile __global int *)ptr;
+        newVal = as_int(as_float(oldVal) + val);
+    } while (atomic_cmpxchg((volatile __global int *)ptr, oldVal, newVal) != oldVal);
 }
 
 // ===========================================================================
@@ -480,9 +482,11 @@ __kernel void adam_update(
     float v_new = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = v_new;
 
-    // Bias correction
-    float m_hat = m_new / (1.0f - pow(beta1, (float)step));
-    float v_hat = v_new / (1.0f - pow(beta2, (float)step));
+    // Bias correction - guard against step==0 which causes division by zero
+    // Step should always be >= 1; if step==0, use step==1 to avoid NaN/Inf
+    int safe_step = step < 1 ? 1 : step;
+    float m_hat = m_new / (1.0f - pow(beta1, (float)safe_step));
+    float v_hat = v_new / (1.0f - pow(beta2, (float)safe_step));
 
     // Update parameters
     float update = learningRate * m_hat / (sqrt(v_hat) + epsilon);
@@ -524,9 +528,11 @@ __kernel void adamw_update(
     float v_new = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = v_new;
 
-    // Bias correction
-    float m_hat = m_new / (1.0f - pow(beta1, (float)step));
-    float v_hat = v_new / (1.0f - pow(beta2, (float)step));
+    // Bias correction - guard against step==0 which causes division by zero
+    // Step should always be >= 1; if step==0, use step==1 to avoid NaN/Inf
+    int safe_step = step < 1 ? 1 : step;
+    float m_hat = m_new / (1.0f - pow(beta1, (float)safe_step));
+    float v_hat = v_new / (1.0f - pow(beta2, (float)safe_step));
 
     // Update parameters
     param[idx] -= learningRate * m_hat / (sqrt(v_hat) + epsilon);
@@ -603,13 +609,15 @@ __kernel void nag_update(
         grad += weightDecay * param[idx];
     }
 
-    // Nesterov momentum
+    // Nesterov momentum (Sutskever-style NAG)
+    // Note: Caller should compute gradient at lookahead position (theta + mu * v) for true NAG
     float v = velocity[idx];
     float vNew = momentum * v - learningRate * grad;
     velocity[idx] = vNew;
 
-    // NAG update with lookahead
-    param[idx] += momentum * vNew - learningRate * grad;
+    // NAG update - apply velocity directly
+    // vNew already incorporates momentum and gradient, no double-counting
+    param[idx] += vNew;
 }
 
 // LARS (Layer-wise Adaptive Rate Scaling) optimizer update

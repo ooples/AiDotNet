@@ -539,12 +539,15 @@ extern ""C"" __global__ void octonion_split_relu_backward(
     gradInput[gid] = val > 0.0f ? gradOutput[gid] : 0.0f;
 }
 
-// Modulus activation: scale octonion by activation of its norm
-// output = relu(||input||) * input / ||input||
+// Modulus activation: scale octonion by activation of its norm with threshold
+// output = relu(||input|| - threshold) * input / ||input||
+// When norm <= threshold, output is zero (dead zone)
+// When norm > threshold, output preserves direction but scales magnitude
 extern ""C"" __global__ void octonion_modulus_relu_forward(
     const float* input,
     float* output,
-    int count)
+    int count,
+    float threshold)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -562,10 +565,10 @@ extern ""C"" __global__ void octonion_modulus_relu_forward(
     float normSq = octonion_norm_sq(inputLocal);
     float norm = sqrtf(fmaxf(normSq, EPSILON));
 
-    // Apply ReLU to norm
-    float activatedNorm = fmaxf(0.0f, norm);
+    // Apply ReLU to (norm - threshold)
+    float activatedNorm = fmaxf(0.0f, norm - threshold);
 
-    // Scale octonion
+    // Scale octonion: output = input * relu(norm - threshold) / norm
     float scale = activatedNorm / norm;
     for (int c = 0; c < 8; c++) {
         output[baseIdx + c] = inputLocal[c] * scale;
@@ -576,7 +579,8 @@ extern ""C"" __global__ void octonion_modulus_relu_backward(
     const float* gradOutput,
     const float* input,
     float* gradInput,
-    int count)
+    int count,
+    float threshold)
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -595,7 +599,8 @@ extern ""C"" __global__ void octonion_modulus_relu_backward(
     float normSq = octonion_norm_sq(inputLocal);
     float norm = sqrtf(fmaxf(normSq, EPSILON));
 
-    if (norm <= 0.0f) {
+    // Check if in dead zone (norm <= threshold)
+    if (norm <= threshold) {
         // ReLU is zero, gradient is zero
         for (int c = 0; c < 8; c++) {
             gradInput[baseIdx + c] = 0.0f;
@@ -603,10 +608,24 @@ extern ""C"" __global__ void octonion_modulus_relu_backward(
         return;
     }
 
-    // For modulus ReLU: output = input (when norm > 0)
-    // Gradient passes through directly
+    // For modulus ReLU with threshold:
+    // output = input * (norm - threshold) / norm
+    // d(output)/d(input) involves both scaling and direction terms
+    // Simplified: when norm > threshold, gradient scales by (norm - threshold) / norm
+    // plus contribution from norm gradient
+    float activatedNorm = norm - threshold;
+    float scale = activatedNorm / norm;
+
+    // Compute dot product of gradOut and inputLocal for the radial component
+    float dotProduct = 0.0f;
     for (int c = 0; c < 8; c++) {
-        gradInput[baseIdx + c] = gradOut[c];
+        dotProduct += gradOut[c] * inputLocal[c];
+    }
+
+    // Gradient: scale * gradOut + (threshold / norm^3) * dotProduct * input
+    float radialFactor = threshold * dotProduct / (norm * norm * norm);
+    for (int c = 0; c < 8; c++) {
+        gradInput[baseIdx + c] = scale * gradOut[c] + radialFactor * inputLocal[c];
     }
 }
 ";

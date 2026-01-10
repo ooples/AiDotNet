@@ -298,6 +298,28 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     private int _gpuWidth;
     private FusedActivationType _gpuActivationType;
 
+    #region GPU Weight Storage Fields
+
+    // GPU weight tensors for GPU-resident training
+    private GpuTensor<T>? _gpuKernels;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient tensors from BackwardGpu
+    private GpuTensor<T>? _gpuKernelGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+
+    // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    private GpuTensor<T>? _gpuKernelVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+
+    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    private GpuTensor<T>? _gpuKernelM;
+    private GpuTensor<T>? _gpuKernelV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
+
+    #endregion
+
     /// <summary>
     /// The factor controlling how much previous gradients influence current updates.
     /// </summary>
@@ -772,18 +794,23 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Compute bias gradient: sum over batch and spatial dimensions (axes 0, 2, 3)
         var biasGradTemp = gpuEngine.SumAxisGpu<T>(convOutputGrad, 0); // [C, H, W]
         var biasGradTemp2 = gpuEngine.SumAxisGpu<T>(biasGradTemp, 1); // [C, W]
-        var biasGradGpu = gpuEngine.SumAxisGpu<T>(biasGradTemp2, 1); // [C]
-        _biasGradients = biasGradGpu.ToTensor();
+        var biasGradGpuTemp = gpuEngine.SumAxisGpu<T>(biasGradTemp2, 1); // [C]
+        _biasGradients = biasGradGpuTemp.ToTensor();
 
         // Compute kernel gradient
-        var kernelGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(
+        var kernelGradGpuTemp = gpuEngine.Conv2DBackwardKernelGpu<T>(
             convOutputGrad,
             _gpuInput,
             _kernels.Shape,
             new[] { 1, 1 },  // stride
             new[] { padSize, padSize },  // padding
             new[] { 1, 1 }); // dilation
-        _kernelGradients = kernelGradGpu.ToTensor();
+        _kernelGradients = kernelGradGpuTemp.ToTensor();
+
+        // Store gradients as GPU tensors for UpdateParametersGpu
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+        _gpuKernelGradient = new GpuTensor<T>(backend, _kernelGradients, GpuTensorRole.Gradient);
+        _gpuBiasGradient = new GpuTensor<T>(backend, _biasGradients, GpuTensorRole.Gradient);
 
         // Compute input gradient
         var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
@@ -1266,6 +1293,90 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
+
+    #region GPU Parameter Updates
+
+    /// <summary>
+    /// Updates parameters using GPU-based optimizer.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuKernelGradient == null || _gpuBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Ensure GPU weight tensors exist
+        _gpuKernels ??= new GpuTensor<T>(backend, _kernels, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+
+        // Ensure optimizer state buffers exist
+        EnsureSubpixelOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        config.ApplyUpdate(backend, _gpuKernels.Buffer, _gpuKernelGradient.Buffer, BuildSubpixelOptimizerState("kernels"), _kernels.Length);
+        config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildSubpixelOptimizerState("biases"), _biases.Length);
+
+        // Sync back to CPU tensors for compatibility
+        _kernels = _gpuKernels.ToTensor();
+        _biases = _gpuBiases.ToTensor();
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers exist for all subpixel conv parameters.
+    /// </summary>
+    private void EnsureSubpixelOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int kernelSize = _kernels.Length;
+        int biasSize = _biases.Length;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Velocity buffers
+                _gpuKernelVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // M and V buffers for Adam-family
+                _gpuKernelM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuKernelV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // Squared average buffers (reuse velocity fields)
+                _gpuKernelVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for a specific subpixel conv parameter.
+    /// </summary>
+    private GpuOptimizerState BuildSubpixelOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "kernels" => new GpuOptimizerState { Velocity = _gpuKernelVelocity?.Buffer, M = _gpuKernelM?.Buffer, V = _gpuKernelV?.Buffer, SquaredAvg = _gpuKernelVelocity?.Buffer, AccumulatedGrad = _gpuKernelVelocity?.Buffer },
+            "biases" => new GpuOptimizerState { Velocity = _gpuBiasVelocity?.Buffer, M = _gpuBiasM?.Buffer, V = _gpuBiasV?.Buffer, SquaredAvg = _gpuBiasVelocity?.Buffer, AccumulatedGrad = _gpuBiasVelocity?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 
     /// <summary>
     /// Resets the internal state of the layer and reinitializes weights.

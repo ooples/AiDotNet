@@ -4270,24 +4270,43 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int seqLen = qShape[2];
         int headDim = qShape[3];
 
-        // Allocate output gradient buffers
+        // Allocate output gradient buffers with exception-safe disposal
         int qkvSize = batch * heads * seqLen * headDim;
-        var gradQueryBuffer = backend.AllocateBuffer(qkvSize);
-        var gradKeyBuffer = backend.AllocateBuffer(qkvSize);
-        var gradValueBuffer = backend.AllocateBuffer(qkvSize);
+        IGpuBuffer? gradQueryBuffer = null;
+        IGpuBuffer? gradKeyBuffer = null;
+        IGpuBuffer? gradValueBuffer = null;
 
-        // Execute ScaledDotProductAttentionBackward on GPU
-        backend.ScaledDotProductAttentionBackward(
-            gradOutput.Buffer, query.Buffer, key.Buffer, value.Buffer,
-            attentionWeights.Buffer, gradQueryBuffer, gradKeyBuffer, gradValueBuffer,
-            batch, heads, seqLen, headDim, (float)scale, isCausal);
+        try
+        {
+            gradQueryBuffer = backend.AllocateBuffer(qkvSize);
+            gradKeyBuffer = backend.AllocateBuffer(qkvSize);
+            gradValueBuffer = backend.AllocateBuffer(qkvSize);
 
-        // Return GPU-resident gradient tensors
-        var gradQuery = new GpuTensor<T>(backend, gradQueryBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        var gradKey = new GpuTensor<T>(backend, gradKeyBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        var gradValue = new GpuTensor<T>(backend, gradValueBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+            // Execute ScaledDotProductAttentionBackward on GPU
+            backend.ScaledDotProductAttentionBackward(
+                gradOutput.Buffer, query.Buffer, key.Buffer, value.Buffer,
+                attentionWeights.Buffer, gradQueryBuffer, gradKeyBuffer, gradValueBuffer,
+                batch, heads, seqLen, headDim, (float)scale, isCausal);
 
-        return (gradQuery, gradKey, gradValue);
+            // Return GPU-resident gradient tensors
+            var gradQuery = new GpuTensor<T>(backend, gradQueryBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+            var gradKey = new GpuTensor<T>(backend, gradKeyBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+            var gradValue = new GpuTensor<T>(backend, gradValueBuffer, qShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Ownership transferred to tensors
+            gradQueryBuffer = null;
+            gradKeyBuffer = null;
+            gradValueBuffer = null;
+
+            return (gradQuery, gradKey, gradValue);
+        }
+        finally
+        {
+            // Dispose any buffers that weren't successfully transferred
+            gradQueryBuffer?.Dispose();
+            gradKeyBuffer?.Dispose();
+            gradValueBuffer?.Dispose();
+        }
     }
 
     /// <summary>
@@ -4457,6 +4476,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (input.Shape.Length < 2)
             throw new ArgumentException("Input must have at least 2 dimensions for upsampling");
 
+        // Parameter validation guard
+        if (scaleFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor), "Scale factor must be positive");
+
         // Compute output shape (scale last two dimensions)
         int[] outputShape = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length - 2; i++)
@@ -4505,6 +4528,30 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         if (gradOutput.Shape.Length < 2)
             throw new ArgumentException("Gradient output must have at least 2 dimensions for upsampling backward");
+
+        // Parameter validation guards
+        if (scaleFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor), "Scale factor must be positive");
+
+        if (inputHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputHeight), "Input height must be positive");
+
+        if (inputWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputWidth), "Input width must be positive");
+
+        // Validate that gradOutput dimensions are consistent with scale factor
+        int expectedOutputHeight = inputHeight * scaleFactor;
+        int expectedOutputWidth = inputWidth * scaleFactor;
+        int actualOutputHeight = gradOutput.Shape[^2];
+        int actualOutputWidth = gradOutput.Shape[^1];
+
+        if (actualOutputHeight != expectedOutputHeight)
+            throw new ArgumentException(
+                $"Gradient output height ({actualOutputHeight}) does not match expected height ({expectedOutputHeight}) based on inputHeight ({inputHeight}) and scaleFactor ({scaleFactor})");
+
+        if (actualOutputWidth != expectedOutputWidth)
+            throw new ArgumentException(
+                $"Gradient output width ({actualOutputWidth}) does not match expected width ({expectedOutputWidth}) based on inputWidth ({inputWidth}) and scaleFactor ({scaleFactor})");
 
         // Compute input shape (original shape before upsampling)
         int[] inputShape = new int[gradOutput.Shape.Length];
@@ -5757,6 +5804,16 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for GlobalMeanPoolBackwardGpu");
 
+        // Parameter validation
+        if (inputShape is null || inputShape.Length == 0)
+            throw new ArgumentException("Input shape must not be null or empty", nameof(inputShape));
+
+        foreach (int dim in inputShape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException("All input shape dimensions must be positive", nameof(inputShape));
+        }
+
         int rank = inputShape.Length;
 
         // Get reduction axes (same as forward pass)
@@ -5813,7 +5870,28 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for GlobalMaxPoolBackwardGpu");
 
+        // Parameter validation
+        if (inputShape is null || inputShape.Length == 0)
+            throw new ArgumentException("Input shape must not be null or empty", nameof(inputShape));
+
+        foreach (int dim in inputShape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException("All input shape dimensions must be positive", nameof(inputShape));
+        }
+
+        if (maxIndices is null)
+            throw new ArgumentNullException(nameof(maxIndices));
+
         int totalSize = inputShape.Aggregate(1, (a, b) => a * b);
+
+        // Validate indices are within bounds
+        foreach (int idx in maxIndices)
+        {
+            if (idx < 0 || idx >= totalSize)
+                throw new ArgumentOutOfRangeException(nameof(maxIndices),
+                    $"Index {idx} is out of bounds for input with total size {totalSize}");
+        }
 
         // Allocate and zero-initialize output buffer
         var outputBuffer = backend.AllocateBuffer(totalSize);
@@ -6303,41 +6381,75 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             normalizedSize *= shape[i];
         }
 
+        // Validate parameter shapes to prevent out-of-bounds kernel access
+        if (gamma.Length != normalizedSize)
+            throw new ArgumentException($"gamma.Length ({gamma.Length}) must match normalizedSize ({normalizedSize}).", nameof(gamma));
+        if (saveMean.Length != batchSize)
+            throw new ArgumentException($"saveMean.Length ({saveMean.Length}) must match batchSize ({batchSize}).", nameof(saveMean));
+        if (saveInvVar.Length != batchSize)
+            throw new ArgumentException($"saveInvVar.Length ({saveInvVar.Length}) must match batchSize ({batchSize}).", nameof(saveInvVar));
+
         // Upload gamma, saveMean, saveInvVar to GPU
         using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.Data, PersistentTensorRole.Weights);
         float[] saveMeanFloat = DirectGpuEngine.ToFloatArray(saveMean.Data);
         float[] saveInvVarFloat = DirectGpuEngine.ToFloatArray(saveInvVar.Data);
-        IGpuBuffer saveMeanBuffer = backend.AllocateBuffer(saveMeanFloat);
-        IGpuBuffer saveInvVarBuffer = backend.AllocateBuffer(saveInvVarFloat);
 
-        // Allocate output buffers
-        int inputSize = gradOutput.ElementCount;
-        var gradInputBuffer = backend.AllocateBuffer(inputSize);
-        IGpuBuffer gradGammaBuffer = backend.AllocateBuffer(normalizedSize);
-        IGpuBuffer gradBetaBuffer = backend.AllocateBuffer(normalizedSize);
+        // Allocate temporary and output buffers with exception-safe disposal
+        IGpuBuffer? saveMeanBuffer = null;
+        IGpuBuffer? saveInvVarBuffer = null;
+        IGpuBuffer? gradInputBuffer = null;
+        IGpuBuffer? gradGammaBuffer = null;
+        IGpuBuffer? gradBetaBuffer = null;
 
-        // Execute LayerNormBackward on GPU
-        backend.LayerNormBackward(
-            gradOutput.Buffer, input.Buffer, gammaBuffer.Buffer,
-            saveMeanBuffer, saveInvVarBuffer,
-            gradInputBuffer, gradGammaBuffer, gradBetaBuffer,
-            batchSize, normalizedSize, (float)epsilon);
+        try
+        {
+            saveMeanBuffer = backend.AllocateBuffer(saveMeanFloat);
+            saveInvVarBuffer = backend.AllocateBuffer(saveInvVarFloat);
 
-        // Download gradGamma and gradBeta (these are small, same size as normalizedSize)
-        float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer);
-        float[] gradBetaFloat = backend.DownloadBuffer(gradBetaBuffer);
+            // Allocate output buffers
+            int inputSize = gradOutput.ElementCount;
+            gradInputBuffer = backend.AllocateBuffer(inputSize);
+            gradGammaBuffer = backend.AllocateBuffer(normalizedSize);
+            gradBetaBuffer = backend.AllocateBuffer(normalizedSize);
 
-        // Dispose temporary buffers
-        saveMeanBuffer.Dispose();
-        saveInvVarBuffer.Dispose();
-        gradGammaBuffer.Dispose();
-        gradBetaBuffer.Dispose();
-        var gradGamma = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaFloat), new[] { normalizedSize });
-        var gradBeta = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaFloat), new[] { normalizedSize });
+            // Execute LayerNormBackward on GPU
+            backend.LayerNormBackward(
+                gradOutput.Buffer, input.Buffer, gammaBuffer.Buffer,
+                saveMeanBuffer, saveInvVarBuffer,
+                gradInputBuffer, gradGammaBuffer, gradBetaBuffer,
+                batchSize, normalizedSize, (float)epsilon);
 
-        // Return GPU-resident gradInput tensor
-        var gradInputTensor = new GpuTensor<T>(backend, gradInputBuffer, shape, GpuTensorRole.Gradient, ownsBuffer: true);
-        return (gradInputTensor, gradGamma, gradBeta);
+            // Download gradGamma and gradBeta (these are small, same size as normalizedSize)
+            float[] gradGammaFloat = backend.DownloadBuffer(gradGammaBuffer);
+            float[] gradBetaFloat = backend.DownloadBuffer(gradBetaBuffer);
+
+            // Dispose temporary buffers (not gradInputBuffer - it becomes part of returned tensor)
+            saveMeanBuffer.Dispose();
+            saveMeanBuffer = null;
+            saveInvVarBuffer.Dispose();
+            saveInvVarBuffer = null;
+            gradGammaBuffer.Dispose();
+            gradGammaBuffer = null;
+            gradBetaBuffer.Dispose();
+            gradBetaBuffer = null;
+
+            var gradGamma = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaFloat), new[] { normalizedSize });
+            var gradBeta = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaFloat), new[] { normalizedSize });
+
+            // Return GPU-resident gradInput tensor
+            var gradInputTensor = new GpuTensor<T>(backend, gradInputBuffer, shape, GpuTensorRole.Gradient, ownsBuffer: true);
+            gradInputBuffer = null; // Ownership transferred to tensor
+            return (gradInputTensor, gradGamma, gradBeta);
+        }
+        finally
+        {
+            // Dispose any buffers that weren't successfully transferred or already disposed
+            saveMeanBuffer?.Dispose();
+            saveInvVarBuffer?.Dispose();
+            gradInputBuffer?.Dispose();
+            gradGammaBuffer?.Dispose();
+            gradBetaBuffer?.Dispose();
+        }
     }
 
     /// <summary>
@@ -6843,6 +6955,13 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for SumAxisGpu");
 
+        // Validate axis for 2D tensors - only axis 0 and 1 are supported
+        if (axis < 0 || axis > 1)
+            throw new ArgumentOutOfRangeException(nameof(axis), axis, "SumAxisGpu only supports axis 0 (sum over rows) or axis 1 (sum over columns) for 2D tensors.");
+
+        if (input.Shape.Length < 1)
+            throw new ArgumentException("Input tensor must have at least one dimension.", nameof(input));
+
         int outerSize = input.Shape[0];
         int innerSize = input.Shape.Length > 1 ? input.Shape[1] : 1;
 
@@ -6855,7 +6974,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             outputSize = innerSize;
             outputShape = [1, innerSize];
         }
-        else
+        else // axis == 1 (validated above)
         {
             // Sum over columns -> output shape [outerSize, 1]
             outputSize = outerSize;
@@ -9177,6 +9296,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             throw new ArgumentException($"BatchNormBackwardGpu expects 2D [B, C] or 4D [B, C, H, W] tensor, got {gradOutput.Shape.Length}D");
         }
 
+        // Validate parameter lengths match channels to prevent out-of-bounds kernel access
+        if (gamma.Length != channels)
+            throw new ArgumentException($"gamma.Length ({gamma.Length}) must match channels ({channels}).", nameof(gamma));
+        if (saveMean.ElementCount != channels)
+            throw new ArgumentException($"saveMean.ElementCount ({saveMean.ElementCount}) must match channels ({channels}).", nameof(saveMean));
+        if (saveInvVar.ElementCount != channels)
+            throw new ArgumentException($"saveInvVar.ElementCount ({saveInvVar.ElementCount}) must match channels ({channels}).", nameof(saveInvVar));
+
         // Allocate output buffers
         var gradInputBuffer = backend.AllocateBuffer(gradOutput.ElementCount);
         var gradGammaBuffer = backend.AllocateBuffer(channels);
@@ -9224,6 +9351,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     {
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for Conv2DBackwardInputGpu");
+
+        // Validate shape lengths to prevent index out of bounds
+        if (inputShape.Length != 4)
+            throw new ArgumentException($"inputShape must be 4D [B, inC, inH, inW], got {inputShape.Length}D.", nameof(inputShape));
+        if (kernel.Rank != 4)
+            throw new ArgumentException($"kernel must be 4D [outC, inC, kH, kW], got {kernel.Rank}D.", nameof(kernel));
+        if (gradOutput.Shape.Length != 4)
+            throw new ArgumentException($"gradOutput must be 4D [B, outC, outH, outW], got {gradOutput.Shape.Length}D.", nameof(gradOutput));
 
         int batch = inputShape[0];
         int inChannels = inputShape[1];
@@ -9278,6 +9413,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for Conv2DBackwardKernelGpu");
 
+        // Validate shape lengths to prevent index out of bounds
+        if (input.Shape.Length != 4)
+            throw new ArgumentException($"input must be 4D [B, inC, inH, inW], got {input.Shape.Length}D.", nameof(input));
+        if (kernelShape.Length != 4)
+            throw new ArgumentException($"kernelShape must be 4D [outC, inC, kH, kW], got {kernelShape.Length}D.", nameof(kernelShape));
+        if (gradOutput.Shape.Length != 4)
+            throw new ArgumentException($"gradOutput must be 4D [B, outC, outH, outW], got {gradOutput.Shape.Length}D.", nameof(gradOutput));
+
         int batch = input.Shape[0];
         int inChannels = input.Shape[1];
         int inHeight = input.Shape[2];
@@ -9318,6 +9461,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for Conv2DBackwardBiasGpu");
 
+        // Validate shape length to prevent index out of bounds
+        if (gradOutput.Shape.Length != 4)
+            throw new ArgumentException($"gradOutput must be 4D [B, outC, outH, outW], got {gradOutput.Shape.Length}D.", nameof(gradOutput));
+
         int batch = gradOutput.Shape[0];
         int outChannels = gradOutput.Shape[1];
         int outHeight = gradOutput.Shape[2];
@@ -9326,7 +9473,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Bias gradient = sum over batch and spatial dimensions
         // gradOutput: [B, outC, outH, outW] -> gradBias: [outC]
         // Sum over batch and spatial dimensions for each channel
-        // Download, compute on CPU, and create new GPU tensor
+        // Note: For large tensors, this could be optimized with GPU reduction kernels
+        // (e.g., reshape to [B*H*W, C] and use SumAxis). Current implementation downloads
+        // to CPU for simplicity and correctness.
         float[] gradOutData = backend.DownloadBuffer(gradOutput.Buffer);
         float[] gradBiasData = new float[outChannels];
 

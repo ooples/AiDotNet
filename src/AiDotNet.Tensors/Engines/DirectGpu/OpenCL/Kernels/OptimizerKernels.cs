@@ -85,9 +85,11 @@ __kernel void adam_update(
     float v_new = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = v_new;
 
-    // Bias correction
-    float m_hat = m_new / (1.0f - pow(beta1, (float)step));
-    float v_hat = v_new / (1.0f - pow(beta2, (float)step));
+    // Bias correction - guard against step==0 which causes division by zero
+    // Step should always be >= 1; if step==0, use step==1 to avoid NaN/Inf
+    int safe_step = step < 1 ? 1 : step;
+    float m_hat = m_new / (1.0f - pow(beta1, (float)safe_step));
+    float v_hat = v_new / (1.0f - pow(beta2, (float)safe_step));
 
     // Update parameters
     float update = learningRate * m_hat / (sqrt(v_hat) + epsilon);
@@ -132,9 +134,10 @@ __kernel void adamw_update(
     float v_new = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = v_new;
 
-    // Bias correction
-    float m_hat = m_new / (1.0f - pow(beta1, (float)step));
-    float v_hat = v_new / (1.0f - pow(beta2, (float)step));
+    // Bias correction - guard against step==0 which causes division by zero
+    int safe_step = step < 1 ? 1 : step;
+    float m_hat = m_new / (1.0f - pow(beta1, (float)safe_step));
+    float v_hat = v_new / (1.0f - pow(beta2, (float)safe_step));
 
     // Update parameters
     param[idx] -= learningRate * m_hat / (sqrt(v_hat) + epsilon);
@@ -300,9 +303,10 @@ __kernel void lamb_update(
     m[idx] = mVal;
     v[idx] = vVal;
 
-    // Bias correction
-    float mHat = mVal / (1.0f - pow(beta1, (float)step));
-    float vHat = vVal / (1.0f - pow(beta2, (float)step));
+    // Bias correction - guard against step==0 which causes division by zero
+    int safe_step = step < 1 ? 1 : step;
+    float mHat = mVal / (1.0f - pow(beta1, (float)safe_step));
+    float vHat = vVal / (1.0f - pow(beta2, (float)safe_step));
 
     // LAMB: Adam update direction with weight decay
     float adamUpdate = mHat / (sqrt(vHat) + epsilon);
@@ -397,7 +401,9 @@ __kernel void amsgrad_update(
     vMax[idx] = vMaxVal;
 
     // Bias correction for m only (AMSGrad uses raw v_max)
-    float mHat = mVal / (1.0f - pow(beta1, (float)step));
+    // Guard against step==0 which causes division by zero
+    int safe_step = step < 1 ? 1 : step;
+    float mHat = mVal / (1.0f - pow(beta1, (float)safe_step));
 
     // Update parameters using v_max instead of v
     param[idx] -= learningRate * mHat / (sqrt(vMaxVal) + epsilon);
@@ -439,8 +445,9 @@ __kernel void adamax_update(
     float uVal = fmax(beta2 * u[idx], fabs(grad));
     u[idx] = uVal;
 
-    // Bias correction for learning rate
-    float biasCorrection = 1.0f - pow(beta1, (float)step);
+    // Bias correction for learning rate - guard against step==0 which causes division by zero
+    int safe_step = step < 1 ? 1 : step;
+    float biasCorrection = 1.0f - pow(beta1, (float)safe_step);
 
     // Update parameters
     param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
@@ -517,9 +524,10 @@ __kernel void nadam_update(
     float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = vVal;
 
-    // Bias corrections
-    float beta1Pow = pow(beta1, (float)step);
-    float beta2Pow = pow(beta2, (float)step);
+    // Bias corrections - guard against step==0 which causes division by zero
+    int safe_step = step < 1 ? 1 : step;
+    float beta1Pow = pow(beta1, (float)safe_step);
+    float beta2Pow = pow(beta2, (float)safe_step);
     float mHat = mVal / (1.0f - beta1Pow);
     float vHat = vVal / (1.0f - beta2Pow);
 

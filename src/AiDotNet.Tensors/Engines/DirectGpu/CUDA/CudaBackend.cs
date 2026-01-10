@@ -34,6 +34,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _deformableConvModule;
     private IntPtr _capsuleModule;
     private IntPtr _specializedModule;
+    private IntPtr _fp16Module;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -294,6 +295,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile Specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
         _specializedModule = CompileKernelModule(device, CudaSpecializedKernels.GetSource(), "specialized_kernels", CudaSpecializedKernels.GetKernelNames());
+
+        // Compile FP16 conversion kernels (half-precision float conversion)
+        _fp16Module = CompileKernelModule(device, CudaFp16Kernels.GetSource(), "fp16_kernels", CudaFp16Kernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -2151,7 +2155,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr inputPtr = input.Handle;
         IntPtr kernelPtr = kernel.Handle;
         IntPtr outputPtr = output.Handle;
-        void** args = stackalloc void*[17];
+        void** args = stackalloc void*[18];
         args[0] = &inputPtr;
         args[1] = &kernelPtr;
         args[2] = &outputPtr;
@@ -2168,7 +2172,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[13] = &strideW;
         args[14] = &padH;
         args[15] = &padW;
-        args[16] = &totalOutput;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
         LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
     }
 
@@ -2179,60 +2184,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         int strideH, int strideW, int padH, int padW,
         int outputPadH, int outputPadW)
     {
-        // The backward pass w.r.t. input for transposed convolution is a standard convolution
-        // dL/dX = conv2d(dL/dY, W) with specific padding
         if (!_kernelCache.TryGetValue("conv_transpose2d_backward_input", out var cudaKernel))
-        {
-            // Fallback: CPU implementation
-            var gradOutData = DownloadBuffer(gradOutput);
-            var kernelData = DownloadBuffer(kernel);
-            var gradInputData = new float[batch * inChannels * inHeight * inWidth];
-
-            // Backward pass: dL/dX = conv(dL/dY, W) with padding adjustment
-            for (int b = 0; b < batch; b++)
-            {
-                for (int ic = 0; ic < inChannels; ic++)
-                {
-                    for (int ih = 0; ih < inHeight; ih++)
-                    {
-                        for (int iw = 0; iw < inWidth; iw++)
-                        {
-                            float sum = 0;
-                            for (int oc = 0; oc < outChannels; oc++)
-                            {
-                                for (int kh = 0; kh < kernelH; kh++)
-                                {
-                                    for (int kw = 0; kw < kernelW; kw++)
-                                    {
-                                        // For transposed conv backward, compute output position
-                                        int oh = ih * strideH - padH + kh;
-                                        int ow = iw * strideW - padW + kw;
-                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
-                                        {
-                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
-                                            // Kernel layout: [inChannels, outChannels, kernelH, kernelW]
-                                            int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
-                                            sum += gradOutData[goIdx] * kernelData[kIdx];
-                                        }
-                                    }
-                                }
-                            }
-                            gradInputData[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
-                        }
-                    }
-                }
-            }
-
-            // Upload to GPU
-            using var ctx = PushContext();
-            fixed (float* gradInputDataPtr = gradInputData)
-            {
-                CuBlasNative.CheckCudaResult(
-                    CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)gradInputDataPtr, (ulong)(gradInputData.Length * sizeof(float))),
-                    "cuMemcpyHtoD (ConvTranspose2DBackwardInput)");
-            }
-            return;
-        }
+            throw new InvalidOperationException("CUDA kernel not found: conv_transpose2d_backward_input");
 
         using var _ = PushContext();
         int totalInput = batch * inChannels * inHeight * inWidth;
@@ -2240,7 +2193,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr kernelPtr = kernel.Handle;
         IntPtr gradInputPtr = gradInput.Handle;
-        void** args = stackalloc void*[17];
+        void** args = stackalloc void*[19];
         args[0] = &gradOutputPtr;
         args[1] = &kernelPtr;
         args[2] = &gradInputPtr;
@@ -2257,7 +2210,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[13] = &strideW;
         args[14] = &padH;
         args[15] = &padW;
-        args[16] = &totalInput;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
+        args[18] = &totalInput;
         LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
     }
 
@@ -2268,59 +2223,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         int strideH, int strideW, int padH, int padW,
         int outputPadH, int outputPadW)
     {
-        // The backward pass w.r.t. kernel for transposed convolution
         if (!_kernelCache.TryGetValue("conv_transpose2d_backward_kernel", out var cudaKernel))
-        {
-            // Fallback: CPU implementation
-            var inputData = DownloadBuffer(input);
-            var gradOutData = DownloadBuffer(gradOutput);
-            // Kernel layout: [inChannels, outChannels, kernelH, kernelW]
-            var gradKernelData = new float[inChannels * outChannels * kernelH * kernelW];
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int ic = 0; ic < inChannels; ic++)
-                {
-                    for (int oc = 0; oc < outChannels; oc++)
-                    {
-                        for (int kh = 0; kh < kernelH; kh++)
-                        {
-                            for (int kw = 0; kw < kernelW; kw++)
-                            {
-                                float sum = 0;
-                                for (int ih = 0; ih < inHeight; ih++)
-                                {
-                                    for (int iw = 0; iw < inWidth; iw++)
-                                    {
-                                        // Output position that this input element contributed to
-                                        int oh = ih * strideH - padH + kh;
-                                        int ow = iw * strideW - padW + kw;
-                                        if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth)
-                                        {
-                                            int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
-                                            int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
-                                            sum += inputData[inIdx] * gradOutData[goIdx];
-                                        }
-                                    }
-                                }
-                                int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
-                                gradKernelData[kIdx] += sum;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Upload to GPU
-            using var ctx = PushContext();
-            fixed (float* gradKernelDataPtr = gradKernelData)
-            {
-                CuBlasNative.CheckCudaResult(
-                    CuBlasNative.cuMemcpyHtoD(gradKernel.Handle, (IntPtr)gradKernelDataPtr, (ulong)(gradKernelData.Length * sizeof(float))),
-                    "cuMemcpyHtoD (ConvTranspose2DBackwardKernel)");
-            }
-            return;
-        }
+            throw new InvalidOperationException("CUDA kernel not found: conv_transpose2d_backward_kernel");
 
         using var _ = PushContext();
         int totalKernel = inChannels * outChannels * kernelH * kernelW;
@@ -2328,7 +2232,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr inputPtr = input.Handle;
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr gradKernelPtr = gradKernel.Handle;
-        void** args = stackalloc void*[17];
+        void** args = stackalloc void*[19];
         args[0] = &inputPtr;
         args[1] = &gradOutputPtr;
         args[2] = &gradKernelPtr;
@@ -2345,7 +2249,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[13] = &strideW;
         args[14] = &padH;
         args[15] = &padW;
-        args[16] = &totalKernel;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
+        args[18] = &totalKernel;
         LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
     }
 
@@ -4281,9 +4187,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
 
-        // First zero out the gradient input
         int inputSize = batchChannels * height * width;
-        Fill(gradInput, 0f, inputSize);
 
         if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
         {
@@ -4294,11 +4198,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         using var _ = PushContext();
 
-        int outHeight = height * scaleFactor;
-        int outWidth = width * scaleFactor;
-        int outputSize = batchChannels * outHeight * outWidth;
-
-        uint grid = (uint)((outputSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        // Kernel iterates over input elements, accumulating from scaleFactor x scaleFactor output regions
+        // No zeroing needed - kernel writes directly (not +=)
+        uint grid = (uint)((inputSize + DefaultBlockSize - 1) / DefaultBlockSize);
 
         IntPtr gradOutPtr = gradOutput.Handle;
         IntPtr gradInPtr = gradInput.Handle;
@@ -4310,7 +4212,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[3] = &height;
         args[4] = &width;
         args[5] = &scaleFactor;
-        args[6] = &outputSize;
+        args[6] = &inputSize;
 
         CuBlasNative.CheckCudaResult(
             CudaNativeBindings.cuLaunchKernel(
@@ -5331,6 +5233,13 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
         float learningRate, float momentum, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("sgd_momentum_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: sgd_momentum_update");
 
@@ -5353,6 +5262,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adam_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adam_update");
 
@@ -5380,6 +5301,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adamw_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adamw_update");
 
@@ -5408,6 +5341,15 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
         float learningRate, float rho, float epsilon, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(squaredAvg, nameof(squaredAvg));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("rmsprop_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: rmsprop_update");
 
@@ -5432,6 +5374,15 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
         float learningRate, float epsilon, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(accumulatedGrad, nameof(accumulatedGrad));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adagrad_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adagrad_update");
 
@@ -5455,6 +5406,13 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
         float learningRate, float momentum, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("nag_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: nag_update");
 
@@ -5478,6 +5436,15 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
         float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(velocity, nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (trustCoeff <= 0)
+            throw new ArgumentOutOfRangeException(nameof(trustCoeff), "Trust coefficient must be positive.");
+
         if (!_kernelCache.TryGetValue("lars_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: lars_update");
 
@@ -5502,6 +5469,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("lamb_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: lamb_update");
 
@@ -5511,7 +5490,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr gradPtr = gradient.Handle;
         IntPtr mPtr = m.Handle;
         IntPtr vPtr = v.Handle;
-        void** args = stackalloc void*[11];
+        float trustRatio = 1.0f; // Default: no layer-wise scaling (degenerates to AdamW)
+        void** args = stackalloc void*[12];
         args[0] = &paramPtr;
         args[1] = &gradPtr;
         args[2] = &mPtr;
@@ -5521,8 +5501,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[6] = &beta2;
         args[7] = &epsilon;
         args[8] = &weightDecay;
-        args[9] = &step;
-        args[10] = &size;
+        args[9] = &trustRatio;
+        args[10] = &step;
+        args[11] = &size;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -5530,6 +5511,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
         float learningRate, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("sgd_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: sgd_update");
 
@@ -5550,6 +5537,16 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
         float rho, float epsilon, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(accumGrad, nameof(accumGrad));
+        ArgumentNullException.ThrowIfNull(accumUpdate, nameof(accumUpdate));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adadelta_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adadelta_update");
 
@@ -5575,6 +5572,19 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        ArgumentNullException.ThrowIfNull(vMax, nameof(vMax));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("amsgrad_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: amsgrad_update");
 
@@ -5605,6 +5615,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(u, nameof(u));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adamax_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adamax_update");
 
@@ -5633,6 +5655,13 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
         float learningRate, float beta1, float beta2, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("lion_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: lion_update");
 
@@ -5657,6 +5686,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(m, nameof(m));
+        ArgumentNullException.ThrowIfNull(v, nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("nadam_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: nadam_update");
 
@@ -5685,6 +5726,14 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
         float learningRate, float l1Reg, float l2Reg, float beta, int size)
     {
+        // Validate buffer parameters
+        ArgumentNullException.ThrowIfNull(param, nameof(param));
+        ArgumentNullException.ThrowIfNull(gradient, nameof(gradient));
+        ArgumentNullException.ThrowIfNull(z, nameof(z));
+        ArgumentNullException.ThrowIfNull(n, nameof(n));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("ftrl_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: ftrl_update");
 
@@ -5710,14 +5759,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
     /// <inheritdoc/>
     public unsafe void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
     {
-        // CUDA doesn't have a built-in conversion kernel in our current set
-        // For now, do a simple copy. In production, this would use a proper FP16 conversion kernel.
         if (!_kernelCache.TryGetValue("convert_fp32_to_fp16", out var kernel))
-        {
-            // Fallback: just copy the data as-is
-            Copy(input, output, size);
-            return;
-        }
+            throw new InvalidOperationException("CUDA kernel not found: convert_fp32_to_fp16");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
@@ -5733,14 +5776,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
     /// <inheritdoc/>
     public unsafe void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
     {
-        // CUDA doesn't have a built-in conversion kernel in our current set
-        // For now, do a simple copy. In production, this would use a proper FP32 conversion kernel.
         if (!_kernelCache.TryGetValue("convert_fp16_to_fp32", out var kernel))
-        {
-            // Fallback: just copy the data as-is
-            Copy(input, output, size);
-            return;
-        }
+            throw new InvalidOperationException("CUDA kernel not found: convert_fp16_to_fp32");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
@@ -6394,7 +6431,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_biases");
 
         using var _ = PushContext();
-        int totalThreads = outputFeatures * inputFeatures;
+        int totalThreads = outputFeatures;  // One thread per bias element
         uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr inputPtr = input.Handle;

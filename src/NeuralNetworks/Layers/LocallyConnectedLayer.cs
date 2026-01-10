@@ -120,6 +120,28 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
 
+    #region GPU Weight Storage Fields
+
+    // GPU weight tensors for GPU-resident training
+    private GpuTensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient tensors from BackwardGpu
+    private GpuTensor<T>? _gpuWeightGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+
+    // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    private GpuTensor<T>? _gpuWeightVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+
+    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    private GpuTensor<T>? _gpuWeightM;
+    private GpuTensor<T>? _gpuWeightV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
+
+    #endregion
+
     /// <summary>
     /// The height of the input tensor.
     /// </summary>
@@ -818,6 +840,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _biasGradients = new Tensor<T>([_outputChannels],
             new Vector<T>(DirectGpuEngine.FromFloatArray<T>(biasGradData)));
 
+        // Store gradients as GPU tensors for UpdateParametersGpu
+        _gpuWeightGradient = new GpuTensor<T>(backend, _weightGradients, GpuTensorRole.Gradient);
+        _gpuBiasGradient = new GpuTensor<T>(backend, _biasGradients, GpuTensorRole.Gradient);
+
         // Create input gradient tensor
         var inputGradient = new GpuTensor<T>(backend, inputGradBuffer, _gpuInputShape4D, GpuTensorRole.Gradient, ownsBuffer: true);
 
@@ -1305,4 +1331,88 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         return output;
     }
+
+    #region GPU Parameter Updates
+
+    /// <summary>
+    /// Updates parameters using GPU-based optimizer.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuWeightGradient == null || _gpuBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Ensure GPU weight tensors exist
+        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+
+        // Ensure optimizer state buffers exist
+        EnsureLocallyConnectedOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        config.ApplyUpdate(backend, _gpuWeights.Buffer, _gpuWeightGradient.Buffer, BuildLocallyConnectedOptimizerState("weights"), _weights.Length);
+        config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildLocallyConnectedOptimizerState("biases"), _biases.Length);
+
+        // Sync back to CPU tensors for compatibility
+        _weights = _gpuWeights.ToTensor();
+        _biases = _gpuBiases.ToTensor();
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers exist for all locally connected parameters.
+    /// </summary>
+    private void EnsureLocallyConnectedOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int weightSize = _weights.Length;
+        int biasSize = _biases.Length;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Velocity buffers
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // M and V buffers for Adam-family
+                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // Squared average buffers (reuse velocity fields)
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for a specific locally connected parameter.
+    /// </summary>
+    private GpuOptimizerState BuildLocallyConnectedOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "weights" => new GpuOptimizerState { Velocity = _gpuWeightVelocity?.Buffer, M = _gpuWeightM?.Buffer, V = _gpuWeightV?.Buffer, SquaredAvg = _gpuWeightVelocity?.Buffer, AccumulatedGrad = _gpuWeightVelocity?.Buffer },
+            "biases" => new GpuOptimizerState { Velocity = _gpuBiasVelocity?.Buffer, M = _gpuBiasM?.Buffer, V = _gpuBiasV?.Buffer, SquaredAvg = _gpuBiasVelocity?.Buffer, AccumulatedGrad = _gpuBiasVelocity?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 }
