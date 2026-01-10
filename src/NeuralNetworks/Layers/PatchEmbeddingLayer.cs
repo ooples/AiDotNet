@@ -103,6 +103,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T>? _lastPreActivation;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuPatchesFlat;
+    private int _gpuBatchSize;
+    private bool _gpuHasBatch;
+
     /// <summary>
     /// Indicates whether this layer supports training.
     /// </summary>
@@ -636,6 +642,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _lastPreActivation = null;
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuPatchesFlat = null;
+        _gpuBatchSize = 0;
+        _gpuHasBatch = false;
     }
 
     /// <summary>
@@ -708,13 +720,26 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // 6. Reshape back to 3D: [B, N, embedDim]
         var output = gpuEngine.ReshapeGpu(projectedFlat, [batchSize, _numPatches, _embeddingDim]);
 
-        // Dispose intermediate GPU tensors that are no longer needed
-        if (processInput != input)
-            processInput.Dispose();
+        // Cache GPU tensors for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuInput = processInput != input ? processInput : input;
+            _gpuPatchesFlat = patchesFlat;
+            _gpuBatchSize = batchSize;
+            _gpuHasBatch = hasBatch;
+        }
+        else
+        {
+            // Dispose intermediate GPU tensors if not training
+            if (processInput != input)
+                processInput.Dispose();
+            patchesFlat.Dispose();
+        }
+
+        // Dispose other intermediate GPU tensors that are no longer needed
         reshaped.Dispose();
         permuted.Dispose();
         patches.Dispose();
-        patchesFlat.Dispose();
         projectedFlat.Dispose();
 
         // Remove batch dimension if input didn't have it
@@ -726,6 +751,90 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for patch embedding.
+    /// </summary>
+    /// <param name="outputGradient">The gradient from subsequent layer [B, N, embedDim].</param>
+    /// <returns>The gradient with respect to input [B, C, H, W].</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuPatchesFlat == null || _gpuInput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // outputGradient shape: [B, N, embedDim] or [N, embedDim] if no batch
+        int patchDim = _channels * _patchSize * _patchSize;
+
+        // Reshape output gradient for linear backward: [B, N, embedDim] -> [B*N, embedDim]
+        IGpuTensor<T> gradFlat;
+        if (outputGradient.Shape.Length == 2)
+        {
+            // [N, embedDim] -> [1*N, embedDim]
+            gradFlat = outputGradient;
+        }
+        else
+        {
+            // [B, N, embedDim] -> [B*N, embedDim]
+            gradFlat = gpuEngine.ReshapeGpu(outputGradient, [_gpuBatchSize * _numPatches, _embeddingDim]);
+        }
+
+        // Step 1: Backprop through linear projection
+        // Weight gradient: patches^T @ gradOutput -> [patchDim, B*N] @ [B*N, embedDim] = [patchDim, embedDim]
+        var patchesFlatT = gpuEngine.TransposeGpu<T>(_gpuPatchesFlat);
+        var weightGradGpu = gpuEngine.MatMulGpuTensors<T>(patchesFlatT, gradFlat);
+        _projectionWeightsGradient = weightGradGpu.ToTensor();
+
+        // Bias gradient: sum of gradOutput along batch dimension -> [embedDim]
+        var biasGradGpu = gpuEngine.SumAxisGpu<T>(gradFlat, 0);
+        _projectionBiasGradient = biasGradGpu.ToTensor();
+
+        // Input gradient: gradOutput @ weights^T -> [B*N, embedDim] @ [embedDim, patchDim] = [B*N, patchDim]
+        var weightsGpu = gpuEngine.UploadToGpu<T>(_projectionWeights, GpuTensorRole.Weight);
+        var weightsT = gpuEngine.TransposeGpu<T>(weightsGpu);
+        var patchGrad = gpuEngine.MatMulGpuTensors<T>(gradFlat, weightsT);
+
+        // Step 2: Reshape patch gradient back to image space
+        // [B*N, patchDim] -> [B, N, patchDim] -> [B, Nh, Nw, C, P, P]
+        var patchGrad3D = gpuEngine.ReshapeGpu(patchGrad, [_gpuBatchSize, _numPatches, patchDim]);
+        var patchGradSpatial = gpuEngine.ReshapeGpu(patchGrad3D,
+            [_gpuBatchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize]);
+
+        // Step 3: Reverse permute: [B, Nh, Nw, C, P, P] -> [B, C, Nh, P, Nw, P]
+        var gradPermuted = gpuEngine.PermuteGpu(patchGradSpatial, [0, 3, 1, 4, 2, 5]);
+
+        // Step 4: Reshape back to image: [B, C, Nh, P, Nw, P] -> [B, C, H, W]
+        var inputGrad = gpuEngine.ReshapeGpu(gradPermuted, [_gpuBatchSize, _channels, _imageHeight, _imageWidth]);
+
+        // Dispose intermediate tensors
+        patchesFlatT.Dispose();
+        weightGradGpu.Dispose();
+        biasGradGpu.Dispose();
+        weightsGpu.Dispose();
+        weightsT.Dispose();
+        patchGrad.Dispose();
+        patchGrad3D.Dispose();
+        patchGradSpatial.Dispose();
+        gradPermuted.Dispose();
+        if (gradFlat != outputGradient)
+            gradFlat.Dispose();
+
+        // Remove batch dimension if input didn't have it
+        if (!_gpuHasBatch)
+        {
+            var result = gpuEngine.ReshapeGpu(inputGrad, [_channels, _imageHeight, _imageWidth]);
+            inputGrad.Dispose();
+            return result;
+        }
+
+        return inputGrad;
     }
 
     /// <inheritdoc/>

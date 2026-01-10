@@ -287,6 +287,17 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _biasMomentum;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuConvOutput;
+    private IGpuTensor<T>? _gpuShuffled;
+    private IGpuTensor<T>? _gpuActivationOutput;
+    private bool _gpuAddedBatch;
+    private int _gpuBatch;
+    private int _gpuHeight;
+    private int _gpuWidth;
+    private FusedActivationType _gpuActivationType;
+
     /// <summary>
     /// The factor controlling how much previous gradients influence current updates.
     /// </summary>
@@ -679,6 +690,20 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
             result = shuffled;
         }
 
+        // Cache GPU tensors for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuInput = input4D;
+            _gpuConvOutput = convOutput;
+            _gpuShuffled = shuffled;
+            _gpuActivationOutput = result;
+            _gpuAddedBatch = addedBatch;
+            _gpuBatch = batch;
+            _gpuHeight = height;
+            _gpuWidth = width;
+            _gpuActivationType = fusedActivation;
+        }
+
         // Remove batch dimension if it was added
         if (addedBatch)
         {
@@ -686,6 +711,96 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Performs the GPU-resident backward pass of the subpixel convolutional layer.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuConvOutput == null || _gpuShuffled == null)
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+
+        var gpuEngine = Engine as DirectGpuTensorEngine;
+        if (gpuEngine == null)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        int r = _upscaleFactor;
+        int outChannels = _outputDepth;
+        int outHeight = _gpuHeight * r;
+        int outWidth = _gpuWidth * r;
+
+        // Ensure output gradient has batch dimension
+        IGpuTensor<T> gradWithBatch = outputGradient;
+        if (outputGradient.Shape.Length == 3)
+        {
+            gradWithBatch = gpuEngine.ReshapeGpu<T>(outputGradient, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+        }
+
+        // Step 1: Backprop through activation
+        IGpuTensor<T> activationGrad;
+        if (_gpuActivationType != FusedActivationType.None && _gpuActivationOutput != null)
+        {
+            activationGrad = _gpuActivationType switch
+            {
+                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
+                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
+                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
+                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
+                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
+                _ => gradWithBatch
+            };
+        }
+        else
+        {
+            activationGrad = gradWithBatch;
+        }
+
+        // Step 2: Backprop through PixelShuffle (reverse: reshape + inverse permute + reshape)
+        // Forward was: [B, C*r², H, W] → [B, C, r, r, H, W] → permute [0,1,4,2,5,3] → [B, C, H, r, W, r] → [B, C, H*r, W*r]
+        // Backward: [B, C, H*r, W*r] → [B, C, H, r, W, r] → inverse permute [0,1,3,4,2,5] → [B, C, r, r, H, W] → [B, C*r², H, W]
+        int numOutChannels = _outputDepth * r * r;
+        var gradReshaped1 = gpuEngine.ReshapeGpu<T>(activationGrad, new[] { _gpuBatch, outChannels, _gpuHeight, r, _gpuWidth, r });
+        var gradPermuted = gpuEngine.PermuteGpu<T>(gradReshaped1, new[] { 0, 1, 3, 5, 2, 4 }); // [B, C, r, r, H, W]
+        var convOutputGrad = gpuEngine.ReshapeGpu<T>(gradPermuted, new[] { _gpuBatch, numOutChannels, _gpuHeight, _gpuWidth });
+
+        // Step 3: Backprop through Conv2D
+        int padSize = _kernelSize / 2;
+
+        // Compute bias gradient: sum over batch and spatial dimensions (axes 0, 2, 3)
+        var biasGradTemp = gpuEngine.SumAxisGpu<T>(convOutputGrad, 0); // [C, H, W]
+        var biasGradTemp2 = gpuEngine.SumAxisGpu<T>(biasGradTemp, 1); // [C, W]
+        var biasGradGpu = gpuEngine.SumAxisGpu<T>(biasGradTemp2, 1); // [C]
+        _biasGradients = biasGradGpu.ToTensor();
+
+        // Compute kernel gradient
+        var kernelGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(
+            convOutputGrad,
+            _gpuInput,
+            _kernels.Shape,
+            new[] { 1, 1 },  // stride
+            new[] { padSize, padSize },  // padding
+            new[] { 1, 1 }); // dilation
+        _kernelGradients = kernelGradGpu.ToTensor();
+
+        // Compute input gradient
+        var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
+            convOutputGrad,
+            _kernels,
+            _gpuInput.Shape,
+            new[] { 1, 1 },  // stride
+            new[] { padSize, padSize },  // padding
+            new[] { 1, 1 }); // dilation
+
+        // Remove batch dimension if it was added
+        if (_gpuAddedBatch)
+        {
+            inputGrad = gpuEngine.ReshapeGpu<T>(inputGrad, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
@@ -1188,6 +1303,17 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Reset momentum if using momentum
         _kernelMomentum = null;
         _biasMomentum = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuConvOutput = null;
+        _gpuShuffled = null;
+        _gpuActivationOutput = null;
+        _gpuAddedBatch = false;
+        _gpuBatch = 0;
+        _gpuHeight = 0;
+        _gpuWidth = 0;
+        _gpuActivationType = FusedActivationType.None;
 
         // Reinitialize weights
         InitializeWeights();
