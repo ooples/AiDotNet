@@ -364,4 +364,3 @@ Additional loss functions that could be added in the future:
 - src/Interfaces/IGradientBasedOptimizer.cs - Added UpdateParametersGpu method
 - All optimizer implementations - Wired UpdateParametersGpu
 - All loss function implementations - Inherit GPU support from LossFunctionBase
-
