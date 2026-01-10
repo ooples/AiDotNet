@@ -1,4 +1,4 @@
-
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
 
@@ -78,5 +78,47 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 
-    
+    /// <summary>
+    /// Calculates both Cross-Entropy loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor (probability distribution).</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            // Fall back to CPU if GPU backend not available
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        // Determine batch size and number of classes from shape
+        // Shape is typically [batchSize, numClasses] or [numClasses] for single sample
+        int batchSize, numClasses;
+        if (predicted.Shape.Length >= 2)
+        {
+            batchSize = predicted.Shape[0];
+            numClasses = predicted.Shape[^1];
+        }
+        else
+        {
+            batchSize = 1;
+            numClasses = predicted.ElementCount;
+        }
+
+        // Compute loss on GPU
+        float lossValue = backend.CrossEntropyLoss(predicted.Buffer, actual.Buffer, batchSize, numClasses);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(predicted.ElementCount);
+        backend.CrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, batchSize, numClasses);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
 }

@@ -1,4 +1,4 @@
-
+using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
 
@@ -91,5 +91,35 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 
-    
+    /// <summary>
+    /// Calculates both BCE loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor (probabilities between 0 and 1).</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            // Fall back to CPU if GPU backend not available
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+
+        // Compute loss on GPU
+        float lossValue = backend.BinaryCrossEntropyLoss(predicted.Buffer, actual.Buffer, size);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.BinaryCrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
 }

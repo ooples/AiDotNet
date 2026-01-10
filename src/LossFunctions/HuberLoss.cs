@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -113,5 +115,39 @@ public class HuberLoss<T> : LossFunctionBase<T>
         return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
 
-    
+    /// <summary>
+    /// Calculates both Huber loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    /// <remarks>
+    /// Uses the SmoothL1 kernel which is equivalent to Huber loss with beta = delta.
+    /// </remarks>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            // Fall back to CPU if GPU backend not available
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+        float beta = (float)NumOps.ToDouble(_delta);
+
+        // Compute loss on GPU using SmoothL1 (equivalent to Huber)
+        float lossValue = backend.SmoothL1Loss(predicted.Buffer, actual.Buffer, size, beta);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.SmoothL1Backward(predicted.Buffer, actual.Buffer, gradientBuffer, size, beta);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
 }
