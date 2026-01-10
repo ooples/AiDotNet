@@ -747,7 +747,8 @@ extern ""C"" __global__ void hyperbolic_log_map_backward(
         // Add contribution from lambdaX depending on x
         float dLambdaX_dxi = lambdaX * lambdaX * c * xLocal[i];
         float dCoeff_dLambdaX = -coeff / lambdaX;
-        dResultj_dxi += dCoeff_dLambdaX * dLambdaX_dxi * (j == i ? 0.0f : 0.0f);  // Only affects coeff, not diff[j]
+        // Note: The direct term (j == i ? 0.0f : 0.0f) evaluates to 0 always, so it's omitted.
+        // The lambdaX contribution is captured via lambdaXContrib below.
 
         // Actually the lambdaX term affects ALL result[j] through coeff:
         // d(result[j])/d(x[i]) += diff[j] * d(coeff)/d(lambdaX) * d(lambdaX)/d(x[i])

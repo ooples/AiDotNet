@@ -357,6 +357,11 @@ __kernel void reduce_sum(
 
 // ---------------------------------------------------------------------------
 // Reduction kernel - compute mean
+// NOTE: This kernel outputs partial sums per workgroup. For correct mean:
+// 1. If only 1 workgroup, output is divided by size to give final mean.
+// 2. If multiple workgroups, use reduce_sum first, then divide result by size on host.
+// For simplicity, this kernel outputs partial sums (same as reduce_sum).
+// Host should sum all outputs and divide by size for final mean.
 // ---------------------------------------------------------------------------
 __kernel void reduce_mean(
     __global const float* input,
@@ -367,11 +372,12 @@ __kernel void reduce_mean(
     int local_id = get_local_id(0);
     int global_id = get_global_id(0);
     int local_size = get_local_size(0);
-    
+    int num_groups = get_num_groups(0);
+
     // Load data into local memory
     scratch[local_id] = (global_id < size) ? input[global_id] : 0.0f;
     barrier(CLK_LOCAL_MEM_FENCE);
-    
+
     // Perform reduction in local memory
     for (int offset = local_size / 2; offset > 0; offset >>= 1) {
         if (local_id < offset) {
@@ -379,10 +385,15 @@ __kernel void reduce_mean(
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
-    
-    // Write result (divide by size for mean)
+
+    // Write result - only divide by size if this is the only workgroup
+    // Otherwise output partial sum for further reduction
     if (local_id == 0) {
-        output[get_group_id(0)] = scratch[0] / (float)size;
+        if (num_groups == 1) {
+            output[0] = scratch[0] / (float)size;
+        } else {
+            output[get_group_id(0)] = scratch[0];
+        }
     }
 }
 
@@ -473,8 +484,13 @@ __kernel void quantile_gradient(
 {
     const int idx = get_global_id(0);
     if (idx >= size) return;
-    
-    gradient[idx] = (actual[idx] > predicted[idx]) ? quantile : -(1.0f - quantile);
+
+    // Gradient of quantile loss w.r.t. predicted:
+    // loss = quantile * (actual - predicted) if actual > predicted
+    // loss = -(1-quantile) * (actual - predicted) if actual <= predicted
+    // d(loss)/d(predicted) = -quantile if actual > predicted
+    // d(loss)/d(predicted) = (1-quantile) if actual <= predicted
+    gradient[idx] = (actual[idx] > predicted[idx]) ? -quantile : (1.0f - quantile);
 }
 
 // ---------------------------------------------------------------------------

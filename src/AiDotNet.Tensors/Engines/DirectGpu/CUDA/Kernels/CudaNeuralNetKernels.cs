@@ -1980,8 +1980,8 @@ extern ""C"" __global__ void groupnorm_backward(
     int totalSize = N * C * H * W;
     if (idx >= totalSize) return;
 
-    // Validate divisibility assumption (only first thread checks to avoid divergence)
-    if (idx == 0 && C % G != 0) return; // Invalid configuration - C must be divisible by G
+    // NOTE: C % G == 0 validation is performed on host side before kernel launch.
+    // Kernel assumes valid configuration to avoid thread divergence issues.
 
     int c = (idx / (W * H)) % C;
     int n = idx / (W * H * C);

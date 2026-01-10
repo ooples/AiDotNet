@@ -57,12 +57,21 @@ extern ""C"" __global__ void swish(const float* input, float* output, int size)
 // ===========================================================================
 
 // Mish: x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
+// Uses numerically stable softplus to prevent overflow for large x
 extern ""C"" __global__ void mish(const float* input, float* output, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
     float x = input[idx];
-    float sp = logf(1.0f + expf(x));  // softplus
+    // Numerically stable softplus: for large x, softplus(x) ≈ x
+    float sp;
+    if (x > 20.0f) {
+        sp = x;
+    } else if (x < -20.0f) {
+        sp = expf(x);
+    } else {
+        sp = log1pf(expf(x));
+    }
     output[idx] = x * tanhf(sp);
 }
 
@@ -133,14 +142,31 @@ extern ""C"" __global__ void hardtanh(const float* input, float* output, int siz
 // ===========================================================================
 
 // Mish backward: d/dx[x * tanh(softplus(x))]
+// Uses numerically stable softplus and sigmoid to prevent overflow
 extern ""C"" __global__ void mish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
     float x = input[idx];
-    float sp = logf(1.0f + expf(x));  // softplus
+    // Numerically stable softplus
+    float sp;
+    if (x > 20.0f) {
+        sp = x;
+    } else if (x < -20.0f) {
+        sp = expf(x);
+    } else {
+        sp = log1pf(expf(x));
+    }
     float tsp = tanhf(sp);
-    float sigmoid_x = 1.0f / (1.0f + expf(-x));
+    // Numerically stable sigmoid
+    float sigmoid_x;
+    if (x >= 0.0f) {
+        float ex = expf(-x);
+        sigmoid_x = 1.0f / (1.0f + ex);
+    } else {
+        float ex = expf(x);
+        sigmoid_x = ex / (1.0f + ex);
+    }
     float sech2_sp = 1.0f - tsp * tsp;
     // d(mish)/dx = tanh(sp) + x * sech^2(sp) * sigmoid(x)
     float grad = tsp + x * sech2_sp * sigmoid_x;

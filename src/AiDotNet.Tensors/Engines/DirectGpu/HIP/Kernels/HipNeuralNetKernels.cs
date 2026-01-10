@@ -2081,7 +2081,7 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "exponential_loss", "exponential_gradient", "modified_huber_loss", "modified_huber_gradient",
             "categorical_cross_entropy_loss", "categorical_cross_entropy_gradient",
             "charbonnier_loss", "charbonnier_gradient", "elastic_net_loss", "elastic_net_gradient",
-            "contrastive_loss", "contrastive_loss_backward",
+            // NOTE: contrastive_loss and contrastive_loss_backward not implemented in HIP backend
             "clamp", "l2_norm_squared", "scale", "copy_buffer", "fill_buffer",
             "greater_than", "less_than", "equals", "where_cond",
             "compute_mean_var", "argmax_axis", "argmin_axis",
