@@ -1091,6 +1091,130 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
         => Inner.SmoothL1Backward(predictions, targets, gradInput, size, beta);
 
+    /// <inheritdoc/>
+    public virtual float TripletLoss(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative, int batchSize, int embeddingDim, float margin)
+        => Inner.TripletLoss(anchor, positive, negative, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual void TripletLossBackward(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative,
+        IGpuBuffer gradAnchor, IGpuBuffer gradPositive, IGpuBuffer gradNegative,
+        int batchSize, int embeddingDim, float margin)
+        => Inner.TripletLossBackward(anchor, positive, negative, gradAnchor, gradPositive, gradNegative, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual float HuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float delta)
+        => Inner.HuberLoss(predictions, targets, size, delta);
+
+    /// <inheritdoc/>
+    public virtual void HuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float delta)
+        => Inner.HuberBackward(predictions, targets, gradInput, size, delta);
+
+    /// <inheritdoc/>
+    public virtual float FocalLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float alpha, float gamma)
+        => Inner.FocalLoss(predictions, targets, size, alpha, gamma);
+
+    /// <inheritdoc/>
+    public virtual void FocalBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float alpha, float gamma)
+        => Inner.FocalBackward(predictions, targets, gradInput, size, alpha, gamma);
+
+    /// <inheritdoc/>
+    public virtual float MaeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.MaeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void MaeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.MaeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float LogCoshLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.LogCoshLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void LogCoshBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.LogCoshBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float QuantileLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float quantile)
+        => Inner.QuantileLoss(predictions, targets, size, quantile);
+
+    /// <inheritdoc/>
+    public virtual void QuantileBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float quantile)
+        => Inner.QuantileBackward(predictions, targets, gradInput, size, quantile);
+
+    /// <inheritdoc/>
+    public virtual float HingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.HingeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void HingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.HingeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float SquaredHingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.SquaredHingeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void SquaredHingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.SquaredHingeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float PoissonLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.PoissonLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void PoissonBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.PoissonBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float ExponentialLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.ExponentialLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void ExponentialBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.ExponentialBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float ModifiedHuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.ModifiedHuberLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void ModifiedHuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.ModifiedHuberBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float CategoricalCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.CategoricalCrossEntropyLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void CategoricalCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.CategoricalCrossEntropyBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float CharbonnierLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float epsilon)
+        => Inner.CharbonnierLoss(predictions, targets, size, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void CharbonnierBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float epsilon)
+        => Inner.CharbonnierBackward(predictions, targets, gradInput, size, epsilon);
+
+    /// <inheritdoc/>
+    public virtual float ElasticNetLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float l1Weight, float l2Weight)
+        => Inner.ElasticNetLoss(predictions, targets, size, l1Weight, l2Weight);
+
+    /// <inheritdoc/>
+    public virtual void ElasticNetBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float l1Weight, float l2Weight)
+        => Inner.ElasticNetBackward(predictions, targets, gradInput, size, l1Weight, l2Weight);
+
+    /// <inheritdoc/>
+    public virtual float ContrastiveLoss(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels, int batchSize, int embeddingDim, float margin)
+        => Inner.ContrastiveLoss(output1, output2, labels, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual void ContrastiveBackward(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels,
+        IGpuBuffer gradOutput1, IGpuBuffer gradOutput2,
+        int batchSize, int embeddingDim, float margin)
+        => Inner.ContrastiveBackward(output1, output2, labels, gradOutput1, gradOutput2, batchSize, embeddingDim, margin);
+
     #endregion
 
     #region Gradient Clipping and Utility

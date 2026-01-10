@@ -52,6 +52,161 @@ extern ""C"" __global__ void swish(const float* input, float* output, int size)
     output[idx] = x / (1.0f + expf(-x));
 }
 
+// ===========================================================================
+// ADDITIONAL ACTIVATION KERNELS (Forward)
+// ===========================================================================
+
+// Mish: x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
+extern ""C"" __global__ void mish(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float sp = logf(1.0f + expf(x));  // softplus
+    output[idx] = x * tanhf(sp);
+}
+
+// Softplus: ln(1 + e^x)
+extern ""C"" __global__ void softplus(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    // Numerically stable: for large x, softplus(x) ≈ x
+    if (x > 20.0f) {
+        output[idx] = x;
+    } else if (x < -20.0f) {
+        output[idx] = expf(x);
+    } else {
+        output[idx] = logf(1.0f + expf(x));
+    }
+}
+
+// Hardswish: x * relu6(x + 3) / 6
+extern ""C"" __global__ void hardswish(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    if (x <= -3.0f) {
+        output[idx] = 0.0f;
+    } else if (x >= 3.0f) {
+        output[idx] = x;
+    } else {
+        output[idx] = x * (x + 3.0f) / 6.0f;
+    }
+}
+
+// SELU: scale * (max(0,x) + min(0, alpha*(exp(x)-1)))
+// scale = 1.0507009873554804934193349852946, alpha = 1.6732632423543772848170429916717
+extern ""C"" __global__ void selu(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    const float alpha = 1.6732632423543772848170429916717f;
+    const float scale = 1.0507009873554804934193349852946f;
+    float x = input[idx];
+    output[idx] = scale * (x > 0.0f ? x : alpha * (expf(x) - 1.0f));
+}
+
+// Hardsigmoid: relu6(x + 3) / 6 = clip((x + 3) / 6, 0, 1)
+extern ""C"" __global__ void hardsigmoid(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float result = (x + 3.0f) / 6.0f;
+    output[idx] = fminf(fmaxf(result, 0.0f), 1.0f);
+}
+
+// Hardtanh: clip(x, min_val, max_val) - default min=-1, max=1
+extern ""C"" __global__ void hardtanh(const float* input, float* output, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    output[idx] = fminf(fmaxf(x, -1.0f), 1.0f);
+}
+
+// ===========================================================================
+// ACTIVATION BACKWARD KERNELS
+// ===========================================================================
+
+// Mish backward: d/dx[x * tanh(softplus(x))]
+extern ""C"" __global__ void mish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float sp = logf(1.0f + expf(x));  // softplus
+    float tsp = tanhf(sp);
+    float sigmoid_x = 1.0f / (1.0f + expf(-x));
+    float sech2_sp = 1.0f - tsp * tsp;
+    // d(mish)/dx = tanh(sp) + x * sech^2(sp) * sigmoid(x)
+    float grad = tsp + x * sech2_sp * sigmoid_x;
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// Softplus backward: d/dx[ln(1 + e^x)] = sigmoid(x)
+extern ""C"" __global__ void softplus_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float sigmoid_x = 1.0f / (1.0f + expf(-x));
+    gradInput[idx] = gradOutput[idx] * sigmoid_x;
+}
+
+// Hardswish backward
+extern ""C"" __global__ void hardswish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad;
+    if (x <= -3.0f) {
+        grad = 0.0f;
+    } else if (x >= 3.0f) {
+        grad = 1.0f;
+    } else {
+        // d/dx[x * (x + 3) / 6] = (2x + 3) / 6
+        grad = (2.0f * x + 3.0f) / 6.0f;
+    }
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// SELU backward
+extern ""C"" __global__ void selu_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    const float alpha = 1.6732632423543772848170429916717f;
+    const float scale = 1.0507009873554804934193349852946f;
+    float x = input[idx];
+    float grad = x > 0.0f ? scale : scale * alpha * expf(x);
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// Hardsigmoid backward
+extern ""C"" __global__ void hardsigmoid_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad = (x > -3.0f && x < 3.0f) ? (1.0f / 6.0f) : 0.0f;
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// Hardtanh backward
+extern ""C"" __global__ void hardtanh_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad = (x > -1.0f && x < 1.0f) ? 1.0f : 0.0f;
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
 extern ""C"" __global__ void softmax(const float* input, float* output, int batchSize, int features)
 {
     int batch = blockIdx.x * blockDim.x + threadIdx.x;
@@ -458,7 +613,20 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
                 "tanh_activation",
                 "gelu",
                 "swish",
+                "mish",
+                "softplus",
+                "hardswish",
+                "selu",
+                "hardsigmoid",
+                "hardtanh",
                 "softmax",
+                // Activation backward
+                "mish_backward",
+                "softplus_backward",
+                "hardswish_backward",
+                "selu_backward",
+                "hardsigmoid_backward",
+                "hardtanh_backward",
                 // Element-wise binary
                 "add_vectors",
                 "subtract_vectors",

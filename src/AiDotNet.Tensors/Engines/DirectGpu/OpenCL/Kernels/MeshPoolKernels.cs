@@ -401,7 +401,37 @@ __kernel void mesh_pool_weighted_backward(
     atomic_add_float(&gradInput[origIdx * inputChannels + channel], gradVal);
 }
 
+// OPTIMIZED: O(k) instead of O(n*k)
+// Caller MUST zero gradScores before launching using mesh_pool_zero_grad kernel.
+// Launch with global_size = numKept (NOT numEdges).
+// Each work-item handles one kept edge, directly writing its gradient.
+// Since each edge can appear at most once in keptIndices, no atomics needed.
 __kernel void mesh_pool_scores_backward(
+    __global const float* gradOutput,
+    __global const float* input,
+    __global const int* keptIndices,
+    __global float* gradScores,
+    const int numKept, const int numEdges, const int inputChannels)
+{
+    int keptIdx = get_global_id(0);
+
+    if (keptIdx >= numKept) return;
+
+    int edge = keptIndices[keptIdx];
+    // Bounds check: ensure edge index is valid
+    if (edge < 0 || edge >= numEdges) return;
+
+    float grad = 0.0f;
+    for (int c = 0; c < inputChannels; c++) {
+        grad += gradOutput[keptIdx * inputChannels + c] * input[edge * inputChannels + c];
+    }
+
+    gradScores[edge] = grad;
+}
+
+// Legacy version for backward compatibility - O(n*k) complexity
+// Use mesh_pool_scores_backward instead for better performance
+__kernel void mesh_pool_scores_backward_legacy(
     __global const float* gradOutput,
     __global const float* input,
     __global const int* keptIndices,
@@ -457,7 +487,8 @@ __kernel void mesh_pool_scores_backward(
             "mesh_pool_softmax_scores",
             "mesh_pool_weighted_gather",
             "mesh_pool_weighted_backward",
-            "mesh_pool_scores_backward"
+            "mesh_pool_scores_backward",
+            "mesh_pool_scores_backward_legacy"
         };
     }
 }

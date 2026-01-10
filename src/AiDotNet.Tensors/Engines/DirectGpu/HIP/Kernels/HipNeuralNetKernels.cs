@@ -261,6 +261,267 @@ extern ""C"" __global__ void smooth_l1_backward(
     gradInput[idx] = grad / (float)size;
 }
 
+// ---------------------------------------------------------------------------
+// Triplet Loss (for metric learning)
+// Formula: loss = max(0, ||anchor - positive||² - ||anchor - negative||² + margin)
+// ---------------------------------------------------------------------------
+extern ""C"" __global__ void triplet_loss(
+    const float* anchor, const float* positive, const float* negative,
+    float* loss, int batchSize, int embeddingDim, float margin)
+{
+    int tripletIdx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tripletIdx >= batchSize) return;
+
+    int offset = tripletIdx * embeddingDim;
+
+    // Compute squared distances
+    float posDist2 = 0.0f;
+    float negDist2 = 0.0f;
+    for (int j = 0; j < embeddingDim; j++) {
+        float diffPos = anchor[offset + j] - positive[offset + j];
+        float diffNeg = anchor[offset + j] - negative[offset + j];
+        posDist2 += diffPos * diffPos;
+        negDist2 += diffNeg * diffNeg;
+    }
+
+    // max(0, pos_dist² - neg_dist² + margin)
+    loss[tripletIdx] = fmaxf(0.0f, posDist2 - negDist2 + margin);
+}
+
+extern ""C"" __global__ void triplet_loss_backward(
+    const float* anchor, const float* positive, const float* negative,
+    float* gradAnchor, float* gradPositive, float* gradNegative,
+    int batchSize, int embeddingDim, float margin)
+{
+    int tripletIdx = blockIdx.x;
+    int featureIdx = threadIdx.x;
+    if (tripletIdx >= batchSize || featureIdx >= embeddingDim) return;
+
+    int offset = tripletIdx * embeddingDim;
+
+    // First, compute squared distances (one thread computes, others wait)
+    __shared__ float posDist2;
+    __shared__ float negDist2;
+    __shared__ int isActive;
+
+    if (featureIdx == 0) {
+        posDist2 = 0.0f;
+        negDist2 = 0.0f;
+        for (int j = 0; j < embeddingDim; j++) {
+            float diffPos = anchor[offset + j] - positive[offset + j];
+            float diffNeg = anchor[offset + j] - negative[offset + j];
+            posDist2 += diffPos * diffPos;
+            negDist2 += diffNeg * diffNeg;
+        }
+        isActive = (posDist2 - negDist2 + margin) > 0.0f ? 1 : 0;
+    }
+    __syncthreads();
+
+    int globalIdx = offset + featureIdx;
+    float scale = 2.0f / (float)batchSize;
+
+    if (isActive) {
+        float diffPos = anchor[globalIdx] - positive[globalIdx];
+        float diffNeg = anchor[globalIdx] - negative[globalIdx];
+
+        // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
+        gradAnchor[globalIdx] = scale * (diffPos - diffNeg);
+        // d_loss/d_positive = -2*(anchor - positive)
+        gradPositive[globalIdx] = -scale * diffPos;
+        // d_loss/d_negative = 2*(anchor - negative)
+        gradNegative[globalIdx] = scale * diffNeg;
+    } else {
+        gradAnchor[globalIdx] = 0.0f;
+        gradPositive[globalIdx] = 0.0f;
+        gradNegative[globalIdx] = 0.0f;
+    }
+}
+
+// ===========================================================================
+// ADDITIONAL LOSS KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void huber_loss(const float* predicted, const float* actual, float* output, float delta, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    float abs_diff = fabsf(diff);
+    output[idx] = (abs_diff <= delta) ? 0.5f * diff * diff : delta * (abs_diff - 0.5f * delta);
+}
+
+extern ""C"" __global__ void huber_gradient(const float* predicted, const float* actual, float* gradient, float delta, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = (fabsf(diff) <= delta) ? diff : delta * ((diff > 0.0f) ? 1.0f : -1.0f);
+}
+
+extern ""C"" __global__ void focal_loss(const float* predicted, const float* actual, float* output, float alpha, float gamma, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float pred = fmaxf(fminf(predicted[idx], 1.0f - epsilon), epsilon);
+    output[idx] = alpha * powf(1.0f - pred, gamma) * actual[idx] * (-logf(pred));
+}
+
+extern ""C"" __global__ void focal_gradient(const float* predicted, const float* actual, float* gradient, float alpha, float gamma, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float pred = fmaxf(fminf(predicted[idx], 1.0f - epsilon), epsilon);
+    float focal_weight = powf(1.0f - pred, gamma);
+    float d_focal = gamma * powf(1.0f - pred, gamma - 1.0f);
+    gradient[idx] = alpha * actual[idx] * (d_focal * logf(pred) - focal_weight / pred);
+}
+
+extern ""C"" __global__ void mae_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    output[idx] = fabsf(predicted[idx] - actual[idx]);
+}
+
+extern ""C"" __global__ void mae_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = (diff > 0.0f) ? 1.0f : ((diff < 0.0f) ? -1.0f : 0.0f);
+}
+
+extern ""C"" __global__ void log_cosh_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    output[idx] = logf(coshf(predicted[idx] - actual[idx]));
+}
+
+extern ""C"" __global__ void log_cosh_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = tanhf(predicted[idx] - actual[idx]);
+}
+
+extern ""C"" __global__ void quantile_loss(const float* predicted, const float* actual, float* output, float quantile, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = actual[idx] - predicted[idx];
+    output[idx] = (diff > 0.0f) ? quantile * diff : -(1.0f - quantile) * diff;
+}
+
+extern ""C"" __global__ void quantile_gradient(const float* predicted, const float* actual, float* gradient, float quantile, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = (actual[idx] > predicted[idx]) ? -quantile : (1.0f - quantile);
+}
+
+extern ""C"" __global__ void hinge_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    output[idx] = fmaxf(0.0f, 1.0f - actual[idx] * predicted[idx]);
+}
+
+extern ""C"" __global__ void hinge_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = (actual[idx] * predicted[idx] < 1.0f) ? -actual[idx] : 0.0f;
+}
+
+extern ""C"" __global__ void squared_hinge_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float margin = fmaxf(0.0f, 1.0f - actual[idx] * predicted[idx]);
+    output[idx] = margin * margin;
+}
+
+extern ""C"" __global__ void squared_hinge_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = -2.0f * actual[idx] * fmaxf(0.0f, 1.0f - actual[idx] * predicted[idx]);
+}
+
+extern ""C"" __global__ void poisson_loss(const float* predicted, const float* actual, float* output, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float pred = fmaxf(predicted[idx], epsilon);
+    output[idx] = pred - actual[idx] * logf(pred);
+}
+
+extern ""C"" __global__ void poisson_gradient(const float* predicted, const float* actual, float* gradient, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float pred = fmaxf(predicted[idx], epsilon);
+    gradient[idx] = 1.0f - actual[idx] / pred;
+}
+
+extern ""C"" __global__ void exponential_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    output[idx] = expf(-actual[idx] * predicted[idx]);
+}
+
+extern ""C"" __global__ void exponential_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = -actual[idx] * expf(-actual[idx] * predicted[idx]);
+}
+
+extern ""C"" __global__ void modified_huber_loss(const float* predicted, const float* actual, float* output, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float z = actual[idx] * predicted[idx];
+    if (z >= 1.0f) output[idx] = 0.0f;
+    else if (z >= -1.0f) { float t = 1.0f - z; output[idx] = t * t; }
+    else output[idx] = -4.0f * z;
+}
+
+extern ""C"" __global__ void modified_huber_gradient(const float* predicted, const float* actual, float* gradient, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float z = actual[idx] * predicted[idx];
+    if (z >= 1.0f) gradient[idx] = 0.0f;
+    else if (z >= -1.0f) gradient[idx] = -2.0f * actual[idx] * (1.0f - z);
+    else gradient[idx] = -4.0f * actual[idx];
+}
+
+extern ""C"" __global__ void categorical_cross_entropy_loss(const float* predicted, const float* actual, float* output, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    output[idx] = -actual[idx] * logf(fmaxf(predicted[idx], epsilon));
+}
+
+extern ""C"" __global__ void categorical_cross_entropy_gradient(const float* predicted, const float* actual, float* gradient, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradient[idx] = -actual[idx] / fmaxf(predicted[idx], epsilon);
+}
+
+extern ""C"" __global__ void charbonnier_loss(const float* predicted, const float* actual, float* output, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    output[idx] = sqrtf(diff * diff + epsilon * epsilon) - epsilon;
+}
+
+extern ""C"" __global__ void charbonnier_gradient(const float* predicted, const float* actual, float* gradient, float epsilon, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    gradient[idx] = diff / sqrtf(diff * diff + epsilon * epsilon);
+}
+
+extern ""C"" __global__ void elastic_net_loss(const float* predicted, const float* actual, float* output, float l1_weight, float l2_weight, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    float pred = predicted[idx];
+    output[idx] = diff * diff + l1_weight * fabsf(pred) + l2_weight * pred * pred;
+}
+
+extern ""C"" __global__ void elastic_net_gradient(const float* predicted, const float* actual, float* gradient, float l1_weight, float l2_weight, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float diff = predicted[idx] - actual[idx];
+    float pred = predicted[idx];
+    float sign_pred = (pred > 0.0f) ? 1.0f : ((pred < 0.0f) ? -1.0f : 0.0f);
+    gradient[idx] = 2.0f * diff + l1_weight * sign_pred + 2.0f * l2_weight * pred;
+}
+
 // ===========================================================================
 // UTILITY KERNELS
 // ===========================================================================
@@ -1471,6 +1732,8 @@ extern ""C"" __global__ void scatter_mean_normalize(
 // ===========================================================================
 
 // Group normalization backward - Pass 1: Compute group-wise sums
+// CRITICAL: Host MUST validate that C % G == 0 before launching this kernel.
+// Launching with C not divisible by G will produce incorrect results.
 extern ""C"" __global__ void groupnorm_backward_sums(
     const float* gradOutput,
     const float* input,
@@ -1809,6 +2072,16 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             "elu", "elu_backward", "silu", "swish_backward", "mish", "softplus", "hardswish",
             "cross_entropy_loss", "cross_entropy_backward", "bce_loss", "bce_backward",
             "mse_loss", "mse_backward", "smooth_l1_loss", "smooth_l1_backward",
+            "triplet_loss", "triplet_loss_backward",
+            // Additional loss functions
+            "huber_loss", "huber_gradient", "focal_loss", "focal_gradient",
+            "mae_loss", "mae_gradient", "log_cosh_loss", "log_cosh_gradient",
+            "quantile_loss", "quantile_gradient", "hinge_loss", "hinge_gradient",
+            "squared_hinge_loss", "squared_hinge_gradient", "poisson_loss", "poisson_gradient",
+            "exponential_loss", "exponential_gradient", "modified_huber_loss", "modified_huber_gradient",
+            "categorical_cross_entropy_loss", "categorical_cross_entropy_gradient",
+            "charbonnier_loss", "charbonnier_gradient", "elastic_net_loss", "elastic_net_gradient",
+            "contrastive_loss", "contrastive_loss_backward",
             "clamp", "l2_norm_squared", "scale", "copy_buffer", "fill_buffer",
             "greater_than", "less_than", "equals", "where_cond",
             "compute_mean_var", "argmax_axis", "argmin_axis",

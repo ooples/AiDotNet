@@ -215,29 +215,87 @@ __kernel void focal_gradient(
 // ---------------------------------------------------------------------------
 // Triplet Loss (for metric learning)
 // Formula: loss = max(0, ||anchor-pos||² - ||anchor-neg||² + margin)
+// Each work-item processes one triplet, iterating over the embedding dimension
 // ---------------------------------------------------------------------------
 __kernel void triplet_loss(
     __global const float* anchor,
     __global const float* positive,
     __global const float* negative,
     __global float* output,
-    const float margin,
-    const int size)
+    const int batchSize,
+    const int embeddingDim,
+    const float margin)
 {
-    const int idx = get_global_id(0);
-    if (idx >= size) return;
-    
+    const int tripletIdx = get_global_id(0);
+    if (tripletIdx >= batchSize) return;
+
+    int offset = tripletIdx * embeddingDim;
+
+    // Compute squared distances with proper reduction across embedding dimension
     float pos_dist_sq = 0.0f;
     float neg_dist_sq = 0.0f;
-    
-    // Note: This is simplified - full implementation needs reduction
-    float diff_pos = anchor[idx] - positive[idx];
-    float diff_neg = anchor[idx] - negative[idx];
-    
-    pos_dist_sq += diff_pos * diff_pos;
-    neg_dist_sq += diff_neg * diff_neg;
-    
-    output[idx] = fmax(0.0f, pos_dist_sq - neg_dist_sq + margin);
+    for (int j = 0; j < embeddingDim; j++) {
+        float diff_pos = anchor[offset + j] - positive[offset + j];
+        float diff_neg = anchor[offset + j] - negative[offset + j];
+        pos_dist_sq += diff_pos * diff_pos;
+        neg_dist_sq += diff_neg * diff_neg;
+    }
+
+    // max(0, pos_dist² - neg_dist² + margin)
+    output[tripletIdx] = fmax(0.0f, pos_dist_sq - neg_dist_sq + margin);
+}
+
+__kernel void triplet_loss_backward(
+    __global const float* anchor,
+    __global const float* positive,
+    __global const float* negative,
+    __global float* gradAnchor,
+    __global float* gradPositive,
+    __global float* gradNegative,
+    const int batchSize,
+    const int embeddingDim,
+    const float margin)
+{
+    const int tripletIdx = get_global_id(0);
+    const int featureIdx = get_local_id(0);
+
+    if (tripletIdx >= batchSize) return;
+
+    int offset = tripletIdx * embeddingDim;
+
+    // First, compute squared distances to determine if triplet is active
+    float pos_dist_sq = 0.0f;
+    float neg_dist_sq = 0.0f;
+    for (int j = 0; j < embeddingDim; j++) {
+        float diff_pos = anchor[offset + j] - positive[offset + j];
+        float diff_neg = anchor[offset + j] - negative[offset + j];
+        pos_dist_sq += diff_pos * diff_pos;
+        neg_dist_sq += diff_neg * diff_neg;
+    }
+
+    int isActive = (pos_dist_sq - neg_dist_sq + margin) > 0.0f ? 1 : 0;
+    float scale = 2.0f / (float)batchSize;
+
+    // Compute gradients for all features in this triplet
+    for (int j = 0; j < embeddingDim; j++) {
+        int globalIdx = offset + j;
+
+        if (isActive) {
+            float diff_pos = anchor[globalIdx] - positive[globalIdx];
+            float diff_neg = anchor[globalIdx] - negative[globalIdx];
+
+            // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
+            gradAnchor[globalIdx] = scale * (diff_pos - diff_neg);
+            // d_loss/d_positive = -2*(anchor - positive)
+            gradPositive[globalIdx] = -scale * diff_pos;
+            // d_loss/d_negative = 2*(anchor - negative)
+            gradNegative[globalIdx] = scale * diff_neg;
+        } else {
+            gradAnchor[globalIdx] = 0.0f;
+            gradPositive[globalIdx] = 0.0f;
+            gradNegative[globalIdx] = 0.0f;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -785,7 +843,7 @@ __kernel void elastic_net_loss(
 {
     const int idx = get_global_id(0);
     if (idx >= size) return;
-    
+
     float diff = predicted[idx] - actual[idx];
     float pred = predicted[idx];
     output[idx] = diff * diff + l1_weight * fabs(pred) + l2_weight * pred * pred;
@@ -801,12 +859,70 @@ __kernel void elastic_net_gradient(
 {
     const int idx = get_global_id(0);
     if (idx >= size) return;
-    
+
     float diff = predicted[idx] - actual[idx];
     float pred = predicted[idx];
     float sign_pred = (pred > 0.0f) ? 1.0f : ((pred < 0.0f) ? -1.0f : 0.0f);
     gradient[idx] = 2.0f * diff + l1_weight * sign_pred + 2.0f * l2_weight * pred;
 }
 ";
+    }
+
+    /// <summary>
+    /// Gets the list of kernel names for loss functions.
+    /// </summary>
+    public static string[] GetKernelNames()
+    {
+        return new string[]
+        {
+            // MSE Loss
+            "mse_loss", "mse_gradient",
+            // Binary Cross-Entropy Loss
+            "bce_loss", "bce_gradient",
+            // Cross-Entropy Loss
+            "cross_entropy_loss", "cross_entropy_gradient",
+            // Huber Loss
+            "huber_loss", "huber_gradient",
+            // Focal Loss
+            "focal_loss", "focal_gradient",
+            // Triplet Loss
+            "triplet_loss", "triplet_loss_backward",
+            // Contrastive Loss
+            "contrastive_loss",
+            // MAE Loss
+            "mae_loss", "mae_gradient",
+            // Log-Cosh Loss
+            "log_cosh_loss", "log_cosh_gradient",
+            // Quantile Loss
+            "quantile_loss", "quantile_gradient",
+            // Hinge Loss
+            "hinge_loss", "hinge_gradient",
+            // Squared Hinge Loss
+            "squared_hinge_loss", "squared_hinge_gradient",
+            // Cosine Similarity Loss
+            "cosine_similarity_gradient",
+            // Dice Loss
+            "dice_gradient",
+            // Jaccard Loss
+            "jaccard_gradient",
+            // Poisson Loss
+            "poisson_loss", "poisson_gradient",
+            // Exponential Loss
+            "exponential_loss", "exponential_gradient",
+            // Modified Huber Loss
+            "modified_huber_loss", "modified_huber_gradient",
+            // Categorical Cross-Entropy Loss
+            "categorical_cross_entropy_loss", "categorical_cross_entropy_gradient",
+            // Weighted Cross-Entropy Loss
+            "weighted_cross_entropy_loss", "weighted_cross_entropy_gradient",
+            // Sparse Categorical Cross-Entropy Loss
+            "sparse_categorical_cross_entropy_loss", "sparse_categorical_cross_entropy_gradient",
+            // Charbonnier Loss
+            "charbonnier_loss", "charbonnier_gradient",
+            // Elastic Net Loss
+            "elastic_net_loss", "elastic_net_gradient",
+            // Reduction kernels
+            "reduce_sum", "reduce_mean"
+        };
     }
 }

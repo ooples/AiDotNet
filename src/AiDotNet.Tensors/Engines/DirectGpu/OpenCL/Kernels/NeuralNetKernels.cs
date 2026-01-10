@@ -683,9 +683,10 @@ __kernel void lamb_update(
     m[idx] = mVal;
     v[idx] = vVal;
 
-    // Bias correction
-    float mHat = mVal / (1.0f - pow(beta1, (float)step));
-    float vHat = vVal / (1.0f - pow(beta2, (float)step));
+    // Bias correction (ensure step >= 1 to avoid division by zero)
+    int safeStep = max(step, 1);
+    float mHat = mVal / (1.0f - pow(beta1, (float)safeStep));
+    float vHat = vVal / (1.0f - pow(beta2, (float)safeStep));
 
     // LAMB: Adam update direction with weight decay
     float adamUpdate = mHat / (sqrt(vHat) + epsilon);
@@ -778,7 +779,9 @@ __kernel void amsgrad_update(
     float vMaxVal = fmax(vMax[idx], vVal);
     vMax[idx] = vMaxVal;
 
-    float mHat = mVal / (1.0f - pow(beta1, (float)step));
+    // Bias correction (ensure step >= 1 to avoid division by zero)
+    int safeStep = max(step, 1);
+    float mHat = mVal / (1.0f - pow(beta1, (float)safeStep));
 
     param[idx] -= learningRate * mHat / (sqrt(vMaxVal) + epsilon);
 }
@@ -811,7 +814,9 @@ __kernel void adamax_update(
     float uVal = fmax(beta2 * u[idx], fabs(grad));
     u[idx] = uVal;
 
-    float biasCorrection = 1.0f - pow(beta1, (float)step);
+    // Bias correction (ensure step >= 1 to avoid division by zero)
+    int safeStep = max(step, 1);
+    float biasCorrection = 1.0f - pow(beta1, (float)safeStep);
 
     param[idx] -= (learningRate / biasCorrection) * mVal / (uVal + epsilon);
 }
@@ -873,8 +878,10 @@ __kernel void nadam_update(
     float vVal = beta2 * v[idx] + (1.0f - beta2) * grad * grad;
     v[idx] = vVal;
 
-    float beta1Pow = pow(beta1, (float)step);
-    float beta2Pow = pow(beta2, (float)step);
+    // Bias correction (ensure step >= 1 to avoid division by zero)
+    int safeStep = max(step, 1);
+    float beta1Pow = pow(beta1, (float)safeStep);
+    float beta2Pow = pow(beta2, (float)safeStep);
     float mHat = mVal / (1.0f - beta1Pow);
     float vHat = vVal / (1.0f - beta2Pow);
 
@@ -1560,6 +1567,8 @@ __kernel void scatter_mean_normalize(
 // ===========================================================================
 
 // Group normalization backward - Pass 1: Compute group-wise sums
+// CRITICAL: Host MUST validate that C % G == 0 before launching this kernel.
+// Launching with C not divisible by G will produce incorrect results.
 __kernel void groupnorm_backward_sums(
     __global const float* gradOutput,
     __global const float* input,

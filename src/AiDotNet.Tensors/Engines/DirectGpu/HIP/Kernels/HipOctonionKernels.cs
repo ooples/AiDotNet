@@ -16,7 +16,11 @@ internal static class HipOctonionKernels
 #include <hip/hip_runtime.h>
 #include <math.h>
 
-#define EPSILON 1e-15f
+// Epsilon for division safety - must be appropriate for float32 precision
+// Float32 machine epsilon is ~1.19e-7, so use 1e-7f for safe divisions
+#define EPSILON_DIV 1e-7f
+// Epsilon for norm^2 comparisons (allows smaller values before protection kicks in)
+#define EPSILON_NORM_SQ 1e-14f
 
 // ===========================================================================
 // OCTONION MULTIPLICATION TABLE
@@ -90,7 +94,7 @@ __device__ float octonion_norm_sq(const float* a) {
 // Octonion inverse: a^(-1) = conj(a) / ||a||^2
 __device__ void octonion_inverse(const float* a, float* r) {
     float normSq = octonion_norm_sq(a);
-    normSq = fmaxf(normSq, EPSILON);
+    normSq = fmaxf(normSq, EPSILON_NORM_SQ);
 
     r[0] = a[0] / normSq;
     for (int i = 1; i < 8; i++) {
@@ -495,9 +499,11 @@ extern ""C"" __global__ void octonion_norm_backward(
         inputLocal[c] = input[baseIdx + c];
     }
 
-    // Compute norm
+    // Compute norm with proper float32 protection
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrtf(fmaxf(normSq, EPSILON));
+    float norm = sqrtf(fmaxf(normSq, EPSILON_NORM_SQ));
+    // Ensure norm is large enough for safe division
+    norm = fmaxf(norm, EPSILON_DIV);
 
     // d(||a||)/da = a / ||a||
     float gradOutScalar = gradOutput[gid]; // Note: norm output is scalar
@@ -562,9 +568,11 @@ extern ""C"" __global__ void octonion_modulus_relu_forward(
         inputLocal[c] = input[baseIdx + c];
     }
 
-    // Compute norm
+    // Compute norm with proper float32 protection
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrtf(fmaxf(normSq, EPSILON));
+    float norm = sqrtf(fmaxf(normSq, EPSILON_NORM_SQ));
+    // Ensure norm is large enough for safe division
+    norm = fmaxf(norm, EPSILON_DIV);
 
     // Apply ReLU to (norm - threshold)
     float activatedNorm = fmaxf(0.0f, norm - threshold);
@@ -596,9 +604,11 @@ extern ""C"" __global__ void octonion_modulus_relu_backward(
         gradOut[c] = gradOutput[baseIdx + c];
     }
 
-    // Compute norm
+    // Compute norm with proper float32 protection
     float normSq = octonion_norm_sq(inputLocal);
-    float norm = sqrtf(fmaxf(normSq, EPSILON));
+    float norm = sqrtf(fmaxf(normSq, EPSILON_NORM_SQ));
+    // Ensure norm is large enough for safe division (especially for norm^3)
+    norm = fmaxf(norm, EPSILON_DIV);
 
     // Check if in dead zone (norm <= threshold)
     if (norm <= threshold) {
@@ -624,7 +634,11 @@ extern ""C"" __global__ void octonion_modulus_relu_backward(
     }
 
     // Gradient: scale * gradOut + (threshold / norm^3) * dotProduct * input
-    float radialFactor = threshold * dotProduct / (norm * norm * norm);
+    // For numerical stability, compute norm^3 as norm * normSq to avoid cubing small numbers
+    float normCubed = norm * normSq;
+    // Additional protection: ensure normCubed is not too small
+    normCubed = fmaxf(normCubed, EPSILON_DIV * EPSILON_DIV * EPSILON_DIV);
+    float radialFactor = threshold * dotProduct / normCubed;
     for (int c = 0; c < 8; c++) {
         gradInput[baseIdx + c] = scale * gradOut[c] + radialFactor * inputLocal[c];
     }

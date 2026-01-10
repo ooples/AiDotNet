@@ -1370,6 +1370,115 @@ public interface IDirectGpuBackend : IDisposable
     float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta);
     void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta);
 
+    /// <summary>
+    /// Computes triplet loss for metric learning.
+    /// Formula: loss = max(0, ||anchor - positive||² - ||anchor - negative||² + margin)
+    /// </summary>
+    /// <param name="anchor">Anchor embeddings [batchSize x embeddingDim].</param>
+    /// <param name="positive">Positive embeddings [batchSize x embeddingDim].</param>
+    /// <param name="negative">Negative embeddings [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of triplets in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for triplet loss (typically 1.0).</param>
+    /// <returns>Mean triplet loss across the batch.</returns>
+    float TripletLoss(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative, int batchSize, int embeddingDim, float margin);
+
+    /// <summary>
+    /// Computes gradients for triplet loss.
+    /// </summary>
+    /// <param name="anchor">Anchor embeddings [batchSize x embeddingDim].</param>
+    /// <param name="positive">Positive embeddings [batchSize x embeddingDim].</param>
+    /// <param name="negative">Negative embeddings [batchSize x embeddingDim].</param>
+    /// <param name="gradAnchor">Output gradient for anchor [batchSize x embeddingDim].</param>
+    /// <param name="gradPositive">Output gradient for positive [batchSize x embeddingDim].</param>
+    /// <param name="gradNegative">Output gradient for negative [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of triplets in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for triplet loss (typically 1.0).</param>
+    void TripletLossBackward(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative,
+        IGpuBuffer gradAnchor, IGpuBuffer gradPositive, IGpuBuffer gradNegative,
+        int batchSize, int embeddingDim, float margin);
+
+    // Huber Loss (robust regression)
+    float HuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float delta);
+    void HuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float delta);
+
+    // Focal Loss (class imbalance)
+    float FocalLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float alpha, float gamma);
+    void FocalBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float alpha, float gamma);
+
+    // Mean Absolute Error Loss
+    float MaeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void MaeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Log-Cosh Loss
+    float LogCoshLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void LogCoshBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Quantile Loss
+    float QuantileLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float quantile);
+    void QuantileBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float quantile);
+
+    // Hinge Loss
+    float HingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void HingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Squared Hinge Loss
+    float SquaredHingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void SquaredHingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Poisson Loss
+    float PoissonLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void PoissonBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Exponential Loss
+    float ExponentialLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void ExponentialBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Modified Huber Loss
+    float ModifiedHuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void ModifiedHuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Categorical Cross-Entropy Loss
+    float CategoricalCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void CategoricalCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Charbonnier Loss
+    float CharbonnierLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float epsilon);
+    void CharbonnierBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float epsilon);
+
+    // Elastic Net Loss
+    float ElasticNetLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float l1Weight, float l2Weight);
+    void ElasticNetBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float l1Weight, float l2Weight);
+
+    // Contrastive Loss
+    /// <summary>
+    /// Computes contrastive loss for similarity learning with paired embeddings.
+    /// </summary>
+    /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="labels">Similarity labels (1 for similar, 0 for dissimilar) [batchSize].</param>
+    /// <param name="batchSize">Number of pairs in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for dissimilar pairs (typically 1.0).</param>
+    /// <returns>Mean contrastive loss across the batch.</returns>
+    float ContrastiveLoss(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels, int batchSize, int embeddingDim, float margin);
+
+    /// <summary>
+    /// Computes gradients for contrastive loss.
+    /// </summary>
+    /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="labels">Similarity labels (1 for similar, 0 for dissimilar) [batchSize].</param>
+    /// <param name="gradOutput1">Output gradient for first embeddings [batchSize x embeddingDim].</param>
+    /// <param name="gradOutput2">Output gradient for second embeddings [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of pairs in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for dissimilar pairs (typically 1.0).</param>
+    void ContrastiveBackward(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels,
+        IGpuBuffer gradOutput1, IGpuBuffer gradOutput2,
+        int batchSize, int embeddingDim, float margin);
+
     #endregion
 
     #region Gradient Clipping and Utility
@@ -1388,11 +1497,17 @@ public interface IDirectGpuBackend : IDisposable
     /// <summary>
     /// Convert FP32 buffer to FP16 for mixed precision training.
     /// </summary>
+    /// <param name="input">Input buffer containing FP32 (float) elements.</param>
+    /// <param name="output">Output buffer for FP16 elements. Must be allocated as a byte buffer with size * 2 bytes (use AllocateByteBuffer(size * 2)).</param>
+    /// <param name="size">Number of elements to convert (not bytes).</param>
     void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size);
 
     /// <summary>
     /// Convert FP16 buffer to FP32 for mixed precision training.
     /// </summary>
+    /// <param name="input">Input buffer containing FP16 elements (byte buffer with size * 2 bytes).</param>
+    /// <param name="output">Output buffer for FP32 (float) elements.</param>
+    /// <param name="size">Number of elements to convert (not bytes).</param>
     void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
 
     #endregion

@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -171,5 +173,46 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         }
 
         return NumOps.Sqrt(sum);
+    }
+
+    /// <summary>
+    /// Calculates Contrastive Loss on GPU for batched input tensors.
+    /// </summary>
+    /// <param name="output1">The first output GPU tensor.</param>
+    /// <param name="output2">The second output GPU tensor.</param>
+    /// <param name="labels">The similarity labels GPU tensor (1 for similar, 0 for dissimilar).</param>
+    /// <returns>A tuple containing the loss value and gradient tensors for both outputs.</returns>
+    public (T Loss, IGpuTensor<T> Gradient1, IGpuTensor<T> Gradient2) CalculateLossAndGradientGpu(
+        IGpuTensor<T> output1, IGpuTensor<T> output2, IGpuTensor<T> labels)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            // Fall back to CPU implementation
+            throw new NotSupportedException("GPU backend not available for ContrastiveLoss GPU computation.");
+        }
+
+        int batchSize = output1.Shape[0];
+        int embeddingSize = output1.ElementCount / batchSize;
+        float margin = Convert.ToSingle(NumOps.ToDouble(_margin));
+
+        // Compute loss on GPU
+        float lossValue = backend.ContrastiveLoss(output1.Buffer, output2.Buffer, labels.Buffer, batchSize, embeddingSize, margin);
+
+        // Allocate gradient buffers
+        var grad1Buffer = backend.AllocateBuffer(output1.ElementCount);
+        var grad2Buffer = backend.AllocateBuffer(output2.ElementCount);
+
+        // Compute gradients on GPU
+        backend.ContrastiveBackward(output1.Buffer, output2.Buffer, labels.Buffer,
+            grad1Buffer, grad2Buffer, batchSize, embeddingSize, margin);
+
+        // Create gradient tensors
+        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape, GpuTensorRole.Gradient);
+        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }
 }
