@@ -649,8 +649,11 @@ __kernel void jaccard_gradient(
     const int idx = get_global_id(0);
     if (idx >= size) return;
     
-    float denom = union_sum * union_sum;
-    gradient[idx] = -(actual[idx] * union_sum - intersection * (1.0f - actual[idx])) / denom;
+    // Add epsilon guard to prevent division by zero when union_sum is near zero
+    const float EPSILON = 1e-7f;
+    float safe_union = fmax(union_sum, EPSILON);
+    float denom = safe_union * safe_union;
+    gradient[idx] = -(actual[idx] * safe_union - intersection * (1.0f - actual[idx])) / denom;
 }
 
 // ---------------------------------------------------------------------------
@@ -886,8 +889,11 @@ __kernel void charbonnier_gradient(
     const int idx = get_global_id(0);
     if (idx >= size) return;
     
+    // Add minimum epsilon guard to prevent division by zero when epsilon==0 and diff==0
+    const float MIN_EPSILON = 1e-7f;
+    float safe_epsilon = fmax(epsilon, MIN_EPSILON);
     float diff = predicted[idx] - actual[idx];
-    gradient[idx] = diff / sqrt(diff * diff + epsilon * epsilon);
+    gradient[idx] = diff / sqrt(diff * diff + safe_epsilon * safe_epsilon);
 }
 
 // ---------------------------------------------------------------------------
@@ -948,7 +954,7 @@ __kernel void elastic_net_gradient(
             // Triplet Loss
             "triplet_loss", "triplet_loss_backward",
             // Contrastive Loss
-            "contrastive_loss",
+            "contrastive_loss", "contrastive_loss_gradient",
             // MAE Loss
             "mae_loss", "mae_gradient",
             // Log-Cosh Loss

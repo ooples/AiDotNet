@@ -1517,7 +1517,7 @@ public interface IDirectGpuBackend : IDisposable
     /// </summary>
     /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
     /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
-    /// <param name="labels">Similarity labels (1 for similar, 0 for dissimilar) [batchSize].</param>
+    /// <param name="labels">Similarity labels (0 for similar pairs to minimize distance, 1 for dissimilar pairs to push apart) [batchSize].</param>
     /// <param name="batchSize">Number of pairs in the batch.</param>
     /// <param name="embeddingDim">Dimension of each embedding vector.</param>
     /// <param name="margin">Margin for dissimilar pairs (typically 1.0).</param>
@@ -1529,7 +1529,7 @@ public interface IDirectGpuBackend : IDisposable
     /// </summary>
     /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
     /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
-    /// <param name="labels">Similarity labels (1 for similar, 0 for dissimilar) [batchSize].</param>
+    /// <param name="labels">Similarity labels (0 for similar pairs to minimize distance, 1 for dissimilar pairs to push apart) [batchSize].</param>
     /// <param name="gradOutput1">Output gradient for first embeddings [batchSize x embeddingDim].</param>
     /// <param name="gradOutput2">Output gradient for second embeddings [batchSize x embeddingDim].</param>
     /// <param name="batchSize">Number of pairs in the batch.</param>
@@ -1579,11 +1579,16 @@ public interface IDirectGpuBackend : IDisposable
     /// <item>Input: AllocateByteBuffer(elementCount * 2) - FP16 buffer with 2 bytes per element</item>
     /// <item>Output: Allocate(elementCount) - FP32 buffer with 4 bytes per element</item>
     /// </list>
-    /// <para>The 'size' parameter is always the element count, not byte count.</para>
+    /// <para><b>Important note on buffer sizes:</b></para>
+    /// <para>The 'size' parameter to this method is always the <b>element count</b>, not the byte count.
+    /// When using AllocateByteBuffer, the IGpuBuffer.Size property returns the byte count (elementCount * 2),
+    /// so callers must track element count separately or divide IGpuBuffer.Size by 2 when passing to this method.</para>
+    /// <para>Example: If you have 1000 FP16 elements, allocate with AllocateByteBuffer(2000), but pass size=1000 here.</para>
     /// </remarks>
-    /// <param name="input">Input buffer containing FP16 elements. Allocated with AllocateByteBuffer(elementCount * 2).</param>
+    /// <param name="input">Input buffer containing FP16 elements. Allocated with AllocateByteBuffer(elementCount * 2).
+    /// Note: IGpuBuffer.Size returns byte count (elementCount * 2), not element count.</param>
     /// <param name="output">Output buffer for FP32 (float) elements [elementCount floats].</param>
-    /// <param name="size">Number of elements to convert (element count, not bytes).</param>
+    /// <param name="size">Number of elements to convert (element count, not bytes). If using IGpuBuffer.Size from a byte buffer, divide by 2.</param>
     void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
 
     #endregion

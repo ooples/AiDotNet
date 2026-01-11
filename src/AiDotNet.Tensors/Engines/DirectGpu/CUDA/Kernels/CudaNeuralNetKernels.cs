@@ -294,7 +294,7 @@ extern ""C"" __global__ void triplet_loss_backward(
     int batchSize, int embeddingDim, float margin)
 {
     int tripletIdx = blockIdx.x;
-    int featureIdx = threadIdx.x;
+    int tid = threadIdx.x;
 
     // Block-level early exit is safe - entire block exits together
     if (tripletIdx >= batchSize) return;
@@ -306,7 +306,7 @@ extern ""C"" __global__ void triplet_loss_backward(
     __shared__ float negDist2;
     __shared__ int isActive;
 
-    if (featureIdx == 0) {
+    if (tid == 0) {
         posDist2 = 0.0f;
         negDist2 = 0.0f;
         for (int j = 0; j < embeddingDim; j++) {
@@ -320,26 +320,25 @@ extern ""C"" __global__ void triplet_loss_backward(
     // All threads in block must reach this barrier (no early return before this)
     __syncthreads();
 
-    // Thread-level bounds check AFTER syncthreads to prevent deadlock
-    if (featureIdx >= embeddingDim) return;
-
-    int globalIdx = offset + featureIdx;
+    // Striding loop: each thread processes multiple features when embeddingDim > blockDim.x
     float scale = 2.0f / (float)batchSize;
+    for (int featureIdx = tid; featureIdx < embeddingDim; featureIdx += blockDim.x) {
+        int globalIdx = offset + featureIdx;
+        if (isActive) {
+            float diffPos = anchor[globalIdx] - positive[globalIdx];
+            float diffNeg = anchor[globalIdx] - negative[globalIdx];
 
-    if (isActive) {
-        float diffPos = anchor[globalIdx] - positive[globalIdx];
-        float diffNeg = anchor[globalIdx] - negative[globalIdx];
-
-        // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
-        gradAnchor[globalIdx] = scale * (diffPos - diffNeg);
-        // d_loss/d_positive = -2*(anchor - positive)
-        gradPositive[globalIdx] = -scale * diffPos;
-        // d_loss/d_negative = 2*(anchor - negative)
-        gradNegative[globalIdx] = scale * diffNeg;
-    } else {
-        gradAnchor[globalIdx] = 0.0f;
-        gradPositive[globalIdx] = 0.0f;
-        gradNegative[globalIdx] = 0.0f;
+            // d_loss/d_anchor = 2*(anchor - positive) - 2*(anchor - negative)
+            gradAnchor[globalIdx] = scale * (diffPos - diffNeg);
+            // d_loss/d_positive = -2*(anchor - positive)
+            gradPositive[globalIdx] = -scale * diffPos;
+            // d_loss/d_negative = 2*(anchor - negative)
+            gradNegative[globalIdx] = scale * diffNeg;
+        } else {
+            gradAnchor[globalIdx] = 0.0f;
+            gradPositive[globalIdx] = 0.0f;
+            gradNegative[globalIdx] = 0.0f;
+        }
     }
 }
 
@@ -1691,9 +1690,7 @@ extern ""C"" __global__ void lstm_cell_backward(
 }
 
 // Fused LSTM gate computation: computes Wi*x + Ui*h + b for all 4 gates
-// Uses shared memory tiling for optimized matrix multiplication
-#define LSTM_TILE_K 32
-
+// Each thread computes one output element: gates[b, g] = bias[g] + sum_k(Wi[g,k]*x[b,k]) + sum_k(Uh[g,k]*h[b,k])
 extern ""C"" __global__ void lstm_gates_precompute(
     const float* input,         // Input: [batch, input_size]
     const float* hiddenPrev,    // Previous hidden: [batch, hidden]
@@ -1704,57 +1701,27 @@ extern ""C"" __global__ void lstm_gates_precompute(
     int batchSize, int inputSize, int hiddenSize)
 {
     // Each thread computes one output element gates[b, g]
-    // Use shared memory to cache tiles of input/hidden and weights
-    __shared__ float tileInput[LSTM_TILE_K];
-    __shared__ float tileHidden[LSTM_TILE_K];
-    __shared__ float tileWeightIH[LSTM_TILE_K];
-    __shared__ float tileWeightHH[LSTM_TILE_K];
-
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int totalSize = batchSize * 4 * hiddenSize;
     if (idx >= totalSize) return;
 
     int b = idx / (4 * hiddenSize);
     int g = idx % (4 * hiddenSize);
-    int tid = threadIdx.x;
-    int blockSize = blockDim.x;
 
     float sum = bias[g];
 
-    // Tiled input-to-hidden: weightsIH[g, :] dot input[b, :]
-    for (int tileStart = 0; tileStart < inputSize; tileStart += LSTM_TILE_K) {
-        // Cooperatively load tiles into shared memory
-        int loadIdx = tileStart + (tid % LSTM_TILE_K);
-        if (tid < LSTM_TILE_K && loadIdx < inputSize) {
-            tileInput[tid] = input[b * inputSize + loadIdx];
-            tileWeightIH[tid] = weightsIH[g * inputSize + loadIdx];
-        }
-        __syncthreads();
-
-        // Compute partial dot product for this tile
-        int tileEnd = min(LSTM_TILE_K, inputSize - tileStart);
-        for (int k = 0; k < tileEnd; k++) {
-            sum += tileWeightIH[k] * tileInput[k];
-        }
-        __syncthreads();
+    // Input-to-hidden: weightsIH[g, :] dot input[b, :]
+    const float* inputRow = input + b * inputSize;
+    const float* weightsIHRow = weightsIH + g * inputSize;
+    for (int k = 0; k < inputSize; k++) {
+        sum += weightsIHRow[k] * inputRow[k];
     }
 
-    // Tiled hidden-to-hidden: weightsHH[g, :] dot hiddenPrev[b, :]
-    for (int tileStart = 0; tileStart < hiddenSize; tileStart += LSTM_TILE_K) {
-        // Cooperatively load tiles into shared memory
-        int loadIdx = tileStart + (tid % LSTM_TILE_K);
-        if (tid < LSTM_TILE_K && loadIdx < hiddenSize) {
-            tileHidden[tid] = hiddenPrev[b * hiddenSize + loadIdx];
-            tileWeightHH[tid] = weightsHH[g * hiddenSize + loadIdx];
-        }
-        __syncthreads();
-
-        // Compute partial dot product for this tile
-        int tileEnd = min(LSTM_TILE_K, hiddenSize - tileStart);
-        for (int k = 0; k < tileEnd; k++) {
-            sum += tileWeightHH[k] * tileHidden[k];
-        }
-        __syncthreads();
+    // Hidden-to-hidden: weightsHH[g, :] dot hiddenPrev[b, :]
+    const float* hiddenRow = hiddenPrev + b * hiddenSize;
+    const float* weightsHHRow = weightsHH + g * hiddenSize;
+    for (int k = 0; k < hiddenSize; k++) {
+        sum += weightsHHRow[k] * hiddenRow[k];
     }
 
     gates[idx] = sum;
