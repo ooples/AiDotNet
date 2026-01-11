@@ -683,17 +683,17 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             // Fall back to CPU for now
             var predictedCpu = predicted.ToTensor();
             var actualCpu = actual.ToTensor();
-            
+
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
-            
+
             var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
-            
+
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
             var gradientGpu = new GpuTensor<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
-            
+
             return (loss, gradientGpu);
         }
     }

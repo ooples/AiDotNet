@@ -101,30 +101,30 @@ public class FocalLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         var result = new T[predicted.Length];
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
             T y = actual[i];
-            
+
             T pt = NumOps.Equals(y, NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);
             T alphaT = NumOps.Equals(y, NumOps.One) ? _alpha : NumOps.Subtract(NumOps.One, _alpha);
-            
+
             T focusingTerm = NumOps.Power(NumOps.Subtract(NumOps.One, pt), _gamma);
             T logPt = NumericalStabilityHelper.SafeLog(pt, NumericalStabilityHelper.SmallEpsilon);
-            
+
             // Derivative of focal loss with respect to p
             T gammaFactor = NumOps.Multiply(_gamma, NumOps.Power(NumOps.Subtract(NumOps.One, pt), NumOps.Subtract(_gamma, NumOps.One)));
             T term1 = NumOps.Multiply(gammaFactor, logPt);
             T term2 = NumOps.Divide(focusingTerm, pt);
-            
+
             T grad = NumOps.Multiply(alphaT, NumOps.Subtract(term1, term2));
-            
+
             result[i] = NumOps.Equals(y, NumOps.One) ? grad : NumOps.Negate(grad);
         }
-        
+
         return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
 

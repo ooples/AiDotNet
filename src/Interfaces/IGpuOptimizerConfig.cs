@@ -56,7 +56,7 @@ public interface IGpuOptimizerConfig
     /// how to apply its own update, so adding new optimizers doesn't require modifying layer code.
     /// </para>
     /// </remarks>
-    void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient, 
+    void ApplyUpdate(IDirectGpuBackend backend, IGpuBuffer param, IGpuBuffer gradient,
         GpuOptimizerState state, int size);
 }
 

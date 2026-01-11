@@ -797,7 +797,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         };
 
         T lossValue = NumOps.Zero;
-        
+
         var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
@@ -861,7 +861,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         };
 
         T lossValue = NumOps.Zero;
-        
+
         var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
