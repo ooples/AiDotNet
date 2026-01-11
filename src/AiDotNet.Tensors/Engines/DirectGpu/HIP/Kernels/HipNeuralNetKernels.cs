@@ -2095,6 +2095,81 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
 
     gradInput[idx] = sum;
 }
+
+// ===========================================================================
+// BATCHED GEMM KERNEL
+// ===========================================================================
+
+// Batched General Matrix Multiply: C[b] = alpha * A[b] * B[b] + beta * C[b]
+// Uses tiled approach with shared memory for better memory access patterns
+#define BATCHED_TILE_SIZE 16
+
+extern ""C"" __global__ void batched_gemm(
+    const float* A, const float* B, float* C,
+    int M, int N, int K, int batchCount,
+    float alpha, float beta)
+{
+    // Each block handles one tile of output
+    int batch = blockIdx.z;
+    int row = blockIdx.y * BATCHED_TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * BATCHED_TILE_SIZE + threadIdx.x;
+
+    if (batch >= batchCount) return;
+
+    // Calculate batch offsets
+    int aStride = M * K;
+    int bStride = K * N;
+    int cStride = M * N;
+
+    const float* Abatch = A + batch * aStride;
+    const float* Bbatch = B + batch * bStride;
+    float* Cbatch = C + batch * cStride;
+
+    __shared__ float As[BATCHED_TILE_SIZE][BATCHED_TILE_SIZE];
+    __shared__ float Bs[BATCHED_TILE_SIZE][BATCHED_TILE_SIZE];
+
+    float sum = 0.0f;
+
+    // Loop over tiles of K dimension
+    int numTiles = (K + BATCHED_TILE_SIZE - 1) / BATCHED_TILE_SIZE;
+    for (int t = 0; t < numTiles; t++)
+    {
+        // Load tile of A into shared memory
+        int aRow = row;
+        int aCol = t * BATCHED_TILE_SIZE + threadIdx.x;
+        if (aRow < M && aCol < K)
+            As[threadIdx.y][threadIdx.x] = Abatch[aRow * K + aCol];
+        else
+            As[threadIdx.y][threadIdx.x] = 0.0f;
+
+        // Load tile of B into shared memory
+        int bRow = t * BATCHED_TILE_SIZE + threadIdx.y;
+        int bCol = col;
+        if (bRow < K && bCol < N)
+            Bs[threadIdx.y][threadIdx.x] = Bbatch[bRow * N + bCol];
+        else
+            Bs[threadIdx.y][threadIdx.x] = 0.0f;
+
+        __syncthreads();
+
+        // Compute partial dot product for this tile
+        for (int k = 0; k < BATCHED_TILE_SIZE; k++)
+        {
+            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        }
+
+        __syncthreads();
+    }
+
+    // Write result
+    if (row < M && col < N)
+    {
+        int outIdx = row * N + col;
+        Cbatch[outIdx] = alpha * sum + beta * Cbatch[outIdx];
+    }
+}
+
+#undef BATCHED_TILE_SIZE
 ";
     }
 
@@ -2142,7 +2217,9 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
             // Conv3D backward
             "conv3d_backward_input", "conv3d_backward_weights",
             // Global pooling backward
-            "global_avgpool_backward", "global_maxpool_backward", "adaptive_avgpool_backward"
+            "global_avgpool_backward", "global_maxpool_backward", "adaptive_avgpool_backward",
+            // Batched GEMM
+            "batched_gemm"
         };
     }
 }

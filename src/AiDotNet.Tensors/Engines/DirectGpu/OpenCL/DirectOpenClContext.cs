@@ -90,6 +90,41 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public static bool IsAvailable => OpenClNativeBindings.IsAvailable;
 
+        /// <summary>
+        /// Gets the total number of OpenCL GPU devices across all platforms.
+        /// </summary>
+        public static int GetDeviceCount()
+        {
+            if (!IsAvailable) return 0;
+
+            try
+            {
+                int err = OpenClNativeBindings.GetPlatformIDs(0, null, out uint numPlatforms);
+                if (err != OpenClNativeBindings.CL_SUCCESS || numPlatforms == 0)
+                    return 0;
+
+                var platforms = new IntPtr[numPlatforms];
+                err = OpenClNativeBindings.GetPlatformIDs(numPlatforms, platforms, out _);
+                if (err != OpenClNativeBindings.CL_SUCCESS)
+                    return 0;
+
+                int totalDevices = 0;
+                foreach (var platform in platforms)
+                {
+                    err = OpenClNativeBindings.GetDeviceIDs(platform, OpenClNativeBindings.CL_DEVICE_TYPE_GPU, 0, null, out uint numDevices);
+                    if (err == OpenClNativeBindings.CL_SUCCESS)
+                    {
+                        totalDevices += (int)numDevices;
+                    }
+                }
+                return totalDevices;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
         public DirectOpenClContext() : this(0)
         {
         }

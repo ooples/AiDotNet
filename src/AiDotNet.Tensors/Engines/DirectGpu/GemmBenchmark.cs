@@ -95,6 +95,18 @@ public sealed class GemmBenchmark
         double flops = 2.0 * M * N * K;  // 2 ops per multiply-add
         double gflops = flops / (avgMs * 1e6);
 
+        // Determine kernel name from backend - varies by vendor/architecture
+        string kernelName = _engine.BackendName switch
+        {
+            string b when b.Contains("MFMA") => "mfma_gemm_tiled",        // AMD MI-series with matrix cores
+            string b when b.Contains("RDNA3") => "gemm_wmma_gfx11",       // AMD RDNA3 with WMMA
+            string b when b.Contains("RDNA") => "gemm_double_buffered",    // AMD RDNA/RDNA2
+            string b when b.Contains("HIP") => "gemm_tiled",               // Generic HIP
+            string b when b.Contains("CUDA") => "gemm_tensor_core",        // NVIDIA with tensor cores
+            string b when b.Contains("OpenCL") => "gemm_double_buffered",  // OpenCL fallback
+            _ => "gemm_default"
+        };
+
         return new GemmBenchmarkResult
         {
             M = M,
@@ -102,7 +114,7 @@ public sealed class GemmBenchmark
             K = K,
             TimeMs = avgMs,
             GFlops = gflops,
-            KernelName = "gemm_double_buffered",  // TODO: Get actual kernel name used
+            KernelName = kernelName,
             MetTarget = gflops >= _targetGFlops
         };
     }

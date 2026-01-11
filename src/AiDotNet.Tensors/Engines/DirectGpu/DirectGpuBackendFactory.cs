@@ -112,27 +112,30 @@ public static class DirectGpuBackendFactory
     {
         var gpus = new System.Collections.Generic.List<GpuInfo>();
 
-        // Check OpenCL devices
+        // Check OpenCL devices - enumerate all GPU devices across all platforms
         if (DirectOpenClContext.IsAvailable)
         {
-            try
+            int deviceCount = DirectOpenClContext.GetDeviceCount();
+            for (int deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++)
             {
-                // TODO: Enumerate all OpenCL devices
-                using var context = new DirectOpenClContext();
-                gpus.Add(new GpuInfo
+                try
                 {
-                    DeviceIndex = 0,
-                    DeviceName = context.DeviceName,
-                    Vendor = ParseVendor(context.DeviceVendor),
-                    VendorName = context.DeviceVendor,
-                    AvailableBackends = GetAvailableBackends(ParseVendor(context.DeviceVendor)),
-                    ComputeUnits = (int)context.MaxComputeUnits,
-                    GlobalMemoryBytes = (long)context.GlobalMemSize
-                });
-            }
-            catch
-            {
-                // Ignore detection errors
+                    using var context = new DirectOpenClContext(deviceIndex);
+                    gpus.Add(new GpuInfo
+                    {
+                        DeviceIndex = deviceIndex,
+                        DeviceName = context.DeviceName,
+                        Vendor = ParseVendor(context.DeviceVendor),
+                        VendorName = context.DeviceVendor,
+                        AvailableBackends = GetAvailableBackends(ParseVendor(context.DeviceVendor)),
+                        ComputeUnits = (int)context.MaxComputeUnits,
+                        GlobalMemoryBytes = (long)context.GlobalMemSize
+                    });
+                }
+                catch
+                {
+                    // Ignore detection errors for individual devices
+                }
             }
         }
 
