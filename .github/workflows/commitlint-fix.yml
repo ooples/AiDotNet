@@ -189,18 +189,18 @@ jobs:
             # This preserves all code changes while fixing the commit message
             git reset --soft "origin/$BASE_BRANCH"
 
-            cat > /tmp/commit_msg.txt << 'COMMIT_MSG'
-chore: fix commit messages for conventional compliance
-
-This commit consolidates changes from a PR where commit messages didn't
-follow conventional commits format. The code changes are preserved exactly
-as originally authored.
-
-Note: Original commit history was consolidated due to message format issues.
-Review the PR for the full change context.
-
-Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
-COMMIT_MSG
+            printf '%s\n' \
+              "chore: fix commit messages for conventional compliance" \
+              "" \
+              "This commit consolidates changes from a PR where commit messages" \
+              "did not follow conventional commits format. The code changes are" \
+              "preserved exactly as originally authored." \
+              "" \
+              "Note: Original commit history was consolidated due to message" \
+              "format issues. Review the PR for the full change context." \
+              "" \
+              "Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
+              > /tmp/commit_msg.txt
             git commit -F /tmp/commit_msg.txt
           fi
 
