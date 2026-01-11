@@ -38,6 +38,32 @@ jobs:
       changelog: ${{ steps.version.outputs.changelog }}
       should_release: ${{ steps.version.outputs.should_release }}
     steps:
+      - name: Free up disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          echo "=== Removing unnecessary tools to free disk space ==="
+          # Remove Android SDK (~12GB)
+          sudo rm -rf /usr/local/lib/android || true
+          # Remove .NET pre-installed versions we don't need (~2GB)
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/7.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/7.* || true
+          # Remove CodeQL (~1GB)
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          # Remove Swift (~1.5GB)
+          sudo rm -rf /usr/share/swift || true
+          # Remove Haskell (~5GB)
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+          # Clean apt cache
+          sudo apt-get clean || true
+          # Clean docker images (~3GB)
+          docker system prune -af || true
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
@@ -258,6 +284,25 @@ jobs:
     timeout-minutes: 20
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
+      - name: Free up disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          echo "=== Removing unnecessary tools to free disk space ==="
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/7.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/7.* || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
