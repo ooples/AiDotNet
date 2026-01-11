@@ -189,7 +189,8 @@ jobs:
             # This preserves all code changes while fixing the commit message
             git reset --soft "origin/$BASE_BRANCH"
 
-            git commit -m "chore: fix commit messages for conventional compliance
+            git commit -m "$(cat <<'EOF'
+chore: fix commit messages for conventional compliance
 
 This commit consolidates changes from a PR where commit messages didn't
 follow conventional commits format. The code changes are preserved exactly
@@ -198,7 +199,9 @@ as originally authored.
 Note: Original commit history was consolidated due to message format issues.
 Review the PR for the full change context.
 
-Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+EOF
+)"
           fi
 
       - name: Force push fixes
