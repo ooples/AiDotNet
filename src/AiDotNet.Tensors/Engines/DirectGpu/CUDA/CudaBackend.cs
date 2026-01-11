@@ -34,6 +34,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _deformableConvModule;
     private IntPtr _capsuleModule;
     private IntPtr _specializedModule;
+    private IntPtr _fp16Module;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -294,6 +295,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile Specialized kernels (hyperbolic geometry, octonion algebra, quantum computing)
         _specializedModule = CompileKernelModule(device, CudaSpecializedKernels.GetSource(), "specialized_kernels", CudaSpecializedKernels.GetKernelNames());
+
+        // Compile FP16 conversion kernels (half-precision float conversion)
+        _fp16Module = CompileKernelModule(device, CudaFp16Kernels.GetSource(), "fp16_kernels", CudaFp16Kernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -1296,6 +1300,66 @@ public sealed class CudaBackend : IAsyncGpuBackend
         return sum;
     }
 
+    /// <summary>
+    /// Performs a full GPU-side sum reduction, iteratively reducing until only one element remains,
+    /// then downloads just that single scalar value to avoid multiple D2H transfers for partial sums.
+    /// </summary>
+    private float SumGpuReduction(IGpuBuffer A, int size)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (size <= 0)
+            return 0.0f;
+
+        using var _ = PushContext();
+        int blockSize = DefaultBlockSize;
+        int currentSize = size;
+
+        // We need at least one iteration
+        IGpuBuffer currentBuffer = A;
+        IGpuBuffer? tempBuffer1 = null;
+        IGpuBuffer? tempBuffer2 = null;
+
+        try
+        {
+            while (currentSize > 1)
+            {
+                int gridSize = (currentSize + blockSize - 1) / blockSize;
+
+                // Allocate output buffer for this reduction pass
+                var outputBuffer = (tempBuffer1 is null || tempBuffer1.Size < gridSize)
+                    ? AllocateBuffer(gridSize)
+                    : tempBuffer1;
+
+                LaunchReductionKernel("reduce_sum", currentBuffer, outputBuffer, currentSize, blockSize);
+
+                // Swap buffers for next iteration
+                if (currentBuffer != A)
+                {
+                    // Return previous temp buffer to pool (swap)
+                    tempBuffer2?.Dispose();
+                    tempBuffer2 = tempBuffer1;
+                }
+                tempBuffer1 = outputBuffer;
+                currentBuffer = outputBuffer;
+                currentSize = gridSize;
+            }
+
+            Synchronize();
+
+            // Download just the single scalar result
+            var result = new float[1];
+            DownloadBuffer(currentBuffer, result);
+            return result[0];
+        }
+        finally
+        {
+            tempBuffer1?.Dispose();
+            tempBuffer2?.Dispose();
+        }
+    }
+
     public float Max(IGpuBuffer A, int size)
     {
         if (!IsAvailable)
@@ -2151,7 +2215,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr inputPtr = input.Handle;
         IntPtr kernelPtr = kernel.Handle;
         IntPtr outputPtr = output.Handle;
-        void** args = stackalloc void*[17];
+        void** args = stackalloc void*[18];
         args[0] = &inputPtr;
         args[1] = &kernelPtr;
         args[2] = &outputPtr;
@@ -2168,7 +2232,110 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[13] = &strideW;
         args[14] = &padH;
         args[15] = &padW;
-        args[16] = &totalOutput;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
+        LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
+    }
+
+    public unsafe void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // Buffer size validation
+        long requiredGradOutput = (long)batch * outChannels * outHeight * outWidth;
+        long requiredKernel = (long)inChannels * outChannels * kernelH * kernelW;
+        long requiredGradInput = (long)batch * inChannels * inHeight * inWidth;
+
+        if (gradOutput.Size < requiredGradOutput)
+            throw new ArgumentException($"gradOutput buffer too small: expected at least {requiredGradOutput} elements, got {gradOutput.Size}.", nameof(gradOutput));
+        if (kernel.Size < requiredKernel)
+            throw new ArgumentException($"kernel buffer too small: expected at least {requiredKernel} elements, got {kernel.Size}.", nameof(kernel));
+        if (gradInput.Size < requiredGradInput)
+            throw new ArgumentException($"gradInput buffer too small: expected at least {requiredGradInput} elements, got {gradInput.Size}.", nameof(gradInput));
+
+        if (!_kernelCache.TryGetValue("conv_transpose2d_backward_input", out var cudaKernel))
+            throw new InvalidOperationException("CUDA kernel not found: conv_transpose2d_backward_input");
+
+        using var _ = PushContext();
+        int totalInput = batch * inChannels * inHeight * inWidth;
+        uint gridX = (uint)((totalInput + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr kernelPtr = kernel.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        void** args = stackalloc void*[19];
+        args[0] = &gradOutputPtr;
+        args[1] = &kernelPtr;
+        args[2] = &gradInputPtr;
+        args[3] = &batch;
+        args[4] = &inChannels;
+        args[5] = &inHeight;
+        args[6] = &inWidth;
+        args[7] = &outChannels;
+        args[8] = &outHeight;
+        args[9] = &outWidth;
+        args[10] = &kernelH;
+        args[11] = &kernelW;
+        args[12] = &strideH;
+        args[13] = &strideW;
+        args[14] = &padH;
+        args[15] = &padW;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
+        args[18] = &totalInput;
+        LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
+    }
+
+    public unsafe void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        // Buffer size validation
+        long requiredInput = (long)batch * inChannels * inHeight * inWidth;
+        long requiredGradOutput = (long)batch * outChannels * outHeight * outWidth;
+        long requiredGradKernel = (long)inChannels * outChannels * kernelH * kernelW;
+
+        if (input.Size < requiredInput)
+            throw new ArgumentException($"input buffer too small: expected at least {requiredInput} elements, got {input.Size}.", nameof(input));
+        if (gradOutput.Size < requiredGradOutput)
+            throw new ArgumentException($"gradOutput buffer too small: expected at least {requiredGradOutput} elements, got {gradOutput.Size}.", nameof(gradOutput));
+        if (gradKernel.Size < requiredGradKernel)
+            throw new ArgumentException($"gradKernel buffer too small: expected at least {requiredGradKernel} elements, got {gradKernel.Size}.", nameof(gradKernel));
+
+        if (!_kernelCache.TryGetValue("conv_transpose2d_backward_kernel", out var cudaKernel))
+            throw new InvalidOperationException("CUDA kernel not found: conv_transpose2d_backward_kernel");
+
+        using var _ = PushContext();
+        int totalKernel = inChannels * outChannels * kernelH * kernelW;
+        uint gridX = (uint)((totalKernel + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr gradKernelPtr = gradKernel.Handle;
+        void** args = stackalloc void*[19];
+        args[0] = &inputPtr;
+        args[1] = &gradOutputPtr;
+        args[2] = &gradKernelPtr;
+        args[3] = &batch;
+        args[4] = &inChannels;
+        args[5] = &inHeight;
+        args[6] = &inWidth;
+        args[7] = &outChannels;
+        args[8] = &outHeight;
+        args[9] = &outWidth;
+        args[10] = &kernelH;
+        args[11] = &kernelW;
+        args[12] = &strideH;
+        args[13] = &strideW;
+        args[14] = &padH;
+        args[15] = &padW;
+        args[16] = &outputPadH;
+        args[17] = &outputPadW;
+        args[18] = &totalKernel;
         LaunchKernel(cudaKernel, gridX, DefaultBlockSize, args);
     }
 
@@ -2737,6 +2904,16 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
     public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
     {
+        // Overload without indices - backward pass will not be available
+        GlobalMaxPool2D(input, output, (IGpuBuffer?)null, batch, channels, height, width);
+    }
+
+    // Interface implementation for non-nullable indices (required for backward pass)
+    void IDirectGpuBackend.GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
+        => GlobalMaxPool2D(input, output, (IGpuBuffer?)indices, batch, channels, height, width);
+
+    public unsafe void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices, int batch, int channels, int height, int width)
+    {
         if (!_kernelCache.TryGetValue("global_maxpool2d", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: global_maxpool2d");
 
@@ -2744,13 +2921,63 @@ public sealed class CudaBackend : IAsyncGpuBackend
         uint grid = (uint)((batch * channels + DefaultBlockSize - 1) / DefaultBlockSize);
         IntPtr inputPtr = input.Handle;
         IntPtr outputPtr = output.Handle;
-        void** args = stackalloc void*[6];
+        // Pass IntPtr.Zero if indices is null; kernel checks saveIndices flag
+        IntPtr indicesPtr = indices?.Handle ?? IntPtr.Zero;
+        int saveIndices = indices is not null ? 1 : 0;
+        void** args = stackalloc void*[8];
         args[0] = &inputPtr;
         args[1] = &outputPtr;
+        args[2] = &indicesPtr;
+        args[3] = &batch;
+        args[4] = &channels;
+        args[5] = &height;
+        args[6] = &width;
+        args[7] = &saveIndices;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_avgpool2d_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: global_avgpool2d_backward");
+
+        using var _ = PushContext();
+        int totalElements = batch * channels * height * width;
+        uint grid = (uint)((totalElements + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &gradInPtr;
         args[2] = &batch;
         args[3] = &channels;
         args[4] = &height;
         args[5] = &width;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+    {
+        if (!_kernelCache.TryGetValue("global_maxpool2d_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: global_maxpool2d_backward");
+
+        using var _ = PushContext();
+        // First zero out the gradient input
+        Fill(gradInput, 0f, batch * channels * height * width);
+
+        int totalOutputs = batch * channels;
+        uint grid = (uint)((totalOutputs + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr indicesPtr = indices.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutPtr;
+        args[1] = &indicesPtr;
+        args[2] = &gradInPtr;
+        args[3] = &batch;
+        args[4] = &channels;
+        args[5] = &height;
+        args[6] = &width;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -3212,6 +3439,147 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[7] = &channels;
         args[8] = &spatialSize;
         args[9] = &epsilon;
+        LaunchKernel(kernel, gridX, DefaultBlockSize, args);
+    }
+
+    public unsafe void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+    {
+        // Parameter validation
+        if (batch <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batch), batch, "batch must be positive.");
+        if (channels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(channels), channels, "channels must be positive.");
+        if (spatialSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spatialSize), spatialSize, "spatialSize must be positive (would cause divide-by-zero).");
+
+        // Buffer size validation
+        long requiredSpatial = (long)batch * channels * spatialSize;
+        long requiredStats = (long)batch * channels;
+
+        if (gradOutput.Size < requiredSpatial)
+            throw new ArgumentException($"gradOutput buffer too small: expected at least {requiredSpatial} elements, got {gradOutput.Size}.", nameof(gradOutput));
+        if (input.Size < requiredSpatial)
+            throw new ArgumentException($"input buffer too small: expected at least {requiredSpatial} elements, got {input.Size}.", nameof(input));
+        if (gamma.Size < channels)
+            throw new ArgumentException($"gamma buffer too small: expected at least {channels} elements, got {gamma.Size}.", nameof(gamma));
+        if (saveMean.Size < requiredStats)
+            throw new ArgumentException($"saveMean buffer too small: expected at least {requiredStats} elements, got {saveMean.Size}.", nameof(saveMean));
+        if (saveInvVar.Size < requiredStats)
+            throw new ArgumentException($"saveInvVar buffer too small: expected at least {requiredStats} elements, got {saveInvVar.Size}.", nameof(saveInvVar));
+        if (gradInput.Size < requiredSpatial)
+            throw new ArgumentException($"gradInput buffer too small: expected at least {requiredSpatial} elements, got {gradInput.Size}.", nameof(gradInput));
+        if (gradGamma.Size < channels)
+            throw new ArgumentException($"gradGamma buffer too small: expected at least {channels} elements, got {gradGamma.Size}.", nameof(gradGamma));
+        if (gradBeta.Size < channels)
+            throw new ArgumentException($"gradBeta buffer too small: expected at least {channels} elements, got {gradBeta.Size}.", nameof(gradBeta));
+
+        // Use instancenorm_backward kernel if available, otherwise fall back to layernorm pattern
+        if (!_kernelCache.TryGetValue("instancenorm_backward", out var kernel))
+        {
+            // Fallback: implement using basic CUDA operations
+            // This computes: dx = invStd * (1/N) * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+            // where delta = gradOutput * gamma
+
+            // For now, use CPU fallback via buffer download/upload
+            var gradOutData = DownloadBuffer(gradOutput);
+            var inputData = DownloadBuffer(input);
+            var gammaData = DownloadBuffer(gamma);
+            var meanData = DownloadBuffer(saveMean);
+            var invVarData = DownloadBuffer(saveInvVar);
+            var gradInputData = new float[gradOutData.Length];
+            var gradGammaData = new float[channels];
+            var gradBetaData = new float[channels];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int offset = (b * channels + c) * spatialSize;
+                    float meanVal = meanData[b * channels + c];
+                    float invStd = invVarData[b * channels + c];
+                    float g = gammaData[c];
+
+                    // First pass: compute sums for gradient correction
+                    float sumDelta = 0.0f;
+                    float sumDeltaXNorm = 0.0f;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        gradGammaData[c] += go * xNorm;
+                        gradBetaData[c] += go;
+
+                        sumDelta += delta;
+                        sumDeltaXNorm += delta * xNorm;
+                    }
+
+                    // Second pass: compute gradInput with proper correction terms
+                    float invN = 1.0f / spatialSize;
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        float go = gradOutData[offset + s];
+                        float x = inputData[offset + s];
+                        float xNorm = (x - meanVal) * invStd;
+                        float delta = go * g;
+
+                        // dx = invStd * invN * (N * delta - sum(delta) - xNorm * sum(delta * xNorm))
+                        gradInputData[offset + s] = invStd * invN * (spatialSize * delta - sumDelta - xNorm * sumDeltaXNorm);
+                    }
+                }
+            }
+
+            // Upload results to GPU buffers
+            using var ctx = PushContext();
+            fixed (float* gradInputDataPtr = gradInputData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)gradInputDataPtr, (ulong)(gradInputData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradInput)");
+            }
+            fixed (float* gradGammaDataPtr = gradGammaData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradGamma.Handle, (IntPtr)gradGammaDataPtr, (ulong)(gradGammaData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradGamma)");
+            }
+            fixed (float* gradBetaDataPtr = gradBetaData)
+            {
+                CuBlasNative.CheckCudaResult(
+                    CuBlasNative.cuMemcpyHtoD(gradBeta.Handle, (IntPtr)gradBetaDataPtr, (ulong)(gradBetaData.Length * sizeof(float))),
+                    "cuMemcpyHtoD (InstanceNormBackward gradBeta)");
+            }
+            return;
+        }
+
+        using var _ = PushContext();
+        uint gridX = (uint)(batch * channels);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gammaPtr = gamma.Handle;
+        IntPtr saveMeanPtr = saveMean.Handle;
+        IntPtr saveInvVarPtr = saveInvVar.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradGammaPtr = gradGamma.Handle;
+        IntPtr gradBetaPtr = gradBeta.Handle;
+        void** args = stackalloc void*[12];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gammaPtr;
+        args[3] = &saveMeanPtr;
+        args[4] = &saveInvVarPtr;
+        args[5] = &gradInputPtr;
+        args[6] = &gradGammaPtr;
+        args[7] = &gradBetaPtr;
+        args[8] = &batch;
+        args[9] = &channels;
+        args[10] = &spatialSize;
+        args[11] = &epsilon;
         LaunchKernel(kernel, gridX, DefaultBlockSize, args);
     }
 
@@ -3941,6 +4309,154 @@ public sealed class CudaBackend : IAsyncGpuBackend
         }
     }
 
+    /// <inheritdoc/>
+    public unsafe void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        // Use checked arithmetic to detect overflow in dimension calculations
+        long inputSizeLong;
+        try
+        {
+            checked
+            {
+                inputSizeLong = (long)batchChannels * height * width;
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new OverflowException($"NearestNeighborUpsampleBackward: Input dimensions overflow (batchChannels={batchChannels}, height={height}, width={width}).");
+        }
+
+        // Validate that computed count fits into int (required for kernel parameters)
+        if (inputSizeLong > int.MaxValue)
+        {
+            throw new InvalidOperationException($"NearestNeighborUpsampleBackward: Input size {inputSizeLong} exceeds int.MaxValue.");
+        }
+        int inputSize = (int)inputSizeLong;
+
+        if (!_kernelCache.TryGetValue("nearest_neighbor_upsample_backward", out var kernel))
+        {
+            // Fallback: CPU implementation
+            NearestNeighborUpsampleBackwardFallback(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+            return;
+        }
+
+        using var _ = PushContext();
+
+        // Kernel iterates over input elements, accumulating from scaleFactor x scaleFactor output regions
+        // No zeroing needed - kernel writes directly (not +=)
+        // Use long arithmetic for grid calculation, then validate for uint range
+        long gridLong = (inputSizeLong + DefaultBlockSize - 1) / DefaultBlockSize;
+        if (gridLong > uint.MaxValue)
+        {
+            throw new InvalidOperationException($"NearestNeighborUpsampleBackward: Grid size {gridLong} exceeds uint.MaxValue.");
+        }
+        uint grid = (uint)gridLong;
+
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutPtr;
+        args[1] = &gradInPtr;
+        args[2] = &batchChannels;
+        args[3] = &height;
+        args[4] = &width;
+        args[5] = &scaleFactor;
+        args[6] = &inputSize;
+
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchKernel(
+                kernel,
+                grid, 1, 1,
+                (uint)DefaultBlockSize, 1, 1,
+                0,
+                _stream,
+                (IntPtr)args,
+                IntPtr.Zero),
+            "cuLaunchKernel (nearest_neighbor_upsample_backward)");
+    }
+
+    /// <summary>
+    /// CPU fallback for nearest-neighbor upsampling backward when kernel is not available.
+    /// </summary>
+    private unsafe void NearestNeighborUpsampleBackwardFallback(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+    {
+        // Use checked arithmetic for all dimension calculations
+        int outHeight, outWidth;
+        long outputSizeLong, inputSizeLong;
+        try
+        {
+            checked
+            {
+                outHeight = height * scaleFactor;
+                outWidth = width * scaleFactor;
+                outputSizeLong = (long)batchChannels * outHeight * outWidth;
+                inputSizeLong = (long)batchChannels * height * width;
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new OverflowException($"NearestNeighborUpsampleBackwardFallback: Dimension overflow (batchChannels={batchChannels}, height={height}, width={width}, scaleFactor={scaleFactor}).");
+        }
+
+        // Validate sizes fit in int (required for array indexing)
+        if (outputSizeLong > int.MaxValue)
+        {
+            throw new InvalidOperationException($"NearestNeighborUpsampleBackwardFallback: Output size {outputSizeLong} exceeds int.MaxValue.");
+        }
+        if (inputSizeLong > int.MaxValue)
+        {
+            throw new InvalidOperationException($"NearestNeighborUpsampleBackwardFallback: Input size {inputSizeLong} exceeds int.MaxValue.");
+        }
+        int outputSize = (int)outputSizeLong;
+        int inputSize = (int)inputSizeLong;
+
+        // Download gradOutput
+        var gradOutData = new float[outputSize];
+        DownloadBuffer(gradOutput, gradOutData);
+
+        // Accumulate gradients on CPU
+        var gradInData = new float[inputSize];
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int ih = oh / scaleFactor;
+                    int iw = ow / scaleFactor;
+                    int inputIdx = bc * height * width + ih * width + iw;
+                    int outputIdx = bc * outHeight * outWidth + oh * outWidth + ow;
+                    gradInData[inputIdx] += gradOutData[outputIdx];
+                }
+            }
+        }
+
+        // Upload gradInput - compute byte size from checked long element count
+        using var _ = PushContext();
+        ulong byteSize;
+        try
+        {
+            checked
+            {
+                byteSize = (ulong)(inputSizeLong * sizeof(float));
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new OverflowException($"NearestNeighborUpsampleBackwardFallback: Byte size overflow for {inputSizeLong} elements.");
+        }
+        fixed (float* src = gradInData)
+        {
+            CuBlasNative.CheckCudaResult(
+                CuBlasNative.cuMemcpyHtoD(gradInput.Handle, (IntPtr)src, byteSize),
+                "cuMemcpyHtoD (upsample backward fallback)");
+        }
+    }
+
     #endregion
 
 
@@ -4210,6 +4726,130 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    // SiLU backward uses SwishBackward since they're mathematically equivalent
+    public void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        SwishBackward(gradOutput, input, gradInput, size);
+    }
+
+    public unsafe void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("mish_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: mish_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("softplus_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: softplus_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardswish_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardswish_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size)
+    {
+        if (!_kernelCache.TryGetValue("selu_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: selu_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &alpha;
+        args[4] = &scale;
+        args[5] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardsigmoid_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardsigmoid_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size)
+    {
+        if (!_kernelCache.TryGetValue("hardtanh_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hardtanh_backward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInPtr = gradInput.Handle;
+        int n = size;
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradInPtr;
+        args[3] = &minVal;
+        args[4] = &maxVal;
+        args[5] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     #endregion
 
 
@@ -4218,6 +4858,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
     public unsafe float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses)
     {
+        // Validate parameters to prevent division-by-zero and OOB access
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "batchSize must be positive to avoid division-by-zero.");
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "numClasses must be positive.");
+
         if (!_kernelCache.TryGetValue("cross_entropy_loss", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: cross_entropy_loss");
 
@@ -4234,11 +4880,20 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[3] = &batchSize;
         args[4] = &numClasses;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
-        return Sum(temp, batchSize) / batchSize;
+
+        // Use GPU-only reduction to avoid downloading all partials to host
+        // This iteratively reduces on GPU until a single scalar remains
+        return SumGpuReduction(temp, batchSize) / batchSize;
     }
 
     public unsafe void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses)
     {
+        // Validate parameters to prevent OOB access
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "batchSize must be positive.");
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "numClasses must be positive.");
+
         if (!_kernelCache.TryGetValue("cross_entropy_backward", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: cross_entropy_backward");
 
@@ -4370,6 +5025,719 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[2] = &gradPtr;
         args[3] = &size;
         args[4] = &beta;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float TripletLoss(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative, int batchSize, int embeddingDim, float margin)
+    {
+        if (anchor is null) throw new ArgumentNullException(nameof(anchor));
+        if (positive is null) throw new ArgumentNullException(nameof(positive));
+        if (negative is null) throw new ArgumentNullException(nameof(negative));
+        if (batchSize <= 0) throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
+
+        if (!_kernelCache.TryGetValue("triplet_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: triplet_loss");
+
+        using var _ = PushContext();
+        using var lossBuffer = AllocateBuffer(batchSize);
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr anchorPtr = anchor.Handle;
+        IntPtr positivePtr = positive.Handle;
+        IntPtr negativePtr = negative.Handle;
+        IntPtr lossPtr = lossBuffer.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &anchorPtr;
+        args[1] = &positivePtr;
+        args[2] = &negativePtr;
+        args[3] = &lossPtr;
+        args[4] = &batchSize;
+        args[5] = &embeddingDim;
+        args[6] = &margin;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(lossBuffer, batchSize) / batchSize;
+    }
+
+    public unsafe void TripletLossBackward(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative,
+        IGpuBuffer gradAnchor, IGpuBuffer gradPositive, IGpuBuffer gradNegative,
+        int batchSize, int embeddingDim, float margin)
+    {
+        if (anchor is null) throw new ArgumentNullException(nameof(anchor));
+        if (positive is null) throw new ArgumentNullException(nameof(positive));
+        if (negative is null) throw new ArgumentNullException(nameof(negative));
+        if (gradAnchor is null) throw new ArgumentNullException(nameof(gradAnchor));
+        if (gradPositive is null) throw new ArgumentNullException(nameof(gradPositive));
+        if (gradNegative is null) throw new ArgumentNullException(nameof(gradNegative));
+        if (batchSize <= 0) throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
+
+        if (!_kernelCache.TryGetValue("triplet_loss_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: triplet_loss_backward");
+
+        using var _ = PushContext();
+        // Launch with batchSize blocks, embeddingDim threads per block
+        uint blockSize = (uint)Math.Min(embeddingDim, 1024);
+        IntPtr anchorPtr = anchor.Handle;
+        IntPtr positivePtr = positive.Handle;
+        IntPtr negativePtr = negative.Handle;
+        IntPtr gradAnchorPtr = gradAnchor.Handle;
+        IntPtr gradPositivePtr = gradPositive.Handle;
+        IntPtr gradNegativePtr = gradNegative.Handle;
+        void** args = stackalloc void*[9];
+        args[0] = &anchorPtr;
+        args[1] = &positivePtr;
+        args[2] = &negativePtr;
+        args[3] = &gradAnchorPtr;
+        args[4] = &gradPositivePtr;
+        args[5] = &gradNegativePtr;
+        args[6] = &batchSize;
+        args[7] = &embeddingDim;
+        args[8] = &margin;
+        LaunchKernel(kernel, (uint)batchSize, blockSize, args);
+    }
+
+    public unsafe float HuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float delta)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("huber_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: huber_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &delta;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void HuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float delta)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("huber_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: huber_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &delta;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float FocalLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float alpha, float gamma)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("focal_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: focal_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[7];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &alpha;
+        args[4] = &gamma;
+        args[5] = &epsilon;
+        args[6] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void FocalBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float alpha, float gamma)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("focal_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: focal_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[7];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &alpha;
+        args[4] = &gamma;
+        args[5] = &epsilon;
+        args[6] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float MaeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("mae_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: mae_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void MaeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("mae_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: mae_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float LogCoshLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("log_cosh_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: log_cosh_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void LogCoshBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("log_cosh_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: log_cosh_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float QuantileLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float quantile)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("quantile_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: quantile_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &quantile;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void QuantileBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float quantile)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("quantile_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: quantile_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &quantile;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float HingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("hinge_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hinge_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void HingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("hinge_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hinge_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float SquaredHingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("squared_hinge_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: squared_hinge_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void SquaredHingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("squared_hinge_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: squared_hinge_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float PoissonLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("poisson_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: poisson_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void PoissonBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("poisson_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: poisson_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float ExponentialLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("exponential_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: exponential_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void ExponentialBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("exponential_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: exponential_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float ModifiedHuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("modified_huber_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: modified_huber_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void ModifiedHuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("modified_huber_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: modified_huber_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[4];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float CategoricalCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("categorical_cross_entropy_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: categorical_cross_entropy_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void CategoricalCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("categorical_cross_entropy_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: categorical_cross_entropy_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        float epsilon = 1e-7f;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float CharbonnierLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float epsilon)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("charbonnier_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: charbonnier_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void CharbonnierBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float epsilon)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("charbonnier_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: charbonnier_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &epsilon;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe float ElasticNetLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float l1Weight, float l2Weight)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (!_kernelCache.TryGetValue("elastic_net_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: elastic_net_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(size);
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr outPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[6];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &outPtr;
+        args[3] = &l1Weight;
+        args[4] = &l2Weight;
+        args[5] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, size) / size;
+    }
+
+    public unsafe void ElasticNetBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float l1Weight, float l2Weight)
+    {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (gradInput is null) throw new ArgumentNullException(nameof(gradInput));
+        if (!_kernelCache.TryGetValue("elastic_net_gradient", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: elastic_net_gradient");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr predPtr = predictions.Handle;
+        IntPtr targetPtr = targets.Handle;
+        IntPtr gradPtr = gradInput.Handle;
+        void** args = stackalloc void*[6];
+        args[0] = &predPtr;
+        args[1] = &targetPtr;
+        args[2] = &gradPtr;
+        args[3] = &l1Weight;
+        args[4] = &l2Weight;
+        args[5] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    // Contrastive Loss
+    public unsafe float ContrastiveLoss(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels, int batchSize, int embeddingDim, float margin)
+    {
+        if (output1 is null) throw new ArgumentNullException(nameof(output1));
+        if (output2 is null) throw new ArgumentNullException(nameof(output2));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        if (!_kernelCache.TryGetValue("contrastive_loss", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: contrastive_loss");
+
+        using var _ = PushContext();
+        using var outputBuffer = AllocateBuffer(batchSize);
+        uint grid = (uint)((batchSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr output1Ptr = output1.Handle;
+        IntPtr output2Ptr = output2.Handle;
+        IntPtr labelsPtr = labels.Handle;
+        IntPtr outputPtr = outputBuffer.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &output1Ptr;
+        args[1] = &output2Ptr;
+        args[2] = &labelsPtr;
+        args[3] = &outputPtr;
+        args[4] = &batchSize;
+        args[5] = &embeddingDim;
+        args[6] = &margin;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        return Sum(outputBuffer, batchSize) / batchSize;
+    }
+
+    public unsafe void ContrastiveBackward(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels,
+        IGpuBuffer gradOutput1, IGpuBuffer gradOutput2,
+        int batchSize, int embeddingDim, float margin)
+    {
+        if (output1 is null) throw new ArgumentNullException(nameof(output1));
+        if (output2 is null) throw new ArgumentNullException(nameof(output2));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        if (gradOutput1 is null) throw new ArgumentNullException(nameof(gradOutput1));
+        if (gradOutput2 is null) throw new ArgumentNullException(nameof(gradOutput2));
+        if (!_kernelCache.TryGetValue("contrastive_loss_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: contrastive_loss_backward");
+
+        using var _ = PushContext();
+        int totalSize = batchSize * embeddingDim;
+        uint grid = (uint)((totalSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr output1Ptr = output1.Handle;
+        IntPtr output2Ptr = output2.Handle;
+        IntPtr labelsPtr = labels.Handle;
+        IntPtr gradOutput1Ptr = gradOutput1.Handle;
+        IntPtr gradOutput2Ptr = gradOutput2.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &output1Ptr;
+        args[1] = &output2Ptr;
+        args[2] = &labelsPtr;
+        args[3] = &gradOutput1Ptr;
+        args[4] = &gradOutput2Ptr;
+        args[5] = &batchSize;
+        args[6] = &embeddingDim;
+        args[7] = &margin;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -4782,6 +6150,13 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
         float learningRate, float momentum, float weightDecay, int size)
     {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
         if (!_kernelCache.TryGetValue("sgd_momentum_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: sgd_momentum_update");
 
@@ -4804,6 +6179,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adam_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adam_update");
 
@@ -4831,6 +6218,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
     {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
         if (!_kernelCache.TryGetValue("adamw_update", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: adamw_update");
 
@@ -4852,6 +6251,459 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[8] = &weightDecay;
         args[9] = &step;
         args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+        float learningRate, float rho, float epsilon, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (squaredAvg is null) throw new ArgumentNullException(nameof(squaredAvg));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("rmsprop_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: rmsprop_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr sqAvgPtr = squaredAvg.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &sqAvgPtr;
+        args[3] = &learningRate;
+        args[4] = &rho;
+        args[5] = &epsilon;
+        args[6] = &weightDecay;
+        args[7] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+        float learningRate, float epsilon, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (accumulatedGrad is null) throw new ArgumentNullException(nameof(accumulatedGrad));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("adagrad_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adagrad_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr accumPtr = accumulatedGrad.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &accumPtr;
+        args[3] = &learningRate;
+        args[4] = &epsilon;
+        args[5] = &weightDecay;
+        args[6] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
+        if (!_kernelCache.TryGetValue("nag_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: nag_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr velPtr = velocity.Handle;
+        void** args = stackalloc void*[7];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &velPtr;
+        args[3] = &learningRate;
+        args[4] = &momentum;
+        args[5] = &weightDecay;
+        args[6] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (velocity is null) throw new ArgumentNullException(nameof(velocity));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (trustCoeff <= 0)
+            throw new ArgumentOutOfRangeException(nameof(trustCoeff), "Trust coefficient must be positive.");
+
+        if (!_kernelCache.TryGetValue("lars_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lars_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr velPtr = velocity.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &velPtr;
+        args[3] = &learningRate;
+        args[4] = &momentum;
+        args[5] = &weightDecay;
+        args[6] = &trustCoeff;
+        args[7] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("lamb_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lamb_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr vPtr = v.Handle;
+        float trustRatio = 1.0f; // Default: no layer-wise scaling (degenerates to AdamW)
+        void** args = stackalloc void*[12];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &vPtr;
+        args[4] = &learningRate;
+        args[5] = &beta1;
+        args[6] = &beta2;
+        args[7] = &epsilon;
+        args[8] = &weightDecay;
+        args[9] = &trustRatio;
+        args[10] = &step;
+        args[11] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
+        if (!_kernelCache.TryGetValue("sgd_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: sgd_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &learningRate;
+        args[3] = &weightDecay;
+        args[4] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (accumGrad is null) throw new ArgumentNullException(nameof(accumGrad));
+        if (accumUpdate is null) throw new ArgumentNullException(nameof(accumUpdate));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("adadelta_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adadelta_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr accumGradPtr = accumGrad.Handle;
+        IntPtr accumUpdatePtr = accumUpdate.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &accumGradPtr;
+        args[3] = &accumUpdatePtr;
+        args[4] = &rho;
+        args[5] = &epsilon;
+        args[6] = &weightDecay;
+        args[7] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (vMax is null) throw new ArgumentNullException(nameof(vMax));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("amsgrad_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: amsgrad_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr vPtr = v.Handle;
+        IntPtr vMaxPtr = vMax.Handle;
+        void** args = stackalloc void*[12];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &vPtr;
+        args[4] = &vMaxPtr;
+        args[5] = &learningRate;
+        args[6] = &beta1;
+        args[7] = &beta2;
+        args[8] = &epsilon;
+        args[9] = &weightDecay;
+        args[10] = &step;
+        args[11] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (u is null) throw new ArgumentNullException(nameof(u));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("adamax_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: adamax_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr uPtr = u.Handle;
+        void** args = stackalloc void*[11];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &uPtr;
+        args[4] = &learningRate;
+        args[5] = &beta1;
+        args[6] = &beta2;
+        args[7] = &epsilon;
+        args[8] = &weightDecay;
+        args[9] = &step;
+        args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
+        if (!_kernelCache.TryGetValue("lion_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lion_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        void** args = stackalloc void*[8];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &learningRate;
+        args[4] = &beta1;
+        args[5] = &beta2;
+        args[6] = &weightDecay;
+        args[7] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        if (v is null) throw new ArgumentNullException(nameof(v));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+        if (step < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
+        if (epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be positive.");
+
+        if (!_kernelCache.TryGetValue("nadam_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: nadam_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr mPtr = m.Handle;
+        IntPtr vPtr = v.Handle;
+        void** args = stackalloc void*[11];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &mPtr;
+        args[3] = &vPtr;
+        args[4] = &learningRate;
+        args[5] = &beta1;
+        args[6] = &beta2;
+        args[7] = &epsilon;
+        args[8] = &weightDecay;
+        args[9] = &step;
+        args[10] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size)
+    {
+        // Validate buffer parameters
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (z is null) throw new ArgumentNullException(nameof(z));
+        if (n is null) throw new ArgumentNullException(nameof(n));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be positive.");
+
+        if (!_kernelCache.TryGetValue("ftrl_update", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: ftrl_update");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr paramPtr = param.Handle;
+        IntPtr gradPtr = gradient.Handle;
+        IntPtr zPtr = z.Handle;
+        IntPtr nPtr = n.Handle;
+        void** args = stackalloc void*[9];
+        args[0] = &paramPtr;
+        args[1] = &gradPtr;
+        args[2] = &zPtr;
+        args[3] = &nPtr;
+        args[4] = &learningRate;
+        args[5] = &l1Reg;
+        args[6] = &l2Reg;
+        args[7] = &beta;
+        args[8] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        if (!_kernelCache.TryGetValue("convert_fp32_to_fp16", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: convert_fp32_to_fp16");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inPtr = input.Handle;
+        IntPtr outPtr = output.Handle;
+        void** args = stackalloc void*[3];
+        args[0] = &inPtr;
+        args[1] = &outPtr;
+        args[2] = &size;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        if (!_kernelCache.TryGetValue("convert_fp16_to_fp32", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: convert_fp16_to_fp32");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inPtr = input.Handle;
+        IntPtr outPtr = output.Handle;
+        void** args = stackalloc void*[3];
+        args[0] = &inPtr;
+        args[1] = &outPtr;
+        args[2] = &size;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -5436,6 +7288,83 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_input");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[8];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &weightsPtr;
+        args[3] = &gradInputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        args[7] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_weights");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradWeightsPtr = gradWeights.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradWeightsPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        args[6] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    /// <inheritdoc/>
+    public unsafe void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+    {
+        if (!_kernelCache.TryGetValue("hyperbolic_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: hyperbolic_linear_backward_biases");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures;  // One thread per bias element
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradBiasesPtr = gradBiases.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradBiasesPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        args[6] = &curvature;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -5501,6 +7430,73 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[4] = &batchSize;
         args[5] = &inputFeatures;
         args[6] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_input", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_input");
+
+        using var _ = PushContext();
+        int totalThreads = batchSize * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsPtr = weights.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+
+        void** args = stackalloc void*[7];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &weightsPtr;
+        args[3] = &gradInputPtr;
+        args[4] = &batchSize;
+        args[5] = &inputFeatures;
+        args[6] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_weights", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_weights");
+
+        using var _ = PushContext();
+        int totalThreads = outputFeatures * inputFeatures;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradWeightsPtr = gradWeights.Handle;
+
+        void** args = stackalloc void*[6];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gradWeightsPtr;
+        args[3] = &batchSize;
+        args[4] = &inputFeatures;
+        args[5] = &outputFeatures;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases,
+        int batchSize, int outputFeatures)
+    {
+        if (!_kernelCache.TryGetValue("octonion_linear_backward_biases", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: octonion_linear_backward_biases");
+
+        using var _ = PushContext();
+        uint grid = (uint)((outputFeatures + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr gradBiasesPtr = gradBiases.Handle;
+
+        void** args = stackalloc void*[4];
+        args[0] = &gradOutputPtr;
+        args[1] = &gradBiasesPtr;
+        args[2] = &batchSize;
+        args[3] = &outputFeatures;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
@@ -5721,6 +7717,36 @@ public sealed class CudaBackend : IAsyncGpuBackend
         {
             CudaNativeBindings.cuModuleUnload(_specializedModule);
             _specializedModule = IntPtr.Zero;
+        }
+
+        if (_fp16Module != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_fp16Module);
+            _fp16Module = IntPtr.Zero;
+        }
+
+        if (_fusedConvolutionModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_fusedConvolutionModule);
+            _fusedConvolutionModule = IntPtr.Zero;
+        }
+
+        if (_fusedModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_fusedModule);
+            _fusedModule = IntPtr.Zero;
+        }
+
+        if (_attentionModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_attentionModule);
+            _attentionModule = IntPtr.Zero;
+        }
+
+        if (_sparseModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_sparseModule);
+            _sparseModule = IntPtr.Zero;
         }
 
         if (_cudaContext != IntPtr.Zero)

@@ -110,6 +110,9 @@ public class FlattenLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _lastInput;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private int[]? _lastInputGpuShape;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -411,6 +414,7 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+        _lastInputGpuShape = null;
     }
 
     /// <summary>
@@ -455,6 +459,12 @@ public class FlattenLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
+        // Cache input shape for BackwardGpu
+        if (IsTrainingMode)
+        {
+            _lastInputGpuShape = input.Shape.ToArray();
+        }
+
         // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)
         if (input.Shape.Length <= 3)
         {
@@ -466,6 +476,23 @@ public class FlattenLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int flattenedSize = input.ElementCount / batchSize;
         return input.CreateView(0, [batchSize, flattenedSize]);
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the flatten layer.
+    /// Reshapes the gradient back to the original input shape.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_lastInputGpuShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Flatten backward is just reshaping the gradient back to original shape
+        // No computation needed, just a view with the original shape
+        return outputGradient.CreateView(0, _lastInputGpuShape);
     }
 
     /// <summary>

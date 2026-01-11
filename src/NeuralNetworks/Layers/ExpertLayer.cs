@@ -263,6 +263,61 @@ public class ExpertLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var grad = outputGradient;
+
+        // Apply activation backward if needed
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T> && _lastPreActivationOutput != null)
+        {
+            var activationType = GetActivationType();
+            if (activationType != FusedActivationType.None)
+            {
+                var preActGpu = gpuEngine.UploadToGpu<T>(_lastPreActivationOutput, GpuTensorRole.Activation);
+                grad = activationType switch
+                {
+                    FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, preActGpu),
+                    FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, preActGpu),
+                    FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, preActGpu),
+                    _ => outputGradient
+                };
+                preActGpu.Dispose();
+            }
+        }
+
+        // Backpropagate through each layer in reverse order
+        for (int i = _layers.Count - 1; i >= 0; i--)
+        {
+            var layer = _layers[i];
+            if (layer is LayerBase<T> layerBase)
+            {
+                var layerType = layerBase.GetType();
+                var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+                if (backwardGpuMethod != null)
+                {
+                    grad = (IGpuTensor<T>)backwardGpuMethod.Invoke(layerBase, new object[] { grad })!;
+                }
+                else
+                {
+                    // Fallback to CPU backward
+                    var cpuGrad = grad.ToTensor();
+                    var cpuInputGrad = layer.Backward(cpuGrad);
+                    grad = gpuEngine.UploadToGpu<T>(cpuInputGrad, GpuTensorRole.Gradient);
+                }
+            }
+        }
+
+        return grad;
+    }
+
+    /// <summary>
     /// Gets the FusedActivationType for the expert's activation function.
     /// </summary>
     private FusedActivationType GetActivationType()

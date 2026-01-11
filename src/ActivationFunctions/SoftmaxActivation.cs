@@ -1,6 +1,5 @@
-
-
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -193,4 +192,57 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
         var output = Activate(input);
         return Engine.SoftmaxBackward(outputGradient, output);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether Softmax supports GPU-resident training.
+    /// </summary>
+    /// <value>True because Softmax has GPU kernels for both forward and backward passes.</value>
+    /// <remarks>
+    /// Softmax on GPU operates on 2D tensors (batch, features) and normalizes along the features axis.
+    /// When used with a single vector, it treats the input as (1, size).
+    /// </remarks>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the Softmax activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values (probabilities).</param>
+    /// <param name="size">The number of elements (features) to process. Treated as a single vector (1, size).</param>
+    /// <remarks>
+    /// Softmax on GPU: output[i] = exp(input[i]) / sum(exp(input[j])) for all j.
+    /// For batch processing, use the tensor-based Activate method instead.
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        // Treat as single vector: batchSize=1, features=size
+        backend.Softmax(input, output, 1, size);
+    }
+
+    /// <summary>
+    /// Calculates the Softmax backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">Not used for Softmax backward (can be null). Softmax backward uses forward output.</param>
+    /// <param name="output">The output buffer from the forward pass (softmax probabilities). Required.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements (features) to process.</param>
+    /// <remarks>
+    /// Softmax backward computes: gradInput[i] = output[i] * (gradOutput[i] - sum(gradOutput[j] * output[j]))
+    /// This is the efficient Jacobian-vector product for softmax.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (output == null)
+            throw new ArgumentNullException(nameof(output), "Softmax backward requires the output (probabilities) from forward pass.");
+
+        // Treat as single vector: batchSize=1, features=size
+        backend.SoftmaxBackward(gradOutput, output, gradInput, 1, size);
+    }
+
+    #endregion
 }

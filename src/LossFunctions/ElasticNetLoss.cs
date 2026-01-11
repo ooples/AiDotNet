@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -161,5 +163,41 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         {
             return NumOps.Zero;
         }
+    }
+
+    /// <summary>
+    /// Calculates both Elastic Net loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+        float l1Ratio = Convert.ToSingle(NumOps.ToDouble(_l1Ratio));
+        float alpha = Convert.ToSingle(NumOps.ToDouble(_alpha));
+        // Calculate l1Weight and l2Weight from l1Ratio and alpha
+        float l1Weight = alpha * l1Ratio;
+        float l2Weight = alpha * (1 - l1Ratio);
+
+        // Compute loss on GPU
+        float lossValue = backend.ElasticNetLoss(predicted.Buffer, actual.Buffer, size, l1Weight, l2Weight);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.ElasticNetBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, l1Weight, l2Weight);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
     }
 }

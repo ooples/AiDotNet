@@ -1,6 +1,7 @@
 
 
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -196,4 +197,50 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Sigmoid(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether Sigmoid supports GPU-resident training.
+    /// </summary>
+    /// <value>True because Sigmoid has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the Sigmoid activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Sigmoid on GPU: output[i] = 1 / (1 + exp(-input[i]))
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Sigmoid(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the Sigmoid backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">Not used for Sigmoid (can be null). Sigmoid backward uses forward output.</param>
+    /// <param name="output">The output buffer from the forward pass.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Sigmoid backward on GPU: gradInput[i] = gradOutput[i] * output[i] * (1 - output[i])
+    /// Note: Sigmoid backward uses the forward output, not the input.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (output == null)
+            throw new ArgumentNullException(nameof(output), "Sigmoid backward requires the output from forward pass.");
+
+        backend.SigmoidBackward(gradOutput, output, gradInput, size);
+    }
+
+    #endregion
 }

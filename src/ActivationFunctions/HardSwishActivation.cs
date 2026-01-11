@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -158,4 +159,52 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>
         throw new NotSupportedException(
             "HardSwishActivation does not support JIT compilation. Use the standard Activate method instead.");
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether HardSwish supports GPU-resident training.
+    /// </summary>
+    /// <value>True because HardSwish has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the HardSwish activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// HardSwish on GPU: output[i] = input[i] * min(max(0, input[i] + 3), 6) / 6
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Hardswish(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the HardSwish backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for HardSwish (can be null). HardSwish backward uses forward input.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// HardSwish backward on GPU:
+    /// - For input &lt;= -3: gradInput[i] = 0
+    /// - For input &gt;= 3: gradInput[i] = gradOutput[i]
+    /// - Otherwise: gradInput[i] = gradOutput[i] * (2 * input[i] + 3) / 6
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "HardSwish backward requires the input from forward pass.");
+
+        backend.HardswishBackward(gradOutput, input, gradInput, size);
+    }
+
+    #endregion
 }

@@ -1,6 +1,7 @@
 
 
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -195,4 +196,50 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Tanh(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether Tanh supports GPU-resident training.
+    /// </summary>
+    /// <value>True because Tanh has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the Tanh activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Tanh on GPU: output[i] = tanh(input[i])
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Tanh(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the Tanh backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">Not used for Tanh (can be null). Tanh backward uses forward output.</param>
+    /// <param name="output">The output buffer from the forward pass.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// Tanh backward on GPU: gradInput[i] = gradOutput[i] * (1 - output[i]^2)
+    /// Note: Tanh backward uses the forward output, not the input.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (output == null)
+            throw new ArgumentNullException(nameof(output), "Tanh backward requires the output from forward pass.");
+
+        backend.TanhBackward(gradOutput, output, gradInput, size);
+    }
+
+    #endregion
 }

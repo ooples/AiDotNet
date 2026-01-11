@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -213,5 +215,49 @@ public class TripletLoss<T> : LossFunctionBase<T>
         }
 
         return NumOps.Sqrt(sum);
+    }
+
+    /// <summary>
+    /// Calculates Triplet Loss on GPU for batched input tensors.
+    /// </summary>
+    /// <param name="anchor">The anchor GPU tensor (batch of embeddings).</param>
+    /// <param name="positive">The positive GPU tensor (similar to anchors).</param>
+    /// <param name="negative">The negative GPU tensor (dissimilar to anchors).</param>
+    /// <returns>A tuple containing the loss value and gradient tensors for anchor, positive, and negative.</returns>
+    public (T Loss, IGpuTensor<T> AnchorGradient, IGpuTensor<T> PositiveGradient, IGpuTensor<T> NegativeGradient) CalculateLossAndGradientGpu(
+        IGpuTensor<T> anchor, IGpuTensor<T> positive, IGpuTensor<T> negative)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            // Fall back to CPU implementation
+            throw new NotSupportedException("GPU backend not available for TripletLoss GPU computation.");
+        }
+
+        int batchSize = anchor.Shape[0];
+        int embeddingSize = anchor.ElementCount / batchSize;
+        float margin = Convert.ToSingle(NumOps.ToDouble(_margin));
+
+        // Compute loss on GPU
+        float lossValue = backend.TripletLoss(anchor.Buffer, positive.Buffer, negative.Buffer, batchSize, embeddingSize, margin);
+
+        // Allocate gradient buffers
+        var anchorGradBuffer = backend.AllocateBuffer(anchor.ElementCount);
+        var positiveGradBuffer = backend.AllocateBuffer(positive.ElementCount);
+        var negativeGradBuffer = backend.AllocateBuffer(negative.ElementCount);
+
+        // Compute gradients on GPU
+        backend.TripletLossBackward(anchor.Buffer, positive.Buffer, negative.Buffer,
+            anchorGradBuffer, positiveGradBuffer, negativeGradBuffer,
+            batchSize, embeddingSize, margin);
+
+        // Create gradient tensors
+        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor.Shape, GpuTensorRole.Gradient);
+        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive.Shape, GpuTensorRole.Gradient);
+        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
     }
 }

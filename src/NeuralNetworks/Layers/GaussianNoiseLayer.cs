@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -135,6 +137,9 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
+    /// <inheritdoc/>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("GaussianNoiseLayer requires an input tensor.");
@@ -163,6 +168,22 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         }
 
         return input;
+    }
+
+    /// <inheritdoc/>
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    /// <remarks>
+    /// Since noise is added independently and doesn't depend on the input,
+    /// the gradient flows through unchanged during backpropagation.
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        return outputGradient;
     }
 
     /// <summary>
@@ -324,7 +345,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         // For a simple identity operation, just return the gradient
         return outputGradient;
     }
-
 
     /// <summary>
     /// Generates a tensor of random Gaussian noise with the specified shape.

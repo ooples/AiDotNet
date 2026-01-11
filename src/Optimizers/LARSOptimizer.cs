@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -640,4 +641,64 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_LARS_{_options.InitialLearningRate}_{_options.TrustCoefficient}_{_options.WeightDecay}";
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for velocity state.
+    /// </summary>
+    private IGpuBuffer? _gpuVelocity;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes LARS optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuVelocity != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuVelocity = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the LARS kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuVelocity == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.LarsUpdate(
+            parameters,
+            gradients,
+            _gpuVelocity!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.InitialMomentum,
+            (float)_options.WeightDecay,
+            (float)_options.TrustCoefficient,
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuVelocity?.Dispose();
+        _gpuVelocity = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

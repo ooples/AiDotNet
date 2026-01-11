@@ -31,6 +31,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _lastInput;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
     /// </summary>
@@ -557,6 +561,10 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+
+        // Clear GPU-resident cached tensors
+        _lastInputGpu = null;
+        _lastOutputGpu = null;
     }
 
     /// <summary>
@@ -687,7 +695,49 @@ public class ActivationLayer<T> : LayerBase<T>
                 $"Use the CPU Forward method instead.");
 
         var input = inputs[0];
-        return gpuEngine.ActivationGpu<T>(input, fusedType);
+        var result = gpuEngine.ActivationGpu<T>(input, fusedType);
+
+        // Cache GPU tensors for BackwardGpu
+        if (IsTrainingMode)
+        {
+            _lastInputGpu = input;
+            _lastOutputGpu = result;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the activation layer.
+    /// Computes gradient with respect to input entirely on GPU - no CPU roundtrip.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_lastInputGpu == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        if (!TryGetFusedActivationType(out var fusedType))
+            throw new InvalidOperationException(
+                $"Activation function '{GetActivationTypeName()}' does not support GPU backward pass.");
+
+        // Apply appropriate activation backward based on type
+        return fusedType switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            _ => outputGradient // Fallback: gradient passes through unchanged
+        };
     }
 
     /// <summary>

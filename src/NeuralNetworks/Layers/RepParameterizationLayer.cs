@@ -103,6 +103,14 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalInputShape;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuMean;
+    private IGpuTensor<T>? _gpuLogVar;
+    private IGpuTensor<T>? _gpuEpsilon;
+    private IGpuTensor<T>? _gpuStdDev;
+    private int _gpuBatchSize;
+    private int _gpuLatentSize;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RepParameterizationLayer{T}"/> class.
     /// </summary>
@@ -322,13 +330,13 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             epsilonData[i] = (float)z;
         }
-        using var epsilonBuffer = backend.AllocateBuffer(epsilonData);
+        var epsilonBuffer = backend.AllocateBuffer(epsilonData);
 
         // Compute stdDev = exp(logvar * 0.5) on GPU
         using var scaledLogvarBuffer = backend.AllocateBuffer(totalElements);
         backend.Scale(logvarBuffer, scaledLogvarBuffer, 0.5f, totalElements);
 
-        using var stdDevBuffer = backend.AllocateBuffer(totalElements);
+        var stdDevBuffer = backend.AllocateBuffer(totalElements);
         backend.Exp(scaledLogvarBuffer, stdDevBuffer, totalElements);
 
         // Compute scaledEpsilon = stdDev * epsilon on GPU
@@ -339,19 +347,32 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         var outputBuffer = backend.AllocateBuffer(totalElements);
         backend.Add(meanBuffer, scaledEpsilonBuffer, outputBuffer, totalElements);
 
-        // Cache mean, logvar, and epsilon for backward pass (only download in training mode)
+        // Cache GPU tensors for backward pass (keep on GPU for efficiency)
         if (IsTrainingMode)
         {
+            int[] latentShape = [batchSize, latentSize];
+            _gpuMean = new GpuTensor<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuLogVar = new GpuTensor<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuEpsilon = new GpuTensor<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuStdDev = new GpuTensor<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuBatchSize = batchSize;
+            _gpuLatentSize = latentSize;
+
+            // Also cache CPU tensors for CPU backward compatibility
             var meanData = backend.DownloadBuffer(meanBuffer);
             var logvarData = backend.DownloadBuffer(logvarBuffer);
-            _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), [batchSize, latentSize]);
-            _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), [batchSize, latentSize]);
-            _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), [batchSize, latentSize]);
+            _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), latentShape);
+            _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), latentShape);
+            _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), latentShape);
         }
-
-        // Dispose intermediate buffers that are no longer needed
-        meanBuffer.Dispose();
-        logvarBuffer.Dispose();
+        else
+        {
+            // Not training - dispose intermediate buffers
+            meanBuffer.Dispose();
+            logvarBuffer.Dispose();
+            epsilonBuffer.Dispose();
+            stdDevBuffer.Dispose();
+        }
 
         // Determine output shape (half the input size in feature dimension)
         int[] outputShape;
@@ -565,6 +586,81 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         return inputGradient;
     }
 
+    /// <summary>
+    /// Performs GPU-accelerated backward pass for the reparameterization layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes gradients for the reparameterization trick: z = mean + exp(logvar * 0.5) * epsilon
+    /// - Gradient for mean: dL/d_mean = dL/dz (passes through unchanged)
+    /// - Gradient for logvar: dL/d_logvar = dL/dz * epsilon * stdDev * 0.5
+    /// The output is concatenated [gradMean, gradLogVar] to match input shape.
+    /// </para>
+    /// </remarks>
+    /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to layer output.</param>
+    /// <returns>GPU tensor containing gradient with respect to input [mean, logvar].</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuMean == null || _gpuEpsilon == null || _gpuStdDev == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int totalElements = _gpuBatchSize * _gpuLatentSize;
+        int[] latentShape = [_gpuBatchSize, _gpuLatentSize];
+        int[] outputShape = [_gpuBatchSize, _gpuLatentSize * 2];
+
+        // Reshape outputGradient to 2D if needed (flatten batch dims)
+        IGpuTensor<T> grad = outputGradient.Shape.Length == 2
+            ? outputGradient
+            : gpuEngine.ReshapeGpu(outputGradient, latentShape);
+
+        // gradMean = outputGradient (unchanged)
+        // The gradient for mean passes through directly
+
+        // gradLogVar = outputGradient * epsilon * stdDev * 0.5
+        // First: temp1 = outputGradient * epsilon
+        var temp1Buffer = backend.AllocateBuffer(totalElements);
+        backend.Multiply(grad.Buffer, _gpuEpsilon.Buffer, temp1Buffer, totalElements);
+
+        // temp2 = temp1 * stdDev
+        var temp2Buffer = backend.AllocateBuffer(totalElements);
+        backend.Multiply(temp1Buffer, _gpuStdDev.Buffer, temp2Buffer, totalElements);
+
+        // gradLogVar = temp2 * 0.5
+        var gradLogVarBuffer = backend.AllocateBuffer(totalElements);
+        backend.Scale(temp2Buffer, gradLogVarBuffer, 0.5f, totalElements);
+
+        temp1Buffer.Dispose();
+        temp2Buffer.Dispose();
+
+        // Allocate output buffer for concatenated gradients [gradMean, gradLogVar]
+        int totalOutputElements = _gpuBatchSize * _gpuLatentSize * 2;
+        var outputBuffer = backend.AllocateBuffer(totalOutputElements);
+
+        // Copy gradMean and gradLogVar into output buffer
+        // For each batch: output[b, 0:latentSize] = gradMean, output[b, latentSize:2*latentSize] = gradLogVar
+        for (int b = 0; b < _gpuBatchSize; b++)
+        {
+            int srcBatchOffset = b * _gpuLatentSize;
+            int dstBatchOffset = b * (_gpuLatentSize * 2);
+
+            // Copy gradMean (from outputGradient)
+            backend.Copy(grad.Buffer, srcBatchOffset, outputBuffer, dstBatchOffset, _gpuLatentSize);
+
+            // Copy gradLogVar
+            backend.Copy(gradLogVarBuffer, srcBatchOffset, outputBuffer, dstBatchOffset + _gpuLatentSize, _gpuLatentSize);
+        }
+
+        gradLogVarBuffer.Dispose();
+
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+    }
 
     /// <summary>
     /// Updates the parameters of the reparameterization layer.
@@ -645,10 +741,16 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
+        // Clear cached CPU values from forward and backward passes
         _lastMean = null;
         _lastLogVar = null;
         _lastEpsilon = null;
+
+        // Clear cached GPU tensors
+        _gpuMean = null;
+        _gpuLogVar = null;
+        _gpuEpsilon = null;
+        _gpuStdDev = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

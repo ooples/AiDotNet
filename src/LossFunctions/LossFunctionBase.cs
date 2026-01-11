@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -39,6 +41,32 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// <param name="actual">The actual (target) values.</param>
     /// <returns>A vector containing the derivatives of the loss with respect to each prediction.</returns>
     public abstract Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
+
+    /// <summary>
+    /// Calculates both loss and gradient on GPU in a single pass.
+    /// Default implementation falls back to separate calls.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public virtual (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        // Default: fall back to CPU
+        var predictedCpu = predicted.ToTensor();
+        var actualCpu = actual.ToTensor();
+        
+        var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
+        var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
+        
+        var gradientTensor = new Tensor<T>(predictedCpu.Shape);
+        Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
+        
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+        var gradientGpu = new GpuTensor<T>(backend, gradientTensor, GpuTensorRole.Gradient);
+        
+        return (loss, gradientGpu);
+    }
 
     /// <summary>
     /// Validates that the predicted and actual vectors have the same length.

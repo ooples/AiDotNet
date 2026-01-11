@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 
@@ -118,6 +120,10 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// Stores the indices of the maximum values found during global max pooling.
     /// </summary>
     private int[]? _maxIndices;
+
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastOutputGpu;
+    private int[]? _lastInputGpuShape;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -589,6 +595,9 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <value><c>true</c> if GPU execution is supported; otherwise, <c>false</c>.</value>
     protected override bool SupportsGpuExecution => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// Performs GPU-accelerated forward pass using GPU-resident tensors.
     /// </summary>
@@ -628,9 +637,72 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         {
             _lastInput = input.ToTensor();
             _lastOutput = output.ToTensor();
+            _lastOutputGpu = output;
+            _lastInputGpuShape = input.Shape.ToArray();
         }
 
         return output;
+    }
+
+    /// <inheritdoc/>
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for global pooling.
+    /// Computes gradients distributed to spatial positions based on pooling type.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastOutputGpu == null || _lastInputGpuShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        // Apply activation backward if needed
+        IGpuTensor<T> gradientWithActivation;
+        var fusedOp = MapActivationToFused();
+        if (fusedOp != FusedActivationType.None)
+        {
+            gradientWithActivation = ComputeActivationBackwardGpu(gpuEngine, outputGradient, _lastOutputGpu, fusedOp);
+        }
+        else
+        {
+            gradientWithActivation = outputGradient;
+        }
+
+        // Compute gradient based on pooling type
+        if (_poolingType == PoolingType.Average)
+        {
+            // Mean pool backward: broadcast gradient to all spatial positions and divide by count
+            return gpuEngine.GlobalMeanPoolBackwardGpu<T>(gradientWithActivation, _lastInputGpuShape);
+        }
+        else // Max pooling
+        {
+            if (_maxIndices == null)
+                throw new InvalidOperationException("Max indices not available for backward pass.");
+
+            // Max pool backward: scatter gradient to max positions only
+            return gpuEngine.GlobalMaxPoolBackwardGpu<T>(gradientWithActivation, _maxIndices, _lastInputGpuShape);
+        }
+    }
+
+    /// <summary>
+    /// Computes the activation backward gradient on GPU.
+    /// </summary>
+    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    {
+        return activationType switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, output),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, output),
+            _ => gradOutput // Identity or unsupported - pass through
+        };
     }
 
     /// <summary>
@@ -715,6 +787,11 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
         _maxIndices = null;
+
+        // Clear GPU cached data
+        _lastOutputGpu?.Dispose();
+        _lastOutputGpu = null;
+        _lastInputGpuShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

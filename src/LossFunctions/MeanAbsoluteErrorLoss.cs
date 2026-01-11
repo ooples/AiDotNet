@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -55,10 +57,45 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         // The derivative of MAE is sign(predicted-actual)/n
-        // When predicted == actual (difference is 0), the derivative is 0 (subgradient)
         return predicted.Subtract(actual).Transform(x =>
-            NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One :
-            NumOps.LessThan(x, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero
-        ).Divide(NumOps.FromDouble(predicted.Length));
+        {
+            if (NumOps.GreaterThan(x, NumOps.Zero))
+                return NumOps.One;
+            else if (NumOps.LessThan(x, NumOps.Zero))
+                return NumOps.FromDouble(-1);
+            else
+                return NumOps.Zero; // Subgradient at 0
+        }).Divide(NumOps.FromDouble(predicted.Length));
+    }
+
+    /// <summary>
+    /// Calculates both MAE loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+
+        // Compute loss on GPU
+        float lossValue = backend.MaeLoss(predicted.Buffer, actual.Buffer, size);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.MaeBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
     }
 }

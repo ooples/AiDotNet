@@ -48,6 +48,14 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _betaGradient;
     private int[] _originalInputShape = [];
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuBuffer? _gpuMean;
+    private IGpuBuffer? _gpuInvVar;
+    private int _gpuBatch;
+    private int _gpuChannels;
+    private int _gpuSpatialSize;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -308,8 +316,15 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         // Cache mean/variance for backward pass if training
         if (IsTrainingMode)
         {
+            _gpuInput = input;
+            _gpuMean = saveMeanBuffer;
+            _gpuInvVar = saveInvVarBuffer;
+            _gpuBatch = batch;
+            _gpuChannels = channels;
+            _gpuSpatialSize = spatialSize;
+
+            // Also cache for CPU backward compatibility
             _lastInput = input.ToTensor();
-            // Download mean and variance for backward pass compatibility
             var meanData = new float[statsSize];
             var varData = new float[statsSize];
             backend.DownloadBuffer(saveMeanBuffer, meanData);
@@ -317,12 +332,71 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
             _lastMean = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(meanData)));
             _lastVariance = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(varData)));
         }
-
-        // Dispose temp buffers
-        saveMeanBuffer.Dispose();
-        saveInvVarBuffer.Dispose();
+        else
+        {
+            // Dispose temp buffers when not training
+            saveMeanBuffer.Dispose();
+            saveInvVarBuffer.Dispose();
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient tensor.</param>
+    /// <returns>GPU-resident input gradient tensor.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_gpuInput == null || _gpuMean == null || _gpuInvVar == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        int batch = _gpuBatch;
+        int channels = _gpuChannels;
+        int spatialSize = _gpuSpatialSize;
+        int totalSize = batch * channels * spatialSize;
+
+        // Upload gamma to GPU
+        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
+        using var gammaBuffer = backend.AllocateBuffer(gammaData);
+
+        // Allocate output buffers
+        var gradInputBuffer = backend.AllocateBuffer(totalSize);
+        var gradGammaBuffer = backend.AllocateBuffer(channels);
+        var gradBetaBuffer = backend.AllocateBuffer(channels);
+
+        // Use GPU InstanceNormBackward kernel
+        float epsilon = (float)NumOps.ToDouble(_epsilon);
+        backend.InstanceNormBackward(
+            outputGradient.Buffer,
+            _gpuInput.Buffer,
+            gammaBuffer,
+            _gpuMean,
+            _gpuInvVar,
+            gradInputBuffer,
+            gradGammaBuffer,
+            gradBetaBuffer,
+            batch, channels, spatialSize, epsilon);
+
+        // Download gradGamma and gradBeta for parameter updates
+        var gradGammaData = backend.DownloadBuffer(gradGammaBuffer);
+        var gradBetaData = backend.DownloadBuffer(gradBetaBuffer);
+        gradGammaBuffer.Dispose();
+        gradBetaBuffer.Dispose();
+
+        _gammaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaData)));
+        _betaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaData)));
+
+        // Return input gradient as GPU tensor
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -466,6 +540,16 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuMean?.Dispose();
+        _gpuMean = null;
+        _gpuInvVar?.Dispose();
+        _gpuInvVar = null;
+        _gpuBatch = 0;
+        _gpuChannels = 0;
+        _gpuSpatialSize = 0;
     }
 
     /// <summary>

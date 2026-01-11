@@ -227,6 +227,12 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private IGpuTensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+    private int[]? _gpuOriginalInputShape;
+
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -979,22 +985,28 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Result is [batchDim, outputSize]
         var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
 
-        // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
+        // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
+            _lastInputGpu = input2D;
+            _gpuOriginalInputShape = input.Shape.ToArray();
 
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)
             {
-                var preActivation = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
-                _lastOutput = preActivation.ToTensor();
+                _lastPreActivationGpu = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
+                _lastOutputGpu = result; // Post-activation for sigmoid/tanh backward
             }
             else
             {
-                _lastOutput = result.ToTensor();
+                _lastPreActivationGpu = result;
+                _lastOutputGpu = result;
             }
+
+            // Also download to CPU for hybrid CPU/GPU backward compatibility
+            _lastInput = input.ToTensor();
+            _lastOutput = _lastPreActivationGpu.ToTensor();
         }
 
         // Reshape output back to original batch dimensions if needed
@@ -1017,6 +1029,104 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D input: result is already [batch, outputSize]
 
         return result;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the dense layer.
+    /// Computes gradients for weights, biases, and input entirely on GPU - no CPU roundtrip.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_lastInputGpu == null || _lastPreActivationGpu == null || _gpuOriginalInputShape == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 2D for computation
+        int batchDim = _lastInputGpu.Shape[0];
+        int outputSize = OutputShape[0];
+        int inputSize = _weights.Shape[0];
+
+        IGpuTensor<T> gradient2D;
+        if (outputGradient.Shape.Length == 1)
+        {
+            gradient2D = outputGradient.CreateView(0, [1, outputSize]);
+        }
+        else if (outputGradient.Shape.Length == 2)
+        {
+            gradient2D = outputGradient;
+        }
+        else
+        {
+            // Flatten ND gradient to 2D
+            int flatBatch = 1;
+            for (int i = 0; i < outputGradient.Shape.Length - 1; i++)
+                flatBatch *= outputGradient.Shape[i];
+            gradient2D = outputGradient.CreateView(0, [flatBatch, outputSize]);
+        }
+
+        // Step 1: Compute activation gradient using GPU-resident activation backward
+        IGpuTensor<T> activationGradient = ComputeActivationGradientGpu(gpuEngine, gradient2D);
+
+        // Step 2: Compute weight gradient: dW = input^T @ activationGrad
+        // input: [batchDim, inputSize], activationGrad: [batchDim, outputSize]
+        // input^T: [inputSize, batchDim], result: [inputSize, outputSize]
+        var inputTransposed = gpuEngine.TransposeGpu<T>(_lastInputGpu);
+        var weightsGradGpu = gpuEngine.MatMulGpuTensors<T>(inputTransposed, activationGradient);
+
+        // Download weight gradient to CPU for UpdateParameters
+        _weightsGradient = weightsGradGpu.ToTensor();
+
+        // Step 3: Compute bias gradient: dB = sum(activationGrad, axis=0)
+        // Result: [1, outputSize] -> reshape to [outputSize]
+        var biasGradGpu = gpuEngine.SumAxisGpu<T>(activationGradient, 0);
+        var biasGradTensor = biasGradGpu.ToTensor();
+        _biasesGradient = biasGradTensor.Reshape([outputSize]);
+
+        // Step 4: Compute input gradient: dX = activationGrad @ W^T
+        // activationGrad: [batchDim, outputSize], W: [inputSize, outputSize]
+        // W^T: [outputSize, inputSize], result: [batchDim, inputSize]
+        var weightsGpu = gpuEngine.UploadToGpu(_weights, GpuTensorRole.Weight);
+        var weightsTransposed = gpuEngine.TransposeGpu<T>(weightsGpu);
+        var inputGradient = gpuEngine.MatMulGpuTensors<T>(activationGradient, weightsTransposed);
+
+        // Reshape input gradient back to original shape if needed
+        if (_gpuOriginalInputShape.Length == 1)
+        {
+            return inputGradient.CreateView(0, [inputSize]);
+        }
+        else if (_gpuOriginalInputShape.Length > 2)
+        {
+            return inputGradient.CreateView(0, _gpuOriginalInputShape);
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes activation gradient using GPU-resident backward operations.
+    /// </summary>
+    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput)
+    {
+        // Determine activation type and apply appropriate backward
+        var fusedActivation = GetFusedActivationType();
+
+        return fusedActivation switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu!),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu!),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu!),
+            FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
+            _ => gradOutput // Fallback for unsupported activations
+        };
     }
 
     private void EnsureWeightShapeForInput(int actualInputSize)
@@ -1549,10 +1659,17 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
+        // Clear cached values from forward and backward passes (CPU)
         _lastInput = null;
+        _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
+
+        // Clear GPU-resident cached tensors
+        _lastInputGpu = null;
+        _lastPreActivationGpu = null;
+        _lastOutputGpu = null;
+        _gpuOriginalInputShape = null;
     }
 
     /// <summary>
@@ -1719,11 +1836,17 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Clear other managed resources
+            // Clear other managed resources (CPU)
             _weightsGradient = null;
             _biasesGradient = null;
             _lastInput = null;
             _lastOutput = null;
+
+            // Clear GPU-resident cached tensors
+            _lastInputGpu = null;
+            _lastPreActivationGpu = null;
+            _lastOutputGpu = null;
+            _gpuOriginalInputShape = null;
         }
 
         base.Dispose(disposing);

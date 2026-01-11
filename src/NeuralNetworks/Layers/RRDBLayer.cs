@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -83,6 +84,11 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Cached output from RDB3 for backpropagation.
     /// </summary>
     private Tensor<T>? _rdb3Output;
+
+    /// <summary>
+    /// GPU cached input tensor for backward pass.
+    /// </summary>
+    private IGpuTensor<T>? _gpuLastInput;
 
     #endregion
 
@@ -232,6 +238,12 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var input = inputs[0];
         var shape = input.Shape;
 
+        // Cache input for backward pass
+        if (IsTrainingMode)
+        {
+            _gpuLastInput = input;
+        }
+
         // Store input buffer for global residual
         var inputBuffer = input.Buffer;
 
@@ -277,6 +289,58 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Add gradient from global residual connection
         return AddTensors(grad, inputGradientFromResidual);
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuLastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = outputGradient.ElementCount;
+
+        // Gradient through global residual:
+        // d(x * scale + input) / dx = scale
+        // d(x * scale + input) / dinput = 1
+
+        // Scale the gradient for the RDB path
+        var rdb3GradBuffer = backend.AllocateBuffer(size);
+        backend.Scale(outputGradient.Buffer, rdb3GradBuffer, (float)_residualScale, size);
+        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+        // Backward through RDB3, RDB2, RDB1
+        IGpuTensor<T> grad = rdb3Grad;
+        for (int i = 2; i >= 0; i--)
+        {
+            var rdbType = _rdbBlocks[i].GetType();
+            var backwardGpuMethod = rdbType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+            if (backwardGpuMethod != null)
+            {
+                grad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_rdbBlocks[i], new object[] { grad })!;
+            }
+            else
+            {
+                // Fallback to CPU backward
+                var cpuGrad = grad.ToTensor();
+                var cpuResult = _rdbBlocks[i].Backward(cpuGrad);
+                grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
+            }
+        }
+
+        // Add gradient from global residual connection
+        var resultBuffer = backend.AllocateBuffer(size);
+        backend.Add(grad.Buffer, outputGradient.Buffer, resultBuffer, size);
+
+        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     #endregion
@@ -371,6 +435,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         _lastInput = null;
         _rdb3Output = null;
+        _gpuLastInput = null;
         foreach (var rdb in _rdbBlocks)
         {
             rdb.ResetState();

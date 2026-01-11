@@ -847,59 +847,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public abstract Tensor<T> Forward(Tensor<T> input);
 
     /// <summary>
-    /// Gets whether this layer can execute on GPU.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// By default, layers do not support GPU execution. Derived classes should override this property
-    /// and return true when they have implemented <see cref="ForwardGpu"/>.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if this layer can run on a graphics card (GPU)
-    /// for faster processing. By default, layers run on the CPU, but some layers have been optimized
-    /// to run on GPUs for much better performance.
-    /// </para>
-    /// </remarks>
-    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
-
-    /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the derived class has implemented GPU execution.
-    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
-    /// Default is false - layers must explicitly override to enable GPU support.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a simple flag that derived classes set to true
-    /// when they have implemented the ForwardGpu method. You don't need to check if the GPU
-    /// is available - that's handled automatically by CanExecuteOnGpu.
-    /// </para>
-    /// </remarks>
-    protected virtual bool SupportsGpuExecution => false;
-
-
-    /// <summary>
-    /// Executes the forward pass on GPU with multiple input tensors.
-    /// </summary>
-    /// <param name="inputs">The input tensors.</param>
-    /// <returns>The output tensor on GPU.</returns>
-    /// <remarks>
-    /// <para>
-    /// This overload is used for layers that require multiple inputs, such as cross-attention
-    /// where queries come from one source and keys/values from another.
-    /// </para>
-    /// <para>
-    /// The default implementation throws NotSupportedException. Layers that support GPU execution
-    /// should override this method and set SupportsGpuExecution to true.
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
-    {
-        throw new NotSupportedException($"GPU execution is not supported by {GetType().Name}. Use Forward() instead.");
-    }
-
-    /// <summary>
     /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.
     /// </summary>
     /// <returns>
@@ -985,6 +932,237 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public abstract Tensor<T> Backward(Tensor<T> outputGradient);
+
+    #region GPU Training Infrastructure
+
+    /// <summary>
+    /// Gets whether this layer has a GPU execution implementation for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
+    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This flag indicates if the layer has GPU code for the forward pass.
+    /// Set this to true in derived classes that implement ForwardGpu.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsGpuExecution => false;
+
+    /// <summary>
+    /// Gets whether this layer has full GPU training support (forward, backward, and parameter updates).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can perform its entire training cycle on GPU
+    /// without downloading data to CPU. A layer has full GPU training support when:
+    /// <list type="bullet">
+    /// <item><description>ForwardGpu is implemented</description></item>
+    /// <item><description>BackwardGpu is implemented</description></item>
+    /// <item><description>UpdateParametersGpu is implemented (for layers with trainable parameters)</description></item>
+    /// <item><description>GPU weight/bias/gradient buffers are properly managed</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if training can happen entirely on GPU.
+    /// 
+    /// GPU-resident training is much faster because:
+    /// - Data stays on GPU between forward and backward passes
+    /// - No expensive CPU-GPU transfers during each training step
+    /// - GPU kernels handle all gradient computation
+    /// 
+    /// Only layers that return true here can participate in fully GPU-resident training.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsGpuTraining => false;
+
+    /// <summary>
+    /// Gets whether this layer can execute its forward pass on GPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns true when both the layer supports GPU execution AND a GPU engine is currently active.
+    /// Use this to check at runtime whether GPU forward pass is available.
+    /// </para>
+    /// <para><b>For Beginners:</b> Check this before calling ForwardGpu.
+    /// It combines "does the layer have GPU code?" with "is the GPU engine active?"
+    /// </para>
+    /// </remarks>
+    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Gets whether this layer can execute GPU training (forward, backward, parameter update).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns true when both the layer supports GPU training AND a GPU engine is currently active.
+    /// </para>
+    /// <para><b>For Beginners:</b> Check this before attempting GPU-resident training.
+    /// If false, training will fall back to CPU operations.
+    /// </para>
+    /// </remarks>
+    public virtual bool CanTrainOnGpu => SupportsGpuTraining && Engine is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Performs the forward pass of the layer on GPU.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensor(s).</param>
+    /// <returns>The GPU-resident output tensor.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU execution.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the layer's forward computation entirely on GPU. The input and output
+    /// tensors remain in GPU memory, avoiding expensive CPU-GPU transfers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Forward() but runs on the graphics card.
+    /// 
+    /// The key difference:
+    /// - Forward() uses CPU tensors that may be copied to/from GPU
+    /// - ForwardGpu() keeps everything on GPU the whole time
+    /// 
+    /// Override this in derived classes that support GPU acceleration.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    {
+        throw new NotSupportedException(
+            $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");
+    }
+
+    /// <summary>
+    /// Performs the backward pass of the layer on GPU.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The GPU-resident gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the layer's backward computation entirely on GPU, including:
+    /// <list type="bullet">
+    /// <item><description>Computing input gradients to pass to previous layers</description></item>
+    /// <item><description>Computing and storing weight gradients on GPU (for layers with trainable parameters)</description></item>
+    /// <item><description>Computing and storing bias gradients on GPU</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like Backward() but runs entirely on GPU.
+    /// 
+    /// During GPU training:
+    /// 1. Output gradients come in (on GPU)
+    /// 2. Input gradients are computed (stay on GPU)
+    /// 3. Weight/bias gradients are computed and stored (on GPU)
+    /// 4. Input gradients are returned for the previous layer
+    /// 
+    /// All data stays on GPU - no CPU round-trips needed!
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        throw new NotSupportedException(
+            $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using the optimizer specified in the config.
+    /// Supported optimizers include SGD, Adam, AdamW, RMSprop, Adagrad, NAG, LARS, and LAMB.
+    /// </para>
+    /// <para><b>For Beginners:</b> This updates the layer's learned values entirely on GPU.
+    /// 
+    /// The config determines which optimizer algorithm to use:
+    /// - SGD: Simple gradient descent with optional momentum
+    /// - Adam: Adaptive learning rates with moment estimates (most popular)
+    /// - AdamW: Adam with proper weight decay (recommended for transformers)
+    /// 
+    /// Using this method keeps all training computation on the GPU for maximum speed.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        throw new NotSupportedException(
+            $"GPU parameter updates are not supported by {GetType().Name}. Use UpdateParameters() instead or check CanTrainOnGpu first.");
+    }
+
+    /// <summary>
+    /// Uploads the layer's weights and biases to GPU memory for GPU-resident training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this before starting GPU training to initialize GPU weight buffers.
+    /// The CPU weights are copied to GPU and remain there until DownloadWeightsFromGpu is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This copies the layer's learned values to the GPU.
+    /// 
+    /// Call this once at the start of training to:
+    /// - Create GPU buffers for weights and biases
+    /// - Copy current values from CPU to GPU
+    /// - Create GPU buffers for gradients and optimizer states (momentum, etc.)
+    /// 
+    /// After this, all training can happen on GPU without CPU involvement.
+    /// </para>
+    /// </remarks>
+    public virtual void UploadWeightsToGpu()
+    {
+        // Default implementation does nothing - layers without trainable parameters don't need this.
+        // Layers with parameters should override to upload their specific weight tensors.
+    }
+
+    /// <summary>
+    /// Downloads the layer's weights and biases from GPU memory back to CPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this after GPU training to sync weights back to CPU for:
+    /// <list type="bullet">
+    /// <item><description>Model checkpointing / saving</description></item>
+    /// <item><description>CPU inference</description></item>
+    /// <item><description>Inspection of trained weights</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This copies learned values back from GPU to CPU.
+    /// 
+    /// During GPU training, weights are modified on GPU and the CPU copy is stale.
+    /// Call this to:
+    /// - Save the model to disk
+    /// - Switch to CPU inference
+    /// - Examine what the layer learned
+    /// 
+    /// This is relatively expensive, so only do it when necessary (not every batch).
+    /// </para>
+    /// </remarks>
+    public virtual void DownloadWeightsFromGpu()
+    {
+        // Default implementation does nothing - layers without trainable parameters don't need this.
+        // Layers with parameters should override to download their specific weight tensors.
+    }
+
+    /// <summary>
+    /// Resets the GPU gradient accumulators to zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this at the start of each training batch to clear accumulated gradients from the previous batch.
+    /// </para>
+    /// <para><b>For Beginners:</b> This clears the "how to improve" information from the last batch.
+    /// 
+    /// Each batch computes new gradients. Before processing a new batch, you need to:
+    /// - Clear the old gradients
+    /// - Compute fresh gradients for the current batch
+    /// - Update weights based on the new gradients
+    /// 
+    /// If you forget to zero gradients, they accumulate and training goes wrong!
+    /// </para>
+    /// </remarks>
+    public virtual void ZeroGradientsGpu()
+    {
+        // Default implementation does nothing.
+        // Layers with GPU training should override to zero their gradient buffers.
+    }
+
+    #endregion
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
@@ -2112,6 +2290,92 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         Engine.InvalidatePersistentTensor(tensor);
     }
 
+    #region OCP-Compliant Activation GPU Methods
+
+    /// <summary>
+    /// Checks if the layer's scalar activation function supports GPU training.
+    /// </summary>
+    /// <returns>True if the activation function has GPU kernels; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Not all activation functions have GPU implementations yet.
+    /// This method checks whether the layer's activation can run entirely on the GPU.
+    /// If false, the layer must fall back to CPU computation for the activation.
+    /// </para>
+    /// </remarks>
+    protected bool HasGpuActivation()
+    {
+        return ScalarActivation?.SupportsGpuTraining ?? false;
+    }
+
+    /// <summary>
+    /// Applies the layer's activation function forward pass on GPU using the activation's own GPU method.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <returns>True if the activation was applied on GPU; false if no activation or GPU not supported.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method follows the Open/Closed Principle by delegating to the activation function's
+    /// own GPU implementation rather than using a switch statement on activation types.
+    /// Each activation function knows how to apply itself on GPU.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of having one giant switch statement that handles every
+    /// possible activation type, each activation function has its own ForwardGpu method.
+    /// This makes it easy to add new activation functions without modifying this code.
+    /// </para>
+    /// </remarks>
+    protected bool ApplyActivationForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        if (ScalarActivation is not { SupportsGpuTraining: true })
+        {
+            return false;
+        }
+
+        ScalarActivation.ForwardGpu(backend, input, output, size);
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the layer's activation function backward pass on GPU using the activation's own GPU method.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass (needed for some activations).</param>
+    /// <param name="output">The output buffer from the forward pass (needed for some activations).</param>
+    /// <param name="gradInput">The buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <returns>True if the backward pass was applied on GPU; false if no activation or GPU not supported.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method follows the Open/Closed Principle by delegating to the activation function's
+    /// own GPU backward implementation. Each activation function knows what it needs:
+    /// - ReLU, GELU, Swish, LeakyReLU, SiLU, Mish, etc.: Need the input from forward pass
+    /// - Sigmoid, Tanh: Need the output from forward pass
+    /// - ELU: Needs both input and output from forward pass
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During training, we need to compute how the activation affects
+    /// the gradients. Each activation function handles this differently, and by delegating
+    /// to the activation's BackwardGpu method, we don't need to know the details here.
+    /// </para>
+    /// </remarks>
+    protected bool ApplyActivationBackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (ScalarActivation is not { SupportsGpuTraining: true })
+        {
+            return false;
+        }
+
+        ScalarActivation.BackwardGpu(backend, gradOutput, input, output, gradInput, size);
+        return true;
+    }
+
+    #endregion
+
     /// <summary>
     /// Gets the fused activation type for IEngine fused operations.
     /// </summary>
@@ -2161,9 +2425,21 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <param name="size">The number of elements to process.</param>
     /// <param name="activation">The type of activation function to apply.</param>
     /// <remarks>
-    /// This method provides a reusable GPU activation function that can be called by any layer
-    /// that implements custom GPU forward passes. It maps FusedActivationType enum values to
+    /// <para>
+    /// This method is primarily used for fused kernel operations where the activation type
+    /// is specified via the <see cref="FusedActivationType"/> enum. It maps enum values to
     /// the corresponding backend activation kernels.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> For new code, prefer using <see cref="ApplyActivationForwardGpu"/> which
+    /// follows the Open/Closed Principle by delegating to each activation function's own
+    /// GPU implementation. This allows new activation functions to be added without modifying
+    /// this switch statement.
+    /// </para>
+    /// <para>
+    /// This static method only supports common activations (ReLU, Sigmoid, Tanh, GELU, LeakyReLU, Swish).
+    /// For other activations, use the OCP-compliant method instead.
+    /// </para>
     /// </remarks>
     protected static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
     {
@@ -2190,6 +2466,90 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             default:
                 backend.Copy(input, output, size);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Applies the backward pass of the specified activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for activation backward.</param>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The input from the forward pass (needed for ReLU, LeakyReLU, GELU, Swish).</param>
+    /// <param name="output">The output from the forward pass (needed for Sigmoid, Tanh).</param>
+    /// <param name="gradInput">The buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <param name="activation">The type of activation function.</param>
+    /// <param name="alpha">Alpha parameter for LeakyReLU (default 0.01).</param>
+    /// <returns>True if the backward was handled on GPU, false if CPU fallback is needed.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is primarily used for fused kernel operations where the activation type
+    /// is specified via the <see cref="FusedActivationType"/> enum.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> For new code, prefer using <see cref="ApplyActivationBackwardGpu"/> which
+    /// follows the Open/Closed Principle by delegating to each activation function's own
+    /// GPU backward implementation. This allows new activation functions to be added without
+    /// modifying this switch statement.
+    /// </para>
+    /// <para>
+    /// Different activation functions require different cached values from forward pass:
+    /// <list type="bullet">
+    /// <item><description>ReLU, LeakyReLU, GELU, Swish: Need the input from forward pass</description></item>
+    /// <item><description>Sigmoid, Tanh: Need the output from forward pass</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    protected static bool ApplyGpuActivationBackward(
+        IDirectGpuBackend backend,
+        IGpuBuffer gradOutput,
+        IGpuBuffer? input,
+        IGpuBuffer? output,
+        IGpuBuffer gradInput,
+        int size,
+        FusedActivationType activation,
+        float alpha = 0.01f)
+    {
+        switch (activation)
+        {
+            case FusedActivationType.ReLU:
+                if (input == null) return false;
+                backend.ReluBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.Sigmoid:
+                if (output == null) return false;
+                backend.SigmoidBackward(gradOutput, output, gradInput, size);
+                return true;
+
+            case FusedActivationType.Tanh:
+                if (output == null) return false;
+                backend.TanhBackward(gradOutput, output, gradInput, size);
+                return true;
+
+            case FusedActivationType.GELU:
+                if (input == null) return false;
+                backend.GeluBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.LeakyReLU:
+                if (input == null) return false;
+                backend.LeakyReluBackward(gradOutput, input, gradInput, alpha, size);
+                return true;
+
+            case FusedActivationType.Swish:
+                if (input == null) return false;
+                backend.SwishBackward(gradOutput, input, gradInput, size);
+                return true;
+
+            case FusedActivationType.None:
+                // No activation means gradient passes through unchanged
+                backend.Copy(gradOutput, gradInput, size);
+                return true;
+
+            default:
+                // Unsupported activation - caller should use CPU fallback
+                return false;
         }
     }
 

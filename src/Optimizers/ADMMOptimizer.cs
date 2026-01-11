@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -327,6 +328,24 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated ADMM.
+    /// </summary>
+    /// <remarks>
+    /// ADMM (Alternating Direction Method of Multipliers) requires maintaining dual variables
+    /// and performing alternating minimization steps.
+    /// GPU implementation is not yet available due to the multi-step iterative nature
+    /// of the algorithm.
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            "GPU-accelerated ADMM is not yet implemented. " +
+            "ADMM requires alternating optimization steps and dual variable updates " +
+            "which don't map well to single-pass GPU kernels. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

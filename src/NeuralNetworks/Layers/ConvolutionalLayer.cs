@@ -295,6 +295,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> _lastOutput;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+    private IGpuTensor<T>? _lastOutputGpu;
+    private int[]? _gpuInputShape4D;
+
     /// <summary>
     /// Tracks whether a batch dimension was added during the forward pass.
     /// </summary>
@@ -1034,9 +1039,15 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             1, 1,                // dilationH, dilationW
             fusedActivation);
 
-        // Cache state for backward pass only during training
+        // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
         if (IsTrainingMode)
         {
+            // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
+            _lastInputGpu = input4D;
+            _lastOutputGpu = result;
+            _gpuInputShape4D = input4D.Shape.ToArray();
+
+            // Also download to CPU for hybrid CPU/GPU backward compatibility
             _lastInput = input4D.ToTensor();
             _lastOutput = result.ToTensor();
         }
@@ -1063,6 +1074,113 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the convolutional layer.
+    /// Computes gradients for kernels, biases, and input entirely on GPU - no CPU roundtrip.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_lastInputGpu == null || _gpuInputShape4D == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        // Ensure gradient is 4D for computation
+        IGpuTensor<T> gradient4D;
+        if (outputGradient.Shape.Length == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            gradient4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+        else if (outputGradient.Shape.Length == 4)
+        {
+            gradient4D = outputGradient;
+        }
+        else
+        {
+            // Flatten ND gradient to 4D
+            int flatBatch = 1;
+            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
+        }
+
+        // Apply activation backward if we have a fused activation
+        var fusedActivation = MapActivationToFused();
+        IGpuTensor<T> activationGradient;
+        if (fusedActivation != FusedActivationType.None && _lastOutputGpu != null)
+        {
+            activationGradient = ComputeConvActivationGradientGpu(gpuEngine, gradient4D, fusedActivation);
+        }
+        else
+        {
+            activationGradient = gradient4D;
+        }
+
+        // Stride, padding, dilation for convolution
+        int[] stride = [Stride, Stride];
+        int[] padding = [Padding, Padding];
+        int[] dilation = [1, 1];
+
+        // Step 1: Compute kernel gradient
+        int[] kernelShape = _kernels.Shape.ToArray();
+        var kernelsGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(activationGradient, _lastInputGpu, kernelShape, stride, padding, dilation);
+        _kernelsGradient = kernelsGradGpu.ToTensor();
+
+        // Step 2: Compute bias gradient
+        var biasGradGpu = gpuEngine.Conv2DBackwardBiasGpu<T>(activationGradient);
+        _biasesGradient = biasGradGpu.ToTensor();
+
+        // Step 3: Compute input gradient
+        var inputGradient = gpuEngine.Conv2DBackwardInputGpu<T>(activationGradient, _kernels, _gpuInputShape4D, stride, padding, dilation);
+
+        // Reshape input gradient back to original shape if needed
+        if (_addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], gradient should also be 3D
+            return inputGradient.CreateView(0, [inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3]]);
+        }
+
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Restore original shape for higher-rank input
+            return inputGradient.CreateView(0, _originalInputShape);
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes activation gradient for convolutional layer using GPU-resident backward operations.
+    /// </summary>
+    private IGpuTensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, FusedActivationType activation)
+    {
+        // For convolutional layers, we need to reshape to 2D for activation backward, then reshape back
+        // Most activations are element-wise, so we can flatten the tensor
+        int totalElements = gradOutput.ElementCount;
+        var flat2DShape = new[] { totalElements, 1 };
+        var flatGrad = gradOutput.CreateView(0, flat2DShape);
+        var flatOutput = _lastOutputGpu!.CreateView(0, flat2DShape);
+
+        IGpuTensor<T> flatResult = activation switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput), // ReLU uses pre-activation, but we only have post-activation here
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(flatGrad, flatOutput),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(flatGrad, flatOutput, 0.01f),
+            _ => flatGrad
+        };
+
+        // Reshape back to 4D
+        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1582,10 +1700,15 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
+        // Clear cached values from forward pass (CPU)
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _addedBatchDimension = false;
+
+        // Clear GPU-resident cached tensors
+        _lastInputGpu = null;
+        _lastOutputGpu = null;
+        _gpuInputShape4D = null;
     }
 
     /// <summary>
@@ -1710,9 +1833,14 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Clear other managed resources
+            // Clear other managed resources (CPU)
             _kernelsGradient = null;
             _biasesGradient = null;
+
+            // Clear GPU-resident cached tensors
+            _lastInputGpu = null;
+            _lastOutputGpu = null;
+            _gpuInputShape4D = null;
         }
 
         base.Dispose(disposing);

@@ -431,6 +431,26 @@ public class DelegatingGpuBackend : IDirectGpuBackend
             outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
 
     /// <inheritdoc/>
+    public virtual void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+        => Inner.ConvTranspose2DBackwardInput(gradOutput, kernel, gradInput, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
+
+    /// <inheritdoc/>
+    public virtual void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+        => Inner.ConvTranspose2DBackwardKernel(input, gradOutput, gradKernel, batch, inChannels, inHeight, inWidth,
+            outChannels, outHeight, outWidth, kernelH, kernelW, strideH, strideW, padH, padW, outputPadH, outputPadW);
+
+    /// <inheritdoc/>
     public virtual void LocallyConnectedConv2D(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer? bias, IGpuBuffer output,
         int batch, int inChannels, int inHeight, int inWidth,
         int outChannels, int outHeight, int outWidth,
@@ -573,6 +593,18 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.GlobalMaxPool2D(input, output, batch, channels, height, width);
 
     /// <inheritdoc/>
+    public virtual void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width)
+        => Inner.GlobalMaxPool2D(input, output, indices, batch, channels, height, width);
+
+    /// <inheritdoc/>
+    public virtual void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        => Inner.GlobalAvgPool2DBackward(gradOutput, gradInput, batch, channels, height, width);
+
+    /// <inheritdoc/>
+    public virtual void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width)
+        => Inner.GlobalMaxPool2DBackward(gradOutput, indices, gradInput, batch, channels, height, width);
+
+    /// <inheritdoc/>
     public virtual void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         => Inner.AdaptiveAvgPool2D(input, output, batch, channels, inHeight, inWidth, outHeight, outWidth);
 
@@ -668,6 +700,13 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
         IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
         => Inner.InstanceNorm(input, output, gamma, beta, saveMean, saveInvVar, batch, channels, spatialSize, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+        => Inner.InstanceNormBackward(gradOutput, input, gamma, saveMean, saveInvVar, gradInput, gradGamma, gradBeta, batch, channels, spatialSize, epsilon);
 
     /// <inheritdoc/>
     public virtual void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
@@ -793,6 +832,10 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         => Inner.NearestNeighborUpsample(input, output, batchChannels, height, width, scaleFactor);
 
     /// <inheritdoc/>
+    public virtual void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor)
+        => Inner.NearestNeighborUpsampleBackward(gradOutput, gradInput, batchChannels, height, width, scaleFactor);
+
+    /// <inheritdoc/>
     public virtual void Fill(IGpuBuffer buffer, float value, int size) => Inner.Fill(buffer, value, size);
 
     #endregion
@@ -849,6 +892,21 @@ public class DelegatingGpuBackend : IDirectGpuBackend
         int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon)
         => Inner.HyperbolicLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures, curvature, epsilon);
 
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardInput(gradOutput, input, weights, gradInput, batchSize, inputFeatures, outputFeatures, curvature);
+
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardWeights(gradOutput, input, gradWeights, batchSize, inputFeatures, outputFeatures, curvature);
+
+    /// <inheritdoc/>
+    public virtual void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature)
+        => Inner.HyperbolicLinearBackwardBiases(gradOutput, input, gradBiases, batchSize, inputFeatures, outputFeatures, curvature);
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -865,6 +923,20 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures)
         => Inner.OctonionLinearForward(input, weights, biases, output, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures)
+        => Inner.OctonionLinearBackwardInput(gradOutput, input, weights, gradInput, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures)
+        => Inner.OctonionLinearBackwardWeights(gradOutput, input, gradWeights, batchSize, inputFeatures, outputFeatures);
+
+    /// <inheritdoc/>
+    public virtual void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases, int batchSize, int outputFeatures)
+        => Inner.OctonionLinearBackwardBiases(gradOutput, gradBiases, batchSize, outputFeatures);
 
     #endregion
 
@@ -959,6 +1031,34 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size)
         => Inner.Hardtanh(A, B, minVal, maxVal, size);
 
+    /// <inheritdoc/>
+    public virtual void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.SiluBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.MishBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.SoftplusBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.HardswishBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size)
+        => Inner.SeluBackward(gradOutput, input, gradInput, alpha, scale, size);
+
+    /// <inheritdoc/>
+    public virtual void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        => Inner.HardsigmoidBackward(gradOutput, input, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size)
+        => Inner.HardtanhBackward(gradOutput, input, gradInput, minVal, maxVal, size);
+
     #endregion
 
     #region Loss Functions
@@ -994,6 +1094,130 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
         => Inner.SmoothL1Backward(predictions, targets, gradInput, size, beta);
+
+    /// <inheritdoc/>
+    public virtual float TripletLoss(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative, int batchSize, int embeddingDim, float margin)
+        => Inner.TripletLoss(anchor, positive, negative, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual void TripletLossBackward(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative,
+        IGpuBuffer gradAnchor, IGpuBuffer gradPositive, IGpuBuffer gradNegative,
+        int batchSize, int embeddingDim, float margin)
+        => Inner.TripletLossBackward(anchor, positive, negative, gradAnchor, gradPositive, gradNegative, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual float HuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float delta)
+        => Inner.HuberLoss(predictions, targets, size, delta);
+
+    /// <inheritdoc/>
+    public virtual void HuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float delta)
+        => Inner.HuberBackward(predictions, targets, gradInput, size, delta);
+
+    /// <inheritdoc/>
+    public virtual float FocalLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float alpha, float gamma)
+        => Inner.FocalLoss(predictions, targets, size, alpha, gamma);
+
+    /// <inheritdoc/>
+    public virtual void FocalBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float alpha, float gamma)
+        => Inner.FocalBackward(predictions, targets, gradInput, size, alpha, gamma);
+
+    /// <inheritdoc/>
+    public virtual float MaeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.MaeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void MaeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.MaeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float LogCoshLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.LogCoshLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void LogCoshBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.LogCoshBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float QuantileLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float quantile)
+        => Inner.QuantileLoss(predictions, targets, size, quantile);
+
+    /// <inheritdoc/>
+    public virtual void QuantileBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float quantile)
+        => Inner.QuantileBackward(predictions, targets, gradInput, size, quantile);
+
+    /// <inheritdoc/>
+    public virtual float HingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.HingeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void HingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.HingeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float SquaredHingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.SquaredHingeLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void SquaredHingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.SquaredHingeBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float PoissonLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.PoissonLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void PoissonBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.PoissonBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float ExponentialLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.ExponentialLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void ExponentialBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.ExponentialBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float ModifiedHuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.ModifiedHuberLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void ModifiedHuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.ModifiedHuberBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float CategoricalCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        => Inner.CategoricalCrossEntropyLoss(predictions, targets, size);
+
+    /// <inheritdoc/>
+    public virtual void CategoricalCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        => Inner.CategoricalCrossEntropyBackward(predictions, targets, gradInput, size);
+
+    /// <inheritdoc/>
+    public virtual float CharbonnierLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float epsilon)
+        => Inner.CharbonnierLoss(predictions, targets, size, epsilon);
+
+    /// <inheritdoc/>
+    public virtual void CharbonnierBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float epsilon)
+        => Inner.CharbonnierBackward(predictions, targets, gradInput, size, epsilon);
+
+    /// <inheritdoc/>
+    public virtual float ElasticNetLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float l1Weight, float l2Weight)
+        => Inner.ElasticNetLoss(predictions, targets, size, l1Weight, l2Weight);
+
+    /// <inheritdoc/>
+    public virtual void ElasticNetBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float l1Weight, float l2Weight)
+        => Inner.ElasticNetBackward(predictions, targets, gradInput, size, l1Weight, l2Weight);
+
+    /// <inheritdoc/>
+    public virtual float ContrastiveLoss(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels, int batchSize, int embeddingDim, float margin)
+        => Inner.ContrastiveLoss(output1, output2, labels, batchSize, embeddingDim, margin);
+
+    /// <inheritdoc/>
+    public virtual void ContrastiveBackward(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels,
+        IGpuBuffer gradOutput1, IGpuBuffer gradOutput2,
+        int batchSize, int embeddingDim, float margin)
+        => Inner.ContrastiveBackward(output1, output2, labels, gradOutput1, gradOutput2, batchSize, embeddingDim, margin);
 
     #endregion
 
@@ -1108,6 +1332,74 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     public virtual void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
         => Inner.AdamWUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+        float learningRate, float rho, float epsilon, float weightDecay, int size)
+        => Inner.RmspropUpdate(param, gradient, squaredAvg, learningRate, rho, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+        float learningRate, float epsilon, float weightDecay, int size)
+        => Inner.AdagradUpdate(param, gradient, accumulatedGrad, learningRate, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size)
+        => Inner.NagUpdate(param, gradient, velocity, learningRate, momentum, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, float trustCoeff, int size)
+        => Inner.LarsUpdate(param, gradient, velocity, learningRate, momentum, weightDecay, trustCoeff, size);
+
+    /// <inheritdoc/>
+    public virtual void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.LambUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size)
+        => Inner.SgdUpdate(param, gradient, learningRate, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size)
+        => Inner.AdadeltaUpdate(param, gradient, accumGrad, accumUpdate, rho, epsilon, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.AmsgradUpdate(param, gradient, m, v, vMax, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.AdamaxUpdate(param, gradient, m, u, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size)
+        => Inner.LionUpdate(param, gradient, m, learningRate, beta1, beta2, weightDecay, size);
+
+    /// <inheritdoc/>
+    public virtual void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        => Inner.NadamUpdate(param, gradient, m, v, learningRate, beta1, beta2, epsilon, weightDecay, step, size);
+
+    /// <inheritdoc/>
+    public virtual void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size)
+        => Inner.FtrlUpdate(param, gradient, z, n, learningRate, l1Reg, l2Reg, beta, size);
+
+    /// <inheritdoc/>
+    public virtual void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size)
+        => Inner.ConvertToFp16(input, output, size);
+
+    /// <inheritdoc/>
+    public virtual void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size)
+        => Inner.ConvertToFp32(input, output, size);
 
     #endregion
 

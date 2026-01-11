@@ -797,6 +797,26 @@ public interface IDirectGpuBackend : IDisposable
         int outputPadH, int outputPadW);
 
     /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. input.
+    /// </summary>
+    void ConvTranspose2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose2D w.r.t. kernel.
+    /// </summary>
+    void ConvTranspose2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    /// <summary>
     /// Performs locally connected 2D convolution where each spatial position has unique weights.
     /// </summary>
     /// <param name="input">Input tensor [batch, inChannels, inHeight, inWidth].</param>
@@ -951,8 +971,44 @@ public interface IDirectGpuBackend : IDisposable
         int strideH, int strideW, int padH, int padW,
         bool countIncludePad);
 
+    /// <summary>
+    /// Global average pooling - reduces each spatial plane to a single value by averaging.
+    /// </summary>
     void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Global max pooling - reduces each spatial plane to a single value by taking the maximum.
+    /// Note: For backward pass with GlobalMaxPool2DBackward, use the overload that outputs indices.
+    /// </summary>
     void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Global max pooling with index output for backward pass.
+    /// Indices are stored as flattened position (h * width + w) for each (batch, channel).
+    /// </summary>
+    /// <param name="input">Input buffer [batch * channels * height * width].</param>
+    /// <param name="output">Output buffer [batch * channels].</param>
+    /// <param name="indices">Index buffer [batch * channels] - stores position of max value for backward pass.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer indices, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global average pooling.
+    /// Broadcasts gradient to all spatial positions and scales by 1/(height*width).
+    /// gradInput[b,c,h,w] = gradOutput[b,c] / (height * width)
+    /// </summary>
+    void GlobalAvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batch, int channels, int height, int width);
+
+    /// <summary>
+    /// Backward pass for global max pooling.
+    /// Scatters gradient to the positions that had maximum values.
+    /// Requires indices from GlobalMaxPool2D(input, output, indices, ...) forward pass.
+    /// gradInput[b,c,h,w] = gradOutput[b,c] if (h,w) was max position, else 0
+    /// </summary>
+    void GlobalMaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput, int batch, int channels, int height, int width);
     void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth);
 
     /// <summary>
@@ -1084,6 +1140,26 @@ public interface IDirectGpuBackend : IDisposable
 
     void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
         IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon);
+
+    /// <summary>
+    /// Computes the backward pass for Instance Normalization.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the next layer [batch, channels, spatialSize].</param>
+    /// <param name="input">Original input from forward pass [batch, channels, spatialSize].</param>
+    /// <param name="gamma">Scale parameters [channels].</param>
+    /// <param name="saveMean">Saved mean from forward pass [batch, channels].</param>
+    /// <param name="saveInvVar">Saved inverse variance from forward pass [batch, channels].</param>
+    /// <param name="gradInput">Output gradient with respect to input [batch, channels, spatialSize].</param>
+    /// <param name="gradGamma">Output gradient with respect to gamma [channels].</param>
+    /// <param name="gradBeta">Output gradient with respect to beta [channels].</param>
+    /// <param name="batch">Number of samples in the batch.</param>
+    /// <param name="channels">Number of channels.</param>
+    /// <param name="spatialSize">Spatial size (H * W for 4D input).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    void InstanceNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon);
 
     void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
         int batchSize, int normalizedSize, float epsilon);
@@ -1224,6 +1300,18 @@ public interface IDirectGpuBackend : IDisposable
     void NearestNeighborUpsample(IGpuBuffer input, IGpuBuffer output, int batchChannels, int height, int width, int scaleFactor);
 
     /// <summary>
+    /// Backward pass for 2D nearest neighbor upsampling.
+    /// Accumulates gradients from each output pixel in a scale block back to the corresponding input pixel.
+    /// </summary>
+    /// <param name="gradOutput">Gradient w.r.t. output [batchChannels x (height*scaleFactor) x (width*scaleFactor)].</param>
+    /// <param name="gradInput">Gradient w.r.t. input (output) [batchChannels x height x width].</param>
+    /// <param name="batchChannels">Combined batch and channel dimensions.</param>
+    /// <param name="height">Input height.</param>
+    /// <param name="width">Input width.</param>
+    /// <param name="scaleFactor">Upsampling scale factor (applied to both height and width).</param>
+    void NearestNeighborUpsampleBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput, int batchChannels, int height, int width, int scaleFactor);
+
+    /// <summary>
     /// Performs 3D nearest-neighbor upsampling on volumetric data.
     /// Each voxel is replicated to fill a [scaleD x scaleH x scaleW] block.
     /// </summary>
@@ -1277,25 +1365,179 @@ public interface IDirectGpuBackend : IDisposable
     void Swish(IGpuBuffer A, IGpuBuffer B, int size);
     void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Silu(IGpuBuffer A, IGpuBuffer B, int size);
+    void SiluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Mish(IGpuBuffer A, IGpuBuffer B, int size);
+    void MishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Softplus(IGpuBuffer A, IGpuBuffer B, int size);
+    void SoftplusBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Hardswish(IGpuBuffer A, IGpuBuffer B, int size);
+    void HardswishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Selu(IGpuBuffer A, IGpuBuffer B, float alpha, float scale, int size);
+    void SeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, float scale, int size);
     void Hardsigmoid(IGpuBuffer A, IGpuBuffer B, int size);
+    void HardsigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
     void Hardtanh(IGpuBuffer A, IGpuBuffer B, float minVal, float maxVal, int size);
+    void HardtanhBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float minVal, float maxVal, int size);
 
     #endregion
 
     #region Loss Functions
 
+    // ============================================================================
+    // LOSS FUNCTION REDUCTION CONVENTION:
+    // All loss functions in this API use MEAN reduction by default.
+    // Forward pass: Returns mean loss = sum(element_losses) / batch_size
+    // Backward pass: Gradients are scaled by 1/batch_size to match mean reduction.
+    // ============================================================================
+
+    /// <summary>
+    /// Cross-entropy loss for multi-class classification. Reduction: MEAN.
+    /// </summary>
     float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses);
+
+    /// <summary>
+    /// Backward pass for cross-entropy loss. Gradients scaled by 1/batchSize (mean reduction).
+    /// </summary>
     void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses);
+
+    /// <summary>
+    /// Binary cross-entropy loss. Reduction: MEAN.
+    /// </summary>
     float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+
+    /// <summary>
+    /// Backward pass for binary cross-entropy loss. Gradients scaled by 1/size (mean reduction).
+    /// </summary>
     void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    /// <summary>
+    /// Mean squared error loss. Reduction: MEAN.
+    /// </summary>
     float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+
+    /// <summary>
+    /// Backward pass for MSE loss. Gradients scaled by 2/size (derivative of mean reduction).
+    /// </summary>
     void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    /// <summary>
+    /// Smooth L1 (Huber) loss. Reduction: MEAN.
+    /// </summary>
     float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta);
+
+    /// <summary>
+    /// Backward pass for Smooth L1 loss. Gradients scaled by 1/size (mean reduction).
+    /// </summary>
     void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta);
+
+    /// <summary>
+    /// Computes triplet loss for metric learning.
+    /// Formula: loss = max(0, ||anchor - positive||² - ||anchor - negative||² + margin)
+    /// </summary>
+    /// <param name="anchor">Anchor embeddings [batchSize x embeddingDim].</param>
+    /// <param name="positive">Positive embeddings [batchSize x embeddingDim].</param>
+    /// <param name="negative">Negative embeddings [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of triplets in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for triplet loss (typically 1.0).</param>
+    /// <returns>Mean triplet loss across the batch.</returns>
+    float TripletLoss(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative, int batchSize, int embeddingDim, float margin);
+
+    /// <summary>
+    /// Computes gradients for triplet loss.
+    /// </summary>
+    /// <param name="anchor">Anchor embeddings [batchSize x embeddingDim].</param>
+    /// <param name="positive">Positive embeddings [batchSize x embeddingDim].</param>
+    /// <param name="negative">Negative embeddings [batchSize x embeddingDim].</param>
+    /// <param name="gradAnchor">Output gradient for anchor [batchSize x embeddingDim].</param>
+    /// <param name="gradPositive">Output gradient for positive [batchSize x embeddingDim].</param>
+    /// <param name="gradNegative">Output gradient for negative [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of triplets in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for triplet loss (typically 1.0).</param>
+    void TripletLossBackward(IGpuBuffer anchor, IGpuBuffer positive, IGpuBuffer negative,
+        IGpuBuffer gradAnchor, IGpuBuffer gradPositive, IGpuBuffer gradNegative,
+        int batchSize, int embeddingDim, float margin);
+
+    // Huber Loss (robust regression)
+    float HuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float delta);
+    void HuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float delta);
+
+    // Focal Loss (class imbalance)
+    float FocalLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float alpha, float gamma);
+    void FocalBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float alpha, float gamma);
+
+    // Mean Absolute Error Loss
+    float MaeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void MaeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Log-Cosh Loss
+    float LogCoshLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void LogCoshBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Quantile Loss
+    float QuantileLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float quantile);
+    void QuantileBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float quantile);
+
+    // Hinge Loss
+    float HingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void HingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Squared Hinge Loss
+    float SquaredHingeLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void SquaredHingeBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Poisson Loss
+    float PoissonLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void PoissonBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Exponential Loss
+    float ExponentialLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void ExponentialBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Modified Huber Loss
+    float ModifiedHuberLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void ModifiedHuberBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Categorical Cross-Entropy Loss
+    float CategoricalCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void CategoricalCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+
+    // Charbonnier Loss
+    float CharbonnierLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float epsilon);
+    void CharbonnierBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float epsilon);
+
+    // Elastic Net Loss
+    float ElasticNetLoss(IGpuBuffer predictions, IGpuBuffer targets, int size, float l1Weight, float l2Weight);
+    void ElasticNetBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float l1Weight, float l2Weight);
+
+    // Contrastive Loss
+    /// <summary>
+    /// Computes contrastive loss for similarity learning with paired embeddings.
+    /// </summary>
+    /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="labels">Similarity labels (0 for similar pairs to minimize distance, 1 for dissimilar pairs to push apart) [batchSize].</param>
+    /// <param name="batchSize">Number of pairs in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for dissimilar pairs (typically 1.0).</param>
+    /// <returns>Mean contrastive loss across the batch.</returns>
+    float ContrastiveLoss(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels, int batchSize, int embeddingDim, float margin);
+
+    /// <summary>
+    /// Computes gradients for contrastive loss.
+    /// </summary>
+    /// <param name="output1">First output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="output2">Second output embeddings [batchSize x embeddingDim].</param>
+    /// <param name="labels">Similarity labels (0 for similar pairs to minimize distance, 1 for dissimilar pairs to push apart) [batchSize].</param>
+    /// <param name="gradOutput1">Output gradient for first embeddings [batchSize x embeddingDim].</param>
+    /// <param name="gradOutput2">Output gradient for second embeddings [batchSize x embeddingDim].</param>
+    /// <param name="batchSize">Number of pairs in the batch.</param>
+    /// <param name="embeddingDim">Dimension of each embedding vector.</param>
+    /// <param name="margin">Margin for dissimilar pairs (typically 1.0).</param>
+    void ContrastiveBackward(IGpuBuffer output1, IGpuBuffer output2, IGpuBuffer labels,
+        IGpuBuffer gradOutput1, IGpuBuffer gradOutput2,
+        int batchSize, int embeddingDim, float margin);
 
     #endregion
 
@@ -1307,6 +1549,49 @@ public interface IDirectGpuBackend : IDisposable
     void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size);
     void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size);
     void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize);
+
+    #endregion
+
+    #region Mixed Precision
+
+    /// <summary>
+    /// Convert FP32 buffer to FP16 for mixed precision training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Buffer allocation:</b></para>
+    /// <list type="bullet">
+    /// <item>Input: Allocate(elementCount) - FP32 buffer with 4 bytes per element</item>
+    /// <item>Output: AllocateByteBuffer(elementCount * 2) - FP16 buffer with 2 bytes per element</item>
+    /// </list>
+    /// <para>The 'size' parameter is always the element count, not byte count.</para>
+    /// </remarks>
+    /// <param name="input">Input buffer containing FP32 (float) elements [elementCount floats].</param>
+    /// <param name="output">Output buffer for FP16 elements. Allocate with AllocateByteBuffer(elementCount * 2).</param>
+    /// <param name="size">Number of elements to convert (element count, not bytes).</param>
+    void ConvertToFp16(IGpuBuffer input, IGpuBuffer output, int size);
+
+    /// <summary>
+    /// Convert FP16 buffer to FP32 for mixed precision training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Buffer allocation:</b></para>
+    /// <list type="bullet">
+    /// <item>Input: AllocateByteBuffer(elementCount * 2) - FP16 buffer with 2 bytes per element</item>
+    /// <item>Output: Allocate(elementCount) - FP32 buffer with 4 bytes per element</item>
+    /// </list>
+    /// <para><b>Important note on buffer sizes:</b></para>
+    /// <para>The 'size' parameter to this method is always the <b>element count</b>, not the byte count.
+    /// When using AllocateByteBuffer, the IGpuBuffer.Size property returns the byte count (elementCount * 2),
+    /// so callers must track element count separately or divide IGpuBuffer.Size by 2 when passing to this method.</para>
+    /// <para>Example: If you have 1000 FP16 elements, allocate with AllocateByteBuffer(2000), but pass size=1000 here.</para>
+    /// </remarks>
+    /// <param name="input">Input buffer containing FP16 elements. Allocated with AllocateByteBuffer(elementCount * 2).
+    /// Note: IGpuBuffer.Size returns byte count (elementCount * 2), not element count.</param>
+    /// <param name="output">Output buffer for FP32 (float) elements [elementCount floats].</param>
+    /// <param name="size">Number of elements to convert (element count, not bytes). If using IGpuBuffer.Size from a byte buffer, divide by 2.</param>
+    void ConvertToFp32(IGpuBuffer input, IGpuBuffer output, int size);
+
+    #endregion
 
     /// <summary>
     /// Computes the backward pass for scatter-add operation.
@@ -1322,8 +1607,6 @@ public interface IDirectGpuBackend : IDisposable
         int numIndices, int featureSize);
 
     void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize);
-
-    #endregion
 
     #region Comparison Operations
 
@@ -1393,6 +1676,183 @@ public interface IDirectGpuBackend : IDisposable
 
     void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
         float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// RMSprop optimizer update: maintains moving average of squared gradients.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="squaredAvg">Moving average of squared gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="rho">Decay rate for moving average (typically 0.9).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void RmspropUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer squaredAvg,
+        float learningRate, float rho, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// Adagrad optimizer update: accumulates squared gradients over time.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="accumulatedGrad">Accumulated squared gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdagradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumulatedGrad,
+        float learningRate, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// Nesterov Accelerated Gradient (NAG) optimizer update with lookahead.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="velocity">Momentum velocity (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="momentum">Momentum coefficient.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void NagUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size);
+
+    /// <summary>
+    /// LARS (Layer-wise Adaptive Rate Scaling) optimizer update.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="velocity">Momentum velocity (state).</param>
+    /// <param name="learningRate">Global learning rate.</param>
+    /// <param name="momentum">Momentum coefficient.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="trustCoeff">Trust coefficient for scaling.</param>
+    /// <param name="size">Number of parameters.</param>
+    void LarsUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, float trustCoeff, int size);
+
+    /// <summary>
+    /// LAMB (Layer-wise Adaptive Moments) optimizer update.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">Weight decay coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void LambUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// Vanilla SGD optimizer update (no momentum).
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void SgdUpdate(IGpuBuffer param, IGpuBuffer gradient,
+        float learningRate, float weightDecay, int size);
+
+    /// <summary>
+    /// AdaDelta optimizer update: uses adaptive learning rate based on accumulated gradients and updates.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="accumGrad">Accumulated squared gradients (state).</param>
+    /// <param name="accumUpdate">Accumulated squared updates (state).</param>
+    /// <param name="rho">Decay rate for exponential averages (typically 0.95).</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdadeltaUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer accumGrad, IGpuBuffer accumUpdate,
+        float rho, float epsilon, float weightDecay, int size);
+
+    /// <summary>
+    /// AMSGrad optimizer update: Adam variant with max of second moment for stability.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="vMax">Max of second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void AmsgradUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v, IGpuBuffer vMax,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// AdaMax optimizer update: Adam variant using infinity norm instead of L2 norm.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="u">Infinity norm of gradients (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for infinity norm.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void AdamaxUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer u,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// Lion optimizer update: uses sign of interpolated momentum for efficient updates.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">Momentum state.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Interpolation weight for update computation.</param>
+    /// <param name="beta2">Exponential decay rate for momentum.</param>
+    /// <param name="weightDecay">Decoupled weight decay coefficient.</param>
+    /// <param name="size">Number of parameters.</param>
+    void LionUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m,
+        float learningRate, float beta1, float beta2, float weightDecay, int size);
+
+    /// <summary>
+    /// Nadam optimizer update: Nesterov-accelerated Adam optimizer.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="m">First moment estimate (state).</param>
+    /// <param name="v">Second moment estimate (state).</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="beta1">Exponential decay rate for first moment.</param>
+    /// <param name="beta2">Exponential decay rate for second moment.</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="weightDecay">L2 regularization coefficient.</param>
+    /// <param name="step">Current optimization step (for bias correction).</param>
+    /// <param name="size">Number of parameters.</param>
+    void NadamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    /// <summary>
+    /// FTRL (Follow The Regularized Leader) optimizer update: efficient for sparse data.
+    /// </summary>
+    /// <param name="param">Parameters to update (in-place).</param>
+    /// <param name="gradient">Gradient values.</param>
+    /// <param name="z">Accumulated sum state.</param>
+    /// <param name="n">Accumulated squared gradient state.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="l1Reg">L1 regularization coefficient.</param>
+    /// <param name="l2Reg">L2 regularization coefficient.</param>
+    /// <param name="beta">Learning rate power parameter.</param>
+    /// <param name="size">Number of parameters.</param>
+    void FtrlUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer z, IGpuBuffer n,
+        float learningRate, float l1Reg, float l2Reg, float beta, int size);
 
     #endregion
 
@@ -1658,6 +2118,46 @@ public interface IDirectGpuBackend : IDisposable
     void HyperbolicLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures, float curvature, float epsilon);
 
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes input gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="weights">Weights [outputFeatures, inputFeatures].</param>
+    /// <param name="gradInput">Output: input gradient [batchSize, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes weight gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="gradWeights">Output: weight gradient [outputFeatures, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
+    /// <summary>
+    /// Backward pass for hyperbolic linear layer - computes bias gradients.
+    /// </summary>
+    /// <param name="gradOutput">Output gradient [batchSize, outputFeatures].</param>
+    /// <param name="input">Input from forward pass [batchSize, inputFeatures].</param>
+    /// <param name="gradBiases">Output: bias gradient [outputFeatures, inputFeatures].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    /// <param name="curvature">Curvature parameter c.</param>
+    void HyperbolicLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradBiases,
+        int batchSize, int inputFeatures, int outputFeatures, float curvature);
+
     #endregion
 
     #region Octonion Algebra Operations
@@ -1694,6 +2194,43 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="outputFeatures">Output features.</param>
     void OctonionLinearForward(IGpuBuffer input, IGpuBuffer weights, IGpuBuffer biases, IGpuBuffer output,
         int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute input gradient.
+    /// Uses Jacobian of octonion multiplication for proper gradient flow.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="input">Cached input from forward pass [batchSize * inputFeatures * 8].</param>
+    /// <param name="weights">Weight octonions [outputFeatures * inputFeatures * 8].</param>
+    /// <param name="gradInput">Output gradient for previous layer [batchSize * inputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardInput(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer weights, IGpuBuffer gradInput,
+        int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute weight gradient.
+    /// Accumulates gradients over the batch dimension.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="input">Cached input from forward pass [batchSize * inputFeatures * 8].</param>
+    /// <param name="gradWeights">Output weight gradient [outputFeatures * inputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="inputFeatures">Input features.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardWeights(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradWeights,
+        int batchSize, int inputFeatures, int outputFeatures);
+
+    /// <summary>
+    /// Backward pass for octonion linear layer - compute bias gradient.
+    /// Sums output gradients over the batch dimension.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [batchSize * outputFeatures * 8].</param>
+    /// <param name="gradBiases">Output bias gradient [outputFeatures * 8].</param>
+    /// <param name="batchSize">Batch size.</param>
+    /// <param name="outputFeatures">Output features.</param>
+    void OctonionLinearBackwardBiases(IGpuBuffer gradOutput, IGpuBuffer gradBiases, int batchSize, int outputFeatures);
 
     #endregion
 
@@ -1763,12 +2300,23 @@ public interface IDirectGpuBackend : IDisposable
 public interface IGpuBuffer : IDisposable
 {
     /// <summary>
-    /// Gets the number of float elements in the buffer.
+    /// Gets the number of elements in the buffer.
+    /// For standard buffers allocated via AllocateBuffer(), this represents float elements.
+    /// For mixed-precision FP16 buffers, this still represents the element count (not bytes),
+    /// but each element is 2 bytes instead of 4.
     /// </summary>
+    /// <remarks>
+    /// When using ConvertToFp16/ConvertToFp32, the 'size' parameter is always the element count.
+    /// The caller must ensure buffer allocation accounts for the correct byte size:
+    /// - FP32 (float): size * 4 bytes
+    /// - FP16 (half): size * 2 bytes
+    /// </remarks>
     int Size { get; }
 
     /// <summary>
-    /// Gets the size in bytes.
+    /// Gets the total size in bytes.
+    /// For standard float buffers: Size * 4.
+    /// For FP16 buffers: Size * 2.
     /// </summary>
     long SizeInBytes { get; }
 

@@ -63,6 +63,18 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalQueryShape;
 
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuQuery;
+    private IGpuTensor<T>? _gpuContext;
+    private IGpuTensor<T>? _gpuQ;
+    private IGpuTensor<T>? _gpuK;
+    private IGpuTensor<T>? _gpuV;
+    private IGpuTensor<T>? _gpuAttnOutput;
+    private IGpuTensor<T>? _gpuAttnWeights;
+    private int _gpuBatch;
+    private int _gpuQueryLen;
+    private int _gpuContextLen;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -535,6 +547,146 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         return inputGradient;
     }
 
+    /// <summary>
+    /// Performs the backward pass on GPU for the cross-attention layer.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the query input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuQuery == null || _gpuContext == null || _gpuQ == null || _gpuK == null || _gpuV == null ||
+            _gpuAttnOutput == null || _gpuAttnWeights == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int batch = _gpuBatch;
+        int queryLen = _gpuQueryLen;
+        int contextLen = _gpuContextLen;
+        int flatQueryLen = batch * queryLen;
+        int flatContextLen = batch * contextLen;
+
+        // Step 1: Backprop through output projection and bias
+        // Forward: output = contextFlat @ outputWeights + bias
+        // Backward: dOutputWeights = dOutput.T @ contextFlat, dAttnOutput = dOutput @ outputWeights.T, dBias = sum(dOutput)
+
+        // Flatten output gradient for matmul
+        var dOutputFlat = gpuEngine.ReshapeGpu(outputGradient, [flatQueryLen, _queryDim]);
+        var attnOutputFlat = gpuEngine.ReshapeGpu(_gpuAttnOutput, [flatQueryLen, _queryDim]);
+
+        // Upload weights to GPU
+        var gpuOutputWeights = gpuEngine.UploadToGpu(_outputWeights, GpuTensorRole.Weight);
+
+        // Compute output weight gradient: dOutput.T @ attnOutput
+        var dOutputFlatT = gpuEngine.TransposeGpu(dOutputFlat);
+        var gpuDOutputWeights = gpuEngine.MatMulGpuTensors(dOutputFlatT, attnOutputFlat);
+        _outputWeightsGradient = gpuDOutputWeights.ToTensor();
+
+        // Compute output bias gradient: sum over batch*seq dimension
+        var gpuDBias = gpuEngine.SumAxisGpu(dOutputFlat, 0);
+        _outputBiasGradient = gpuDBias.ToTensor();
+
+        // Compute gradient through output projection: dAttnOutput = dOutput @ outputWeights.T
+        var outputWeightsT = gpuEngine.TransposeGpu(gpuOutputWeights);
+        var dAttnOutputFlat = gpuEngine.MatMulGpuTensors(dOutputFlat, outputWeightsT);
+        var dAttnOutput = gpuEngine.ReshapeGpu(dAttnOutputFlat, [batch, queryLen, _queryDim]);
+
+        // Step 2: Backprop through attention (multi-head)
+        // Reshape to 4D for attention backward: [B, queryLen, numHeads, headDim] -> [B, numHeads, queryLen, headDim]
+        var dAttnReshaped = gpuEngine.ReshapeGpu(dAttnOutput, [batch, queryLen, _headCount, _headDim]);
+        var dAttnPermuted = gpuEngine.PermuteGpu(dAttnReshaped, [0, 2, 1, 3]);
+
+        // Reshape Q, K, V to 4D for attention backward
+        var qReshaped = gpuEngine.ReshapeGpu(_gpuQ, [batch, queryLen, _headCount, _headDim]);
+        var kReshaped = gpuEngine.ReshapeGpu(_gpuK, [batch, contextLen, _headCount, _headDim]);
+        var vReshaped = gpuEngine.ReshapeGpu(_gpuV, [batch, contextLen, _headCount, _headDim]);
+        var qPermuted = gpuEngine.PermuteGpu(qReshaped, [0, 2, 1, 3]);
+        var kPermuted = gpuEngine.PermuteGpu(kReshaped, [0, 2, 1, 3]);
+        var vPermuted = gpuEngine.PermuteGpu(vReshaped, [0, 2, 1, 3]);
+
+        // Reshape attention weights to 4D
+        var attnWeights4D = gpuEngine.ReshapeGpu(_gpuAttnWeights, [batch, _headCount, queryLen, contextLen]);
+
+        // Use ScaledDotProductAttentionBackwardGpu
+        double scale = 1.0 / Math.Sqrt(_headDim);
+        var (dQ4D, dK4D, dV4D) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
+            dAttnPermuted, qPermuted, kPermuted, vPermuted, attnWeights4D, scale);
+
+        // Permute gradients back to [B, seqLen, numHeads, headDim]
+        var dQPermuted = gpuEngine.PermuteGpu(dQ4D, [0, 2, 1, 3]);
+        var dKPermuted = gpuEngine.PermuteGpu(dK4D, [0, 2, 1, 3]);
+        var dVPermuted = gpuEngine.PermuteGpu(dV4D, [0, 2, 1, 3]);
+
+        // Reshape to [B, seqLen, queryDim]
+        var dQ = gpuEngine.ReshapeGpu(dQPermuted, [batch, queryLen, _queryDim]);
+        var dK = gpuEngine.ReshapeGpu(dKPermuted, [batch, contextLen, _queryDim]);
+        var dV = gpuEngine.ReshapeGpu(dVPermuted, [batch, contextLen, _queryDim]);
+
+        // Step 3: Backprop through Q, K, V projections
+        // Forward: Q = query @ queryWeights, K = context @ keyWeights, V = context @ valueWeights
+        // Backward: dQueryWeights = dQ.T @ query, dKeyWeights = dK.T @ context, dValueWeights = dV.T @ context
+
+        // Flatten for matmul
+        var dQFlat = gpuEngine.ReshapeGpu(dQ, [flatQueryLen, _queryDim]);
+        var dKFlat = gpuEngine.ReshapeGpu(dK, [flatContextLen, _queryDim]);
+        var dVFlat = gpuEngine.ReshapeGpu(dV, [flatContextLen, _queryDim]);
+
+        var queryFlat = gpuEngine.ReshapeGpu(_gpuQuery, [flatQueryLen, _queryDim]);
+        var contextFlat = gpuEngine.ReshapeGpu(_gpuContext, [flatContextLen, _contextDim]);
+
+        // Upload weights
+        var gpuQueryWeights = gpuEngine.UploadToGpu(_queryWeights, GpuTensorRole.Weight);
+        var gpuKeyWeights = gpuEngine.UploadToGpu(_keyWeights, GpuTensorRole.Weight);
+        var gpuValueWeights = gpuEngine.UploadToGpu(_valueWeights, GpuTensorRole.Weight);
+
+        // Compute weight gradients
+        var dQFlatT = gpuEngine.TransposeGpu(dQFlat);
+        var dKFlatT = gpuEngine.TransposeGpu(dKFlat);
+        var dVFlatT = gpuEngine.TransposeGpu(dVFlat);
+
+        var gpuDQueryWeights = gpuEngine.MatMulGpuTensors(dQFlatT, queryFlat);
+        var gpuDKeyWeights = gpuEngine.MatMulGpuTensors(dKFlatT, contextFlat);
+        var gpuDValueWeights = gpuEngine.MatMulGpuTensors(dVFlatT, contextFlat);
+
+        _queryWeightsGradient = gpuDQueryWeights.ToTensor();
+        _keyWeightsGradient = gpuDKeyWeights.ToTensor();
+        _valueWeightsGradient = gpuDValueWeights.ToTensor();
+
+        // Compute query input gradient: dQuery = dQ @ queryWeights.T
+        var queryWeightsT = gpuEngine.TransposeGpu(gpuQueryWeights);
+        var dQueryFlat = gpuEngine.MatMulGpuTensors(dQFlat, queryWeightsT);
+
+        // Reshape back to 3D: [B, queryLen, queryDim]
+        var dQuery = gpuEngine.ReshapeGpu(dQueryFlat, [batch, queryLen, _queryDim]);
+
+        // Restore original shape if needed
+        if (_originalQueryShape != null)
+        {
+            int origRank = _originalQueryShape.Length;
+            if (origRank == 2)
+            {
+                dQuery = gpuEngine.ReshapeGpu(dQuery, [queryLen, _queryDim]);
+            }
+            else if (origRank == 4)
+            {
+                int height = _originalQueryShape[2];
+                int width = _originalQueryShape[3];
+                dQuery = ReshapeNLCToNCHWGpu(gpuEngine, dQuery, batch, _queryDim, height, width);
+            }
+            else if (origRank > 3)
+            {
+                dQuery = gpuEngine.ReshapeGpu(dQuery, _originalQueryShape);
+            }
+        }
+
+        return dQuery;
+    }
+
     private Tensor<T> TransposeWeights(Tensor<T> weights)
     {
         // Use IEngine for GPU-accelerated 2D tensor transpose
@@ -739,6 +891,19 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
+            // Cache GPU tensors for GPU backward pass
+            _gpuQuery = query;
+            _gpuContext = context;
+            _gpuQ = Q;
+            _gpuK = K;
+            _gpuV = V;
+            _gpuAttnOutput = contextFlat;
+            _gpuAttnWeights = attentionWeightsGpu;
+            _gpuBatch = batch;
+            _gpuQueryLen = queryLen;
+            _gpuContextLen = contextLen;
+
+            // Also cache CPU tensors for CPU backward compatibility
             _lastQuery = query.ToTensor();
             _lastContext = context.ToTensor();
             _lastAttentionScores = attentionWeightsGpu?.ToTensor();
@@ -849,6 +1014,15 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuQuery = null;
+        _gpuContext = null;
+        _gpuQ = null;
+        _gpuK = null;
+        _gpuV = null;
+        _gpuAttnOutput = null;
+        _gpuAttnWeights = null;
     }
 
     /// <inheritdoc/>

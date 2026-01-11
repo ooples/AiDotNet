@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -211,6 +212,22 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _previousUpdate[index] = update;
 
         return NumOps.Negate(update);
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated coordinate descent.
+    /// </summary>
+    /// <remarks>
+    /// Coordinate descent optimizes one coordinate at a time sequentially.
+    /// GPU implementation is not yet available because coordinate descent's sequential
+    /// nature doesn't parallelize well on GPU.
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            "GPU-accelerated coordinate descent is not yet implemented. " +
+            "Coordinate descent's sequential per-coordinate updates don't parallelize well on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

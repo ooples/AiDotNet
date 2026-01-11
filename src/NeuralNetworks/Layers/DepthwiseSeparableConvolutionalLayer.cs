@@ -1,4 +1,6 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -244,6 +246,41 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _biasesGradient;
+
+    #region GPU Training Fields
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuTensor<T>? _gpuLastOutput;
+
+    // GPU weight buffers
+    private GpuTensor<T>? _gpuDepthwiseKernels;
+    private GpuTensor<T>? _gpuPointwiseKernels;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient buffers
+    private GpuTensor<T>? _gpuDepthwiseKernelsGradient;
+    private GpuTensor<T>? _gpuPointwiseKernelsGradient;
+    private GpuTensor<T>? _gpuBiasesGradient;
+
+    // GPU velocity buffers (SGD momentum)
+    private GpuTensor<T>? _gpuDepthwiseKernelsVelocity;
+    private GpuTensor<T>? _gpuPointwiseKernelsVelocity;
+    private GpuTensor<T>? _gpuBiasesVelocity;
+
+    // GPU Adam first moment buffers
+    private GpuTensor<T>? _gpuDepthwiseKernelsM;
+    private GpuTensor<T>? _gpuPointwiseKernelsM;
+    private GpuTensor<T>? _gpuBiasesM;
+
+    // GPU Adam second moment buffers
+    private GpuTensor<T>? _gpuDepthwiseKernelsV;
+    private GpuTensor<T>? _gpuPointwiseKernelsV;
+    private GpuTensor<T>? _gpuBiasesV;
+    #endregion
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-resident training.
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
 
     /// <summary>
     /// The number of channels in the input data.
@@ -905,6 +942,13 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             outputShape[originalInputShape.Length - 2] = result.Shape[2];
             outputShape[originalInputShape.Length - 1] = result.Shape[3];
             return result.CreateView(0, outputShape);
+        }
+
+        // Cache for GPU-resident training
+        if (IsTrainingMode)
+        {
+            _gpuLastInput = input;
+            _gpuLastOutput = result;
         }
 
         if (addedBatchDimension)
@@ -1599,4 +1643,151 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
         return output;
     }
+
+    #region GPU Training Methods
+
+    /// <summary>
+    /// Performs the backward pass on GPU tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // CPU fallback: download gradient, run Backward(), upload result
+        var outputGradCpu = outputGradient.ToTensor();
+        var inputGradCpu = Backward(outputGradCpu);
+
+        // Upload gradient buffers to GPU for UpdateParametersGpu
+        if (_depthwiseKernelsGradient is not null)
+        {
+            _gpuDepthwiseKernelsGradient?.Dispose();
+            _gpuDepthwiseKernelsGradient = new GpuTensor<T>(backend, _depthwiseKernelsGradient, GpuTensorRole.Gradient);
+        }
+
+        if (_pointwiseKernelsGradient is not null)
+        {
+            _gpuPointwiseKernelsGradient?.Dispose();
+            _gpuPointwiseKernelsGradient = new GpuTensor<T>(backend, _pointwiseKernelsGradient, GpuTensorRole.Gradient);
+        }
+
+        if (_biasesGradient is not null)
+        {
+            _gpuBiasesGradient?.Dispose();
+            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
+        }
+
+        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using the configured optimizer.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Ensure GPU weight buffers exist
+        _gpuDepthwiseKernels ??= new GpuTensor<T>(backend, _depthwiseKernels, GpuTensorRole.Weight);
+        _gpuPointwiseKernels ??= new GpuTensor<T>(backend, _pointwiseKernels, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
+
+        // Ensure optimizer state exists
+        EnsureDepthwiseSepOptimizerState(config, backend);
+
+        // Apply updates for depthwise kernels
+        if (_gpuDepthwiseKernelsGradient is not null)
+        {
+            var state = BuildDepthwiseSepOptimizerState("depthwise");
+            config.ApplyUpdate(backend, _gpuDepthwiseKernels.Buffer, _gpuDepthwiseKernelsGradient.Buffer, state, _depthwiseKernels.Length);
+        }
+
+        // Apply updates for pointwise kernels
+        if (_gpuPointwiseKernelsGradient is not null)
+        {
+            var state = BuildDepthwiseSepOptimizerState("pointwise");
+            config.ApplyUpdate(backend, _gpuPointwiseKernels.Buffer, _gpuPointwiseKernelsGradient.Buffer, state, _pointwiseKernels.Length);
+        }
+
+        // Apply updates for biases
+        if (_gpuBiasesGradient is not null)
+        {
+            var state = BuildDepthwiseSepOptimizerState("biases");
+            config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasesGradient.Buffer, state, _biases.Length);
+        }
+
+        // Download updated weights back to CPU tensors
+        _depthwiseKernels = _gpuDepthwiseKernels.ToTensor();
+        _pointwiseKernels = _gpuPointwiseKernels.ToTensor();
+        _biases = _gpuBiases.ToTensor();
+
+        // Notify engine that tensor data has changed
+        Engine.InvalidatePersistentTensor(_depthwiseKernels);
+        Engine.InvalidatePersistentTensor(_pointwiseKernels);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    private void EnsureDepthwiseSepOptimizerState(IGpuOptimizerConfig config, IDirectGpuBackend backend)
+    {
+        var optimizerType = config.OptimizerType;
+
+        // Ensure velocity buffers for SGD momentum, NAG, LARS
+        if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
+        {
+            _gpuDepthwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+
+        // Ensure Adam moment buffers
+        if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
+        {
+            _gpuDepthwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+    }
+
+    private GpuOptimizerState BuildDepthwiseSepOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "depthwise" => new GpuOptimizerState
+            {
+                Velocity = _gpuDepthwiseKernelsVelocity?.Buffer,
+                M = _gpuDepthwiseKernelsM?.Buffer,
+                V = _gpuDepthwiseKernelsV?.Buffer
+            },
+            "pointwise" => new GpuOptimizerState
+            {
+                Velocity = _gpuPointwiseKernelsVelocity?.Buffer,
+                M = _gpuPointwiseKernelsM?.Buffer,
+                V = _gpuPointwiseKernelsV?.Buffer
+            },
+            "biases" => new GpuOptimizerState
+            {
+                Velocity = _gpuBiasesVelocity?.Buffer,
+                M = _gpuBiasesM?.Buffer,
+                V = _gpuBiasesV?.Buffer
+            },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 }

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -92,6 +93,9 @@ public class MeanLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// The input tensor from the most recent forward pass.
     /// </summary>
@@ -109,6 +113,11 @@ public class MeanLayer<T> : LayerBase<T>
     /// useful for certain operations or debugging.
     /// </remarks>
     private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Cached input shape for GPU backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MeanLayer{T}"/> class with the specified input shape and axis.
@@ -272,9 +281,11 @@ public class MeanLayer<T> : LayerBase<T>
         backend.Scale(sumBuffer, outputBuffer, scale, outerSize);
         sumBuffer.Dispose();
 
-        // Cache for backward pass (only download if training)
+        // Cache for backward pass (only when training)
         if (IsTrainingMode)
         {
+            _gpuCachedInputShape = (int[])shape.Clone();
+
             // For backward pass, we need the input cached
             // Download only when in training mode to minimize overhead during inference
             var inputData = backend.DownloadBuffer(input.Buffer);
@@ -285,6 +296,80 @@ public class MeanLayer<T> : LayerBase<T>
         }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <inheritdoc/>
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// The backward pass broadcasts the output gradient back to the input shape
+    /// and scales by 1/axisSize (since mean = sum/N, gradient is distributed evenly).
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called in training mode before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        int[] inputShape = _gpuCachedInputShape;
+        int axisSize = inputShape[Axis];
+        float scale = 1.0f / axisSize;
+
+        int inputSize = 1;
+        foreach (var dim in inputShape) inputSize *= dim;
+
+        // Download gradient and broadcast on CPU, then upload
+        // (More efficient would be a GPU broadcast kernel, but this ensures correctness)
+        var gradData = backend.DownloadBuffer(outputGradient.Buffer);
+
+        // Compute strides for broadcast
+        int[] outputShape = outputGradient.Shape;
+        int[] inputStrides = new int[inputShape.Length];
+        int[] outputStrides = new int[outputShape.Length];
+        inputStrides[inputShape.Length - 1] = 1;
+        for (int i = inputShape.Length - 2; i >= 0; i--)
+            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
+
+        if (outputShape.Length > 0)
+        {
+            outputStrides[outputShape.Length - 1] = 1;
+            for (int i = outputShape.Length - 2; i >= 0; i--)
+                outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
+        }
+
+        // Broadcast and scale on CPU
+        var broadcastedData = new float[inputSize];
+        System.Threading.Tasks.Parallel.For(0, inputSize, idx =>
+        {
+            // Convert linear index to multi-dimensional indices
+            int remaining = idx;
+            int outputIdx = 0;
+            int outDimIdx = 0;
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                int dimIdx = remaining / inputStrides[d];
+                remaining %= inputStrides[d];
+
+                // Skip the axis dimension when computing output index
+                if (d != Axis)
+                {
+                    outputIdx += dimIdx * outputStrides[outDimIdx];
+                    outDimIdx++;
+                }
+            }
+            broadcastedData[idx] = gradData[outputIdx] * scale;
+        });
+
+        var gradInputBuffer = backend.AllocateBuffer(broadcastedData);
+        return new GpuTensor<T>(backend, gradInputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -483,6 +568,7 @@ public class MeanLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
         _lastOutput = null;
+        _gpuCachedInputShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

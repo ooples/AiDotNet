@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
@@ -331,6 +332,22 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated L-BFGS.
+    /// </summary>
+    /// <remarks>
+    /// L-BFGS is a limited-memory quasi-Newton method that maintains history of past gradients.
+    /// GPU implementation is not yet available due to the complexity of two-loop recursion
+    /// and history management across GPU memory.
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            "GPU-accelerated L-BFGS is not yet implemented. L-BFGS requires maintaining gradient history " +
+            "and performing two-loop recursion which is complex to implement efficiently on GPU. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

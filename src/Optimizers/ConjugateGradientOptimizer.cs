@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -261,6 +262,22 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
         {
             throw new ArgumentException("Invalid options type. Expected ConjugateGradientOptimizerOptions.");
         }
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated conjugate gradient.
+    /// </summary>
+    /// <remarks>
+    /// Conjugate gradient requires maintaining conjugate direction vectors.
+    /// GPU implementation is not yet available due to the complexity of line search
+    /// and conjugate direction updates that span multiple kernel invocations.
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            "GPU-accelerated conjugate gradient is not yet implemented. " +
+            "Conjugate gradient requires line search and direction updates that span multiple operations. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
     }
 
     /// <summary>

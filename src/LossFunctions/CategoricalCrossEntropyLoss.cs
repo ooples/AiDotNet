@@ -1,5 +1,7 @@
 
 
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -71,5 +73,36 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // When used with softmax, the derivative simplifies to (predicted - actual)
         // Note: Not averaged since the loss is a sum over classes
         return predicted.Subtract(actual);
+    }
+
+    /// <summary>
+    /// Calculates both Categorical Cross Entropy loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+
+        // Compute loss on GPU
+        float lossValue = backend.CategoricalCrossEntropyLoss(predicted.Buffer, actual.Buffer, size);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.CategoricalCrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
     }
 }

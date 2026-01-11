@@ -281,6 +281,73 @@ public class GRULayer<T> : LayerBase<T>
     /// </remarks>
     private readonly IVectorActivationFunction<T>? _vectorRecurrentActivation;
 
+    #region GPU Training Fields
+
+    // GPU-resident weight tensors
+    private GpuTensor<T>? _gpuWz;
+    private GpuTensor<T>? _gpuWr;
+    private GpuTensor<T>? _gpuWh;
+    private GpuTensor<T>? _gpuUz;
+    private GpuTensor<T>? _gpuUr;
+    private GpuTensor<T>? _gpuUh;
+    private GpuTensor<T>? _gpuBz;
+    private GpuTensor<T>? _gpuBr;
+    private GpuTensor<T>? _gpuBh;
+
+    // GPU-resident gradient tensors
+    private GpuTensor<T>? _gpuWzGradient;
+    private GpuTensor<T>? _gpuWrGradient;
+    private GpuTensor<T>? _gpuWhGradient;
+    private GpuTensor<T>? _gpuUzGradient;
+    private GpuTensor<T>? _gpuUrGradient;
+    private GpuTensor<T>? _gpuUhGradient;
+    private GpuTensor<T>? _gpuBzGradient;
+    private GpuTensor<T>? _gpuBrGradient;
+    private GpuTensor<T>? _gpuBhGradient;
+
+    // GPU-resident optimizer state tensors (SGD/NAG/LARS velocity)
+    private GpuTensor<T>? _gpuWzVelocity;
+    private GpuTensor<T>? _gpuWrVelocity;
+    private GpuTensor<T>? _gpuWhVelocity;
+    private GpuTensor<T>? _gpuUzVelocity;
+    private GpuTensor<T>? _gpuUrVelocity;
+    private GpuTensor<T>? _gpuUhVelocity;
+    private GpuTensor<T>? _gpuBzVelocity;
+    private GpuTensor<T>? _gpuBrVelocity;
+    private GpuTensor<T>? _gpuBhVelocity;
+
+    // Adam/AdamW M (first moment) tensors
+    private GpuTensor<T>? _gpuWzM;
+    private GpuTensor<T>? _gpuWrM;
+    private GpuTensor<T>? _gpuWhM;
+    private GpuTensor<T>? _gpuUzM;
+    private GpuTensor<T>? _gpuUrM;
+    private GpuTensor<T>? _gpuUhM;
+    private GpuTensor<T>? _gpuBzM;
+    private GpuTensor<T>? _gpuBrM;
+    private GpuTensor<T>? _gpuBhM;
+
+    // Adam/AdamW V (second moment) tensors
+    private GpuTensor<T>? _gpuWzV;
+    private GpuTensor<T>? _gpuWrV;
+    private GpuTensor<T>? _gpuWhV;
+    private GpuTensor<T>? _gpuUzV;
+    private GpuTensor<T>? _gpuUrV;
+    private GpuTensor<T>? _gpuUhV;
+    private GpuTensor<T>? _gpuBzV;
+    private GpuTensor<T>? _gpuBrV;
+    private GpuTensor<T>? _gpuBhV;
+
+    // Cached forward pass state for backpropagation (BPTT)
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuTensor<T>[]? _gpuCachedZGates;
+    private IGpuTensor<T>[]? _gpuCachedRGates;
+    private IGpuTensor<T>[]? _gpuCachedHCandidates;
+    private IGpuTensor<T>[]? _gpuCachedHiddenStates;
+    private IGpuTensor<T>? _gpuInitialHiddenState;
+
+    #endregion
+
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
     /// </summary>
@@ -814,6 +881,9 @@ public class GRULayer<T> : LayerBase<T>
         List<IGpuBuffer>? hCanBufferSnapshots = null;
         List<IGpuBuffer>? hBufferSnapshots = null;
 
+        // Check if we should cache states on GPU for GPU-resident training
+        bool cacheForGpuTraining = IsTrainingMode && Engine is DirectGpuTensorEngine;
+
         if (IsTrainingMode)
         {
             cachedZ = new List<float[]>(sequenceLength);
@@ -826,6 +896,22 @@ public class GRULayer<T> : LayerBase<T>
             rBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
             hCanBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
             hBufferSnapshots = new List<IGpuBuffer>(sequenceLength);
+
+            // Clear and prepare GPU training cache for GPU-resident backprop
+            if (cacheForGpuTraining)
+            {
+                ClearGpuTrainingCache();
+                _gpuCachedZGates = new IGpuTensor<T>[sequenceLength];
+                _gpuCachedRGates = new IGpuTensor<T>[sequenceLength];
+                _gpuCachedHCandidates = new IGpuTensor<T>[sequenceLength];
+                _gpuCachedHiddenStates = new IGpuTensor<T>[sequenceLength];
+                _gpuLastInput = input;
+
+                // Cache initial hidden state (zeros)
+                var initHBuffer = backend.AllocateBuffer(hiddenBufferSize);
+                backend.Fill(initHBuffer, 0.0f, hiddenBufferSize);
+                _gpuInitialHiddenState = new GpuTensor<T>(backend, initHBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+            }
         }
 
         try
@@ -894,6 +980,26 @@ public class GRULayer<T> : LayerBase<T>
                     rBufferSnapshots!.Add(rSnapshot);
                     hCanBufferSnapshots!.Add(hCanSnapshot);
                     hBufferSnapshots!.Add(hSnapshot);
+
+                    // Also cache for GPU-resident training (keep separate GpuTensor references)
+                    if (cacheForGpuTraining && _gpuCachedZGates is not null && _gpuCachedRGates is not null &&
+                        _gpuCachedHCandidates is not null && _gpuCachedHiddenStates is not null)
+                    {
+                        var zTensorBuffer = backend.AllocateBuffer(hiddenBufferSize);
+                        var rTensorBuffer = backend.AllocateBuffer(hiddenBufferSize);
+                        var hCanTensorBuffer = backend.AllocateBuffer(hiddenBufferSize);
+                        var hTensorBuffer = backend.AllocateBuffer(hiddenBufferSize);
+
+                        backend.Copy(zGateBuffer, zTensorBuffer, hiddenBufferSize);
+                        backend.Copy(rGateBuffer, rTensorBuffer, hiddenBufferSize);
+                        backend.Copy(hCandidateBuffer, hCanTensorBuffer, hiddenBufferSize);
+                        backend.Copy(newHBuffer, hTensorBuffer, hiddenBufferSize);
+
+                        _gpuCachedZGates[t] = new GpuTensor<T>(backend, zTensorBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+                        _gpuCachedRGates[t] = new GpuTensor<T>(backend, rTensorBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+                        _gpuCachedHCandidates[t] = new GpuTensor<T>(backend, hCanTensorBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+                        _gpuCachedHiddenStates[t] = new GpuTensor<T>(backend, hTensorBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+                    }
                 }
 
                 // Swap hidden state buffers
@@ -1983,5 +2089,424 @@ public class GRULayer<T> : LayerBase<T>
         clone._dbh = null;
 
         return clone;
+    }
+
+    /// <summary>
+    /// Clears the GPU training cache to release GPU memory.
+    /// </summary>
+    private void ClearGpuTrainingCache()
+    {
+        if (_gpuCachedZGates != null)
+        {
+            foreach (var tensor in _gpuCachedZGates)
+                tensor?.Dispose();
+            _gpuCachedZGates = null;
+        }
+        if (_gpuCachedRGates != null)
+        {
+            foreach (var tensor in _gpuCachedRGates)
+                tensor?.Dispose();
+            _gpuCachedRGates = null;
+        }
+        if (_gpuCachedHCandidates != null)
+        {
+            foreach (var tensor in _gpuCachedHCandidates)
+                tensor?.Dispose();
+            _gpuCachedHCandidates = null;
+        }
+        if (_gpuCachedHiddenStates != null)
+        {
+            foreach (var tensor in _gpuCachedHiddenStates)
+                tensor?.Dispose();
+            _gpuCachedHiddenStates = null;
+        }
+        _gpuInitialHiddenState?.Dispose();
+        _gpuInitialHiddenState = null;
+        _gpuLastInput = null; // Don't dispose - owned by caller
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass implementing Backpropagation Through Time (BPTT).
+    /// Computes gradients for all weights and biases directly on GPU.
+    /// </summary>
+    /// <param name="outputGradient">Gradient of the loss with respect to the layer output.</param>
+    /// <returns>Gradient of the loss with respect to the layer input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuLastInput == null || _gpuCachedZGates == null || _gpuCachedRGates == null ||
+            _gpuCachedHCandidates == null || _gpuCachedHiddenStates == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        int batchSize = _gpuLastInput.Shape[0];
+        int timeSteps = _gpuCachedZGates.Length;
+        int hiddenBufferSize = batchSize * _hiddenSize;
+        int inputBufferSize = batchSize * _inputSize;
+
+        // Initialize gradient accumulators for weights (zeros)
+        var dWzBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
+        var dWrBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
+        var dWhBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
+        var dUzBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
+        var dUrBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
+        var dUhBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
+        var dBzBuffer = backend.AllocateBuffer(_hiddenSize);
+        var dBrBuffer = backend.AllocateBuffer(_hiddenSize);
+        var dBhBuffer = backend.AllocateBuffer(_hiddenSize);
+
+        backend.Fill(dWzBuffer, 0.0f, _hiddenSize * _inputSize);
+        backend.Fill(dWrBuffer, 0.0f, _hiddenSize * _inputSize);
+        backend.Fill(dWhBuffer, 0.0f, _hiddenSize * _inputSize);
+        backend.Fill(dUzBuffer, 0.0f, _hiddenSize * _hiddenSize);
+        backend.Fill(dUrBuffer, 0.0f, _hiddenSize * _hiddenSize);
+        backend.Fill(dUhBuffer, 0.0f, _hiddenSize * _hiddenSize);
+        backend.Fill(dBzBuffer, 0.0f, _hiddenSize);
+        backend.Fill(dBrBuffer, 0.0f, _hiddenSize);
+        backend.Fill(dBhBuffer, 0.0f, _hiddenSize);
+
+        // Allocate input gradient buffer
+        int inputGradientSize = batchSize * timeSteps * _inputSize;
+        var inputGradientBuffer = backend.AllocateBuffer(inputGradientSize);
+        backend.Fill(inputGradientBuffer, 0.0f, inputGradientSize);
+
+        // Upload transposed weights to GPU for backward matmul
+        using var WzT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Wz.ToArray()));
+        using var WrT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Wr.ToArray()));
+        using var WhT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Wh.ToArray()));
+        using var UzT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Uz.ToArray()));
+        using var UrT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Ur.ToArray()));
+        using var UhT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_Uh.ToArray()));
+
+        // Temporary buffers
+        var dHNext = backend.AllocateBuffer(hiddenBufferSize);
+        var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
+        var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
+        var dZ = backend.AllocateBuffer(hiddenBufferSize);
+        var dR = backend.AllocateBuffer(hiddenBufferSize);
+        var dHCandidate = backend.AllocateBuffer(hiddenBufferSize);
+        var dHPrev = backend.AllocateBuffer(hiddenBufferSize);
+
+        // Additional buffers for transpose operations
+        var inputTranspose = backend.AllocateBuffer(inputBufferSize);
+        var hiddenTranspose = backend.AllocateBuffer(hiddenBufferSize);
+        var gateGradTranspose = backend.AllocateBuffer(hiddenBufferSize);
+        int maxWeightSize = Math.Max(_inputSize, _hiddenSize) * _hiddenSize;
+        var weightGradBuffer = backend.AllocateBuffer(maxWeightSize);
+        var inputGradTemp = backend.AllocateBuffer(inputBufferSize);
+        var hiddenGradTemp = backend.AllocateBuffer(hiddenBufferSize);
+
+        backend.Fill(dHNext, 0.0f, hiddenBufferSize);
+
+        try
+        {
+            // Process each time step in reverse order (BPTT)
+            for (int t = timeSteps - 1; t >= 0; t--)
+            {
+                // Get output gradient for this timestep
+                int gradOffset = t * hiddenBufferSize;
+                var gradSlice = outputGradient.CreateView(gradOffset, [batchSize, _hiddenSize]);
+
+                // Add gradient from next timestep to current output gradient
+                backend.Add(gradSlice.Buffer, dHNext, dHNext, hiddenBufferSize);
+
+                // Get cached states
+                var z_t = _gpuCachedZGates[t];
+                var r_t = _gpuCachedRGates[t];
+                var hCan_t = _gpuCachedHCandidates[t];
+                var h_t = _gpuCachedHiddenStates[t];
+
+                // Get previous hidden state
+                IGpuTensor<T> h_prev = t > 0 ? _gpuCachedHiddenStates[t - 1] : _gpuInitialHiddenState!;
+
+                // GRU Backward equations:
+                // h = z * h_prev + (1 - z) * h_candidate
+                // dh_candidate = dh * (1 - z) * tanh'(h_candidate)
+                // dz = dh * (h_prev - h_candidate) * sigmoid'(z)
+                // dh_prev += dh * z + dh_candidate_through_r
+                // dr = d(r * h_prev) @ Uh^T * tanh_grad @ Wh^T (complex)
+
+                // d(h_candidate) = dh * (1 - z) * tanh'(h_candidate)
+                // First compute (1 - z)
+                using var onesBuffer = backend.AllocateBuffer(hiddenBufferSize);
+                backend.Fill(onesBuffer, 1.0f, hiddenBufferSize);
+                backend.Subtract(onesBuffer, z_t.Buffer, tempBuffer1, hiddenBufferSize); // tempBuffer1 = 1 - z
+                backend.Multiply(dHNext, tempBuffer1, tempBuffer2, hiddenBufferSize); // tempBuffer2 = dh * (1 - z)
+                backend.TanhBackward(tempBuffer2, hCan_t.Buffer, dHCandidate, hiddenBufferSize); // dHCandidate = tempBuffer2 * tanh'(hCan)
+
+                // dz = dh * (h_prev - h_candidate) * sigmoid'(z)
+                backend.Subtract(h_prev.Buffer, hCan_t.Buffer, tempBuffer1, hiddenBufferSize); // tempBuffer1 = h_prev - h_candidate
+                backend.Multiply(dHNext, tempBuffer1, tempBuffer2, hiddenBufferSize); // tempBuffer2 = dh * (h_prev - h_candidate)
+                backend.SigmoidBackward(tempBuffer2, z_t.Buffer, dZ, hiddenBufferSize); // dZ = tempBuffer2 * sigmoid'(z)
+
+                // dr = (dHCandidate @ Uh^T) * h_prev * sigmoid'(r)
+                // The gradient flows through: h_candidate = tanh(x @ Wh + (r * h_prev) @ Uh + bh)
+                // d(r * h_prev) = dHCandidate from tanh -> matmul with Uh
+                backend.Gemm(dHCandidate, UhT, tempBuffer1, batchSize, _hiddenSize, _hiddenSize);
+                backend.Multiply(tempBuffer1, h_prev.Buffer, tempBuffer2, hiddenBufferSize); // tempBuffer2 = gradient * h_prev
+                backend.SigmoidBackward(tempBuffer2, r_t.Buffer, dR, hiddenBufferSize); // dR = tempBuffer2 * sigmoid'(r)
+
+                // Get input for this timestep
+                int inputOffset = t * inputBufferSize;
+                var inputSlice = _gpuLastInput.CreateView(inputOffset, [batchSize, _inputSize]);
+
+                // Accumulate weight gradients using outer products
+                // dWz += input^T @ dZ
+                backend.Transpose(inputSlice.Buffer, inputTranspose, batchSize, _inputSize);
+                backend.Gemm(inputTranspose, dZ, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
+                backend.Add(dWzBuffer, weightGradBuffer, dWzBuffer, _hiddenSize * _inputSize);
+
+                // dUz += h_prev^T @ dZ
+                backend.Transpose(h_prev.Buffer, hiddenTranspose, batchSize, _hiddenSize);
+                backend.Gemm(hiddenTranspose, dZ, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
+                backend.Add(dUzBuffer, weightGradBuffer, dUzBuffer, _hiddenSize * _hiddenSize);
+
+                // dBz += sum(dZ, axis=0)
+                backend.Transpose(dZ, gateGradTranspose, batchSize, _hiddenSize);
+                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
+                backend.Add(dBzBuffer, tempBuffer1, dBzBuffer, _hiddenSize);
+
+                // dWr += input^T @ dR
+                backend.Gemm(inputTranspose, dR, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
+                backend.Add(dWrBuffer, weightGradBuffer, dWrBuffer, _hiddenSize * _inputSize);
+
+                // dUr += h_prev^T @ dR
+                backend.Gemm(hiddenTranspose, dR, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
+                backend.Add(dUrBuffer, weightGradBuffer, dUrBuffer, _hiddenSize * _hiddenSize);
+
+                // dBr += sum(dR, axis=0)
+                backend.Transpose(dR, gateGradTranspose, batchSize, _hiddenSize);
+                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
+                backend.Add(dBrBuffer, tempBuffer1, dBrBuffer, _hiddenSize);
+
+                // dWh += input^T @ dHCandidate
+                backend.Gemm(inputTranspose, dHCandidate, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
+                backend.Add(dWhBuffer, weightGradBuffer, dWhBuffer, _hiddenSize * _inputSize);
+
+                // dUh += (r * h_prev)^T @ dHCandidate
+                using var rGatedH = backend.AllocateBuffer(hiddenBufferSize);
+                backend.Multiply(r_t.Buffer, h_prev.Buffer, rGatedH, hiddenBufferSize);
+                backend.Transpose(rGatedH, hiddenTranspose, batchSize, _hiddenSize);
+                backend.Gemm(hiddenTranspose, dHCandidate, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
+                backend.Add(dUhBuffer, weightGradBuffer, dUhBuffer, _hiddenSize * _hiddenSize);
+
+                // dBh += sum(dHCandidate, axis=0)
+                backend.Transpose(dHCandidate, gateGradTranspose, batchSize, _hiddenSize);
+                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
+                backend.Add(dBhBuffer, tempBuffer1, dBhBuffer, _hiddenSize);
+
+                // Compute input gradient for this timestep
+                // dX = dZ @ Wz + dR @ Wr + dHCandidate @ Wh
+                var inputGradSlice = backend.AllocateBuffer(inputBufferSize);
+                backend.Gemm(dZ, WzT, inputGradSlice, batchSize, _inputSize, _hiddenSize);
+                backend.Gemm(dR, WrT, inputGradTemp, batchSize, _inputSize, _hiddenSize);
+                backend.Add(inputGradSlice, inputGradTemp, inputGradSlice, inputBufferSize);
+                backend.Gemm(dHCandidate, WhT, inputGradTemp, batchSize, _inputSize, _hiddenSize);
+                backend.Add(inputGradSlice, inputGradTemp, inputGradSlice, inputBufferSize);
+
+                // Store input gradient
+                backend.Copy2DStrided(inputGradSlice, inputGradientBuffer, 1, inputBufferSize, inputGradientSize, inputOffset);
+                inputGradSlice.Dispose();
+
+                // Compute dH_next for previous timestep
+                // dH_prev = dh * z + dZ @ Uz + dR @ Ur + (dHCandidate * r) @ Uh
+                backend.Multiply(dHNext, z_t.Buffer, dHPrev, hiddenBufferSize);
+                backend.Gemm(dZ, UzT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(dHPrev, hiddenGradTemp, dHPrev, hiddenBufferSize);
+                backend.Gemm(dR, UrT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(dHPrev, hiddenGradTemp, dHPrev, hiddenBufferSize);
+                // Add gradient through (r * h_prev) @ Uh path
+                backend.Multiply(dHCandidate, r_t.Buffer, tempBuffer1, hiddenBufferSize);
+                backend.Gemm(tempBuffer1, UhT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
+                backend.Add(dHPrev, hiddenGradTemp, dHPrev, hiddenBufferSize);
+
+                // Copy dH_prev to dHNext for next iteration
+                backend.Copy(dHPrev, dHNext, hiddenBufferSize);
+            }
+
+            // Store gradient tensors for UpdateParametersGpu
+            _gpuWzGradient = new GpuTensor<T>(backend, dWzBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWrGradient = new GpuTensor<T>(backend, dWrBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWhGradient = new GpuTensor<T>(backend, dWhBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuUzGradient = new GpuTensor<T>(backend, dUzBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuUrGradient = new GpuTensor<T>(backend, dUrBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuUhGradient = new GpuTensor<T>(backend, dUhBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBzGradient = new GpuTensor<T>(backend, dBzBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBrGradient = new GpuTensor<T>(backend, dBrBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBhGradient = new GpuTensor<T>(backend, dBhBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Cleanup temporary buffers
+            dHNext.Dispose();
+            dHPrev.Dispose();
+            tempBuffer1.Dispose();
+            tempBuffer2.Dispose();
+            dZ.Dispose();
+            dR.Dispose();
+            dHCandidate.Dispose();
+            inputTranspose.Dispose();
+            hiddenTranspose.Dispose();
+            gateGradTranspose.Dispose();
+            weightGradBuffer.Dispose();
+            inputGradTemp.Dispose();
+            hiddenGradTemp.Dispose();
+
+            return new GpuTensor<T>(backend, inputGradientBuffer, [batchSize, timeSteps, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        catch
+        {
+            dWzBuffer.Dispose();
+            dWrBuffer.Dispose();
+            dWhBuffer.Dispose();
+            dUzBuffer.Dispose();
+            dUrBuffer.Dispose();
+            dUhBuffer.Dispose();
+            dBzBuffer.Dispose();
+            dBrBuffer.Dispose();
+            dBhBuffer.Dispose();
+            inputGradientBuffer.Dispose();
+            dHNext.Dispose();
+            dHPrev.Dispose();
+            tempBuffer1.Dispose();
+            tempBuffer2.Dispose();
+            dZ.Dispose();
+            dR.Dispose();
+            dHCandidate.Dispose();
+            inputTranspose.Dispose();
+            hiddenTranspose.Dispose();
+            gateGradTranspose.Dispose();
+            weightGradBuffer.Dispose();
+            inputGradTemp.Dispose();
+            hiddenGradTemp.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident parameter update with polymorphic optimizer support.
+    /// Updates all weight tensors directly on GPU using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuWzGradient == null || _gpuWrGradient == null || _gpuWhGradient == null ||
+            _gpuUzGradient == null || _gpuUrGradient == null || _gpuUhGradient == null ||
+            _gpuBzGradient == null || _gpuBrGradient == null || _gpuBhGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Ensure GPU weight tensors exist
+        _gpuWz ??= new GpuTensor<T>(backend, _Wz, GpuTensorRole.Weight);
+        _gpuWr ??= new GpuTensor<T>(backend, _Wr, GpuTensorRole.Weight);
+        _gpuWh ??= new GpuTensor<T>(backend, _Wh, GpuTensorRole.Weight);
+        _gpuUz ??= new GpuTensor<T>(backend, _Uz, GpuTensorRole.Weight);
+        _gpuUr ??= new GpuTensor<T>(backend, _Ur, GpuTensorRole.Weight);
+        _gpuUh ??= new GpuTensor<T>(backend, _Uh, GpuTensorRole.Weight);
+        _gpuBz ??= new GpuTensor<T>(backend, _bz, GpuTensorRole.Bias);
+        _gpuBr ??= new GpuTensor<T>(backend, _br, GpuTensorRole.Bias);
+        _gpuBh ??= new GpuTensor<T>(backend, _bh, GpuTensorRole.Bias);
+
+        // Ensure optimizer state exists
+        EnsureGruOptimizerState(config, backend);
+
+        // Apply optimizer updates using polymorphic config
+        var wzState = BuildGruOptimizerState("Wz");
+        var wrState = BuildGruOptimizerState("Wr");
+        var whState = BuildGruOptimizerState("Wh");
+        var uzState = BuildGruOptimizerState("Uz");
+        var urState = BuildGruOptimizerState("Ur");
+        var uhState = BuildGruOptimizerState("Uh");
+        var bzState = BuildGruOptimizerState("bz");
+        var brState = BuildGruOptimizerState("br");
+        var bhState = BuildGruOptimizerState("bh");
+
+        config.ApplyUpdate(backend, _gpuWz.Buffer, _gpuWzGradient.Buffer, wzState, _Wz.Length);
+        config.ApplyUpdate(backend, _gpuWr.Buffer, _gpuWrGradient.Buffer, wrState, _Wr.Length);
+        config.ApplyUpdate(backend, _gpuWh.Buffer, _gpuWhGradient.Buffer, whState, _Wh.Length);
+        config.ApplyUpdate(backend, _gpuUz.Buffer, _gpuUzGradient.Buffer, uzState, _Uz.Length);
+        config.ApplyUpdate(backend, _gpuUr.Buffer, _gpuUrGradient.Buffer, urState, _Ur.Length);
+        config.ApplyUpdate(backend, _gpuUh.Buffer, _gpuUhGradient.Buffer, uhState, _Uh.Length);
+        config.ApplyUpdate(backend, _gpuBz.Buffer, _gpuBzGradient.Buffer, bzState, _bz.Length);
+        config.ApplyUpdate(backend, _gpuBr.Buffer, _gpuBrGradient.Buffer, brState, _br.Length);
+        config.ApplyUpdate(backend, _gpuBh.Buffer, _gpuBhGradient.Buffer, bhState, _bh.Length);
+    }
+
+    /// <summary>
+    /// Ensures optimizer state tensors are allocated for the given optimizer type.
+    /// </summary>
+    private void EnsureGruOptimizerState(IGpuOptimizerConfig config, IDirectGpuBackend backend)
+    {
+        var optimizerType = config.OptimizerType;
+
+        if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
+        {
+            // Velocity tensors for momentum-based optimizers
+            var inputWeightSize = _hiddenSize * _inputSize;
+            var hiddenWeightSize = _hiddenSize * _hiddenSize;
+            var biasSize = _hiddenSize;
+            _gpuWzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+        else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
+        {
+            var inputWeightSize = _hiddenSize * _inputSize;
+            var hiddenWeightSize = _hiddenSize * _hiddenSize;
+            var biasSize = _hiddenSize;
+
+            // First moment (M) tensors
+            _gpuWzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+
+            // Second moment (V) tensors
+            _gpuWzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+        }
+    }
+
+    /// <summary>
+    /// Builds optimizer state for a specific parameter tensor.
+    /// </summary>
+    private GpuOptimizerState BuildGruOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "Wz" => new GpuOptimizerState { Velocity = _gpuWzVelocity?.Buffer, M = _gpuWzM?.Buffer, V = _gpuWzV?.Buffer },
+            "Wr" => new GpuOptimizerState { Velocity = _gpuWrVelocity?.Buffer, M = _gpuWrM?.Buffer, V = _gpuWrV?.Buffer },
+            "Wh" => new GpuOptimizerState { Velocity = _gpuWhVelocity?.Buffer, M = _gpuWhM?.Buffer, V = _gpuWhV?.Buffer },
+            "Uz" => new GpuOptimizerState { Velocity = _gpuUzVelocity?.Buffer, M = _gpuUzM?.Buffer, V = _gpuUzV?.Buffer },
+            "Ur" => new GpuOptimizerState { Velocity = _gpuUrVelocity?.Buffer, M = _gpuUrM?.Buffer, V = _gpuUrV?.Buffer },
+            "Uh" => new GpuOptimizerState { Velocity = _gpuUhVelocity?.Buffer, M = _gpuUhM?.Buffer, V = _gpuUhV?.Buffer },
+            "bz" => new GpuOptimizerState { Velocity = _gpuBzVelocity?.Buffer, M = _gpuBzM?.Buffer, V = _gpuBzV?.Buffer },
+            "br" => new GpuOptimizerState { Velocity = _gpuBrVelocity?.Buffer, M = _gpuBrM?.Buffer, V = _gpuBrV?.Buffer },
+            "bh" => new GpuOptimizerState { Velocity = _gpuBhVelocity?.Buffer, M = _gpuBhM?.Buffer, V = _gpuBhV?.Buffer },
+            _ => new GpuOptimizerState()
+        };
     }
 }

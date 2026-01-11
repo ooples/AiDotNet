@@ -1,4 +1,9 @@
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
+
+namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Implements a Proximal Gradient Descent optimization algorithm which combines gradient descent with regularization.
@@ -284,6 +289,22 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <summary>
+    /// Updates parameters using GPU-accelerated proximal gradient descent.
+    /// </summary>
+    /// <remarks>
+    /// Proximal gradient descent requires applying proximal operators which vary by regularizer type.
+    /// GPU implementation is not yet available due to the variety of proximal operators
+    /// (soft-thresholding for L1, projection for constraints, etc.).
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            "GPU-accelerated proximal gradient descent is not yet implemented. " +
+            "Proximal operators vary by regularizer type and require specialized kernels. " +
+            "Use CPU-based UpdateParameters or consider using Adam/AdamW with weight decay for GPU-resident training.");
+    }
+
+    /// <summary>
     /// Reverses a Proximal Gradient Descent update to recover original parameters.
     /// </summary>
     /// <param name="updatedParameters">Parameters after PGD update</param>
@@ -540,3 +561,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
     }
 }
+
+
+
+

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -199,4 +200,78 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
         var derivative = Derivative(input);
         return Engine.TensorMultiply(derivative, outputGradient);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether this activation function supports GPU-resident training.
+    /// </summary>
+    /// <value>
+    /// True if the activation can perform forward and backward passes entirely on GPU.
+    /// Default is false; derived classes override this to return true if GPU kernels are available.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GPU-resident training keeps all data on the graphics card during
+    /// training, avoiding slow data transfers between CPU and GPU memory. This property indicates
+    /// whether this activation function can participate in GPU-resident training.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsGpuTraining => false;
+
+    /// <summary>
+    /// Applies the activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <exception cref="NotSupportedException">
+    /// Thrown because this activation function does not support GPU execution.
+    /// Override this method in derived classes to provide GPU support.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the GPU-accelerated version of the Activate method.
+    /// The default implementation throws an exception because most activation functions
+    /// need to provide their own GPU kernel implementation.
+    /// </para>
+    /// </remarks>
+    public virtual void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support GPU-resident training. " +
+            $"SupportsGpuTraining = {SupportsGpuTraining}. " +
+            "Use the CPU-based Activate() method instead or implement GPU support in the derived class.");
+    }
+
+    /// <summary>
+    /// Calculates the backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass (needed for ReLU, GELU, Swish, LeakyReLU).</param>
+    /// <param name="output">The output buffer from the forward pass (needed for Sigmoid, Tanh).</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <exception cref="NotSupportedException">
+    /// Thrown because this activation function does not support GPU execution.
+    /// Override this method in derived classes to provide GPU support.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> During training, we need to compute gradients to update the network.
+    /// The default implementation throws an exception because most activation functions
+    /// need to provide their own GPU backward kernel implementation.
+    /// </para>
+    /// </remarks>
+    public virtual void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support GPU-resident backward pass. " +
+            $"SupportsGpuTraining = {SupportsGpuTraining}. " +
+            "Use the CPU-based Backward() method instead or implement GPU support in the derived class.");
+    }
+
+    #endregion
 }

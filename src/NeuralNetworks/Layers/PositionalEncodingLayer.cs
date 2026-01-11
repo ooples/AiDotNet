@@ -749,4 +749,18 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
 
         return result;
     }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    /// <remarks>
+    /// Since positional encodings are constants, the gradient flows through unchanged.
+    /// The derivative of (x + constant) with respect to x is 1.
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        return outputGradient;
+    }
 }

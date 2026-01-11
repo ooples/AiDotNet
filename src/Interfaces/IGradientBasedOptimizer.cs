@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -226,4 +228,54 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
     /// <exception cref="ArgumentException">If parameter and gradient sizes don't match</exception>
     Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients);
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This indicates whether the optimizer can update parameters
+    /// directly on the GPU without transferring data to the CPU. GPU updates are much faster
+    /// for large models.</para>
+    /// </remarks>
+    bool SupportsGpuUpdate { get; }
+
+    /// <summary>
+    /// Updates parameters on the GPU using optimizer-specific GPU kernels.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method performs the same parameter update as
+    /// UpdateParameters, but executes directly on the GPU for maximum performance.
+    /// The parameters and gradients must already be on the GPU.</para>
+    /// <para><b>Production Use Cases:</b>
+    /// - **Large-scale training**: Avoid CPU-GPU data transfers during training
+    /// - **GPU-resident training**: Keep all training data on GPU for maximum throughput
+    /// - **Mixed-precision training**: Combine with FP16 gradients for even faster training
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">GPU buffer containing parameters to update (modified in-place).</param>
+    /// <param name="gradients">GPU buffer containing gradients.</param>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend);
+
+    /// <summary>
+    /// Initializes optimizer state on the GPU for a given parameter count.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Many optimizers maintain internal state (like momentum or
+    /// adaptive learning rates). This method allocates that state on the GPU so that
+    /// all updates can happen without CPU transfers.</para>
+    /// </remarks>
+    /// <param name="parameterCount">Number of parameters to initialize state for.</param>
+    /// <param name="backend">The GPU backend to use for memory allocation.</param>
+    void InitializeGpuState(int parameterCount, IDirectGpuBackend backend);
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Frees GPU memory used by the optimizer's internal state.
+    /// Call this when you're done training or want to reclaim GPU memory.</para>
+    /// </remarks>
+    void DisposeGpuState();
 }

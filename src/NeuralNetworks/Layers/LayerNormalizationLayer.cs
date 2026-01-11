@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -93,6 +94,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuSaveMean;
+    private Tensor<T>? _gpuSaveInvVar;
 
     /// <summary>
     /// Returns layer-specific metadata required for cloning/serialization.
@@ -289,12 +295,43 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
+            _gpuLastInput = input;
+            _gpuSaveMean = saveMean;
+            _gpuSaveInvVar = saveInvVar;
             _lastInput = input.ToTensor();
             _lastMean = saveMean;
             _lastVariance = saveInvVar;
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuLastInput == null || _gpuSaveMean == null || _gpuSaveInvVar == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Use GPU-accelerated layer norm backward
+        var (gradInput, gradGamma, gradBeta) = gpuEngine.LayerNormBackwardGpu(
+            outputGradient,
+            _gpuLastInput,
+            _gamma,
+            _gpuSaveMean,
+            _gpuSaveInvVar,
+            NumOps.ToDouble(_epsilon));
+
+        _gammaGradient = gradGamma;
+        _betaGradient = gradBeta;
+
+        return gradInput;
     }
 
     /// <summary>
@@ -580,6 +617,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
+        // Clear GPU cached values
+        _gpuLastInput = null;
+        _gpuSaveMean = null;
+        _gpuSaveInvVar = null;
+
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastMean = null;

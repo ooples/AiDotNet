@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -60,24 +62,56 @@ public class HingeLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
+        
+        var result = new T[predicted.Length];
+        
         for (int i = 0; i < predicted.Length; i++)
         {
-            T margin = NumOps.Multiply(actual[i], predicted[i]);
-
-            if (NumOps.LessThan(margin, NumOps.One))
+            T margin = NumOps.Subtract(NumOps.One, NumOps.Multiply(actual[i], predicted[i]));
+            
+            if (NumOps.GreaterThan(margin, NumOps.Zero))
             {
-                // If y*f(x) < 1, derivative is -y
-                derivative[i] = NumOps.Negate(actual[i]);
+                // Derivative is -y when margin > 0
+                result[i] = NumOps.Negate(actual[i]);
             }
             else
             {
-                // If y*f(x) >= 1, derivative is 0
-                derivative[i] = NumOps.Zero;
+                // Derivative is 0 when margin <= 0
+                result[i] = NumOps.Zero;
             }
         }
+        
+        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
+    }
 
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
+    /// <summary>
+    /// Calculates both Hinge loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+
+        // Compute loss on GPU
+        float lossValue = backend.HingeLoss(predicted.Buffer, actual.Buffer, size);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.HingeBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
     }
 }

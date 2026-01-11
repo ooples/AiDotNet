@@ -3,6 +3,7 @@ using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -1306,4 +1307,74 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             GradientOptions = gradientOptions;
         }
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Override this in derived classes that have GPU kernel implementations.
+    /// The base class returns false since it has no specific GPU kernel.</para>
+    /// </remarks>
+    public virtual bool SupportsGpuUpdate => false;
+
+    /// <summary>
+    /// GPU-resident optimizer state. Derived classes override to store their specific state.
+    /// </summary>
+    protected IGpuBuffer? _gpuState;
+
+    /// <summary>
+    /// Whether GPU state has been initialized.
+    /// </summary>
+    protected bool _gpuStateInitialized;
+
+    /// <summary>
+    /// Updates parameters on the GPU using optimizer-specific GPU kernels.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation throws since there's no generic GPU kernel.
+    /// Derived classes that support GPU updates override this method.</para>
+    /// </remarks>
+    /// <param name="parameters">GPU buffer containing parameters to update (modified in-place).</param>
+    /// <param name="gradients">GPU buffer containing gradients.</param>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    public virtual void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            $"GPU parameter updates are not supported by {GetType().Name}. " +
+            $"Check SupportsGpuUpdate before calling this method, or use CPU-based UpdateParameters instead.");
+    }
+
+    /// <summary>
+    /// Initializes optimizer state on the GPU for a given parameter count.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation does nothing. Derived classes that
+    /// maintain optimizer state (like momentum or adaptive learning rates) override this.</para>
+    /// </remarks>
+    /// <param name="parameterCount">Number of parameters to initialize state for.</param>
+    /// <param name="backend">The GPU backend to use for memory allocation.</param>
+    public virtual void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        // Base implementation - no state to initialize
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation disposes _gpuState if set.
+    /// Derived classes with multiple state buffers should override.</para>
+    /// </remarks>
+    public virtual void DisposeGpuState()
+    {
+        _gpuState?.Dispose();
+        _gpuState = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -188,6 +189,11 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastGateOutput;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuLinearOutput;
+    private IGpuTensor<T>? _gpuGateOutput;
 
     /// <summary>
     /// The gradients for the linear weights, computed during backpropagation.
@@ -560,12 +566,80 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput = input;
+            _gpuLinearOutput = linearOutput;
+            _gpuGateOutput = gateOutput;
+
+            // Also cache CPU tensors for fallback backward pass
             _lastInput = input.ToTensor();
             _lastLinearOutput = linearOutput.ToTensor();
             _lastGateOutput = gateOutput.ToTensor();
         }
 
         return new GpuTensor<T>(backend, outputBuffer, linearOutput.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
+    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_gpuInput == null || _gpuLinearOutput == null || _gpuGateOutput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        int inputDim = _linearWeights.Shape[1];
+        int outputDim = _linearWeights.Shape[0];
+        int batchSize = _gpuInput.Shape[0];
+
+        // GLU backward: output = linear * gate
+        // d(linear) = outputGrad * gate
+        // d(gate) = outputGrad * linear
+        var dLinearOutput = gpuEngine.MultiplyGpu(outputGradient, _gpuGateOutput);
+        var dGateBeforeSigmoid = gpuEngine.MultiplyGpu(outputGradient, _gpuLinearOutput);
+
+        // Apply sigmoid derivative to gate gradient: sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+        // d(gate_pre_activation) = d(gate_output) * gate_output * (1 - gate_output)
+        var dGateOutput = gpuEngine.SigmoidBackwardGpu(dGateBeforeSigmoid, _gpuGateOutput);
+
+        // Flatten to 2D for matmul
+        var input2D = gpuEngine.ReshapeGpu(_gpuInput, new[] { batchSize, inputDim });
+        var dLinear2D = gpuEngine.ReshapeGpu(dLinearOutput, new[] { batchSize, outputDim });
+        var dGate2D = gpuEngine.ReshapeGpu(dGateOutput, new[] { batchSize, outputDim });
+
+        // Linear weights gradient: dLinear^T @ input
+        var dLinearT = gpuEngine.TransposeGpu(dLinear2D);
+        var linearWeightsGrad = gpuEngine.MatMulGpuTensors(dLinearT, input2D);
+        _linearWeightsGradient = linearWeightsGrad.ToTensor();
+
+        // Gate weights gradient: dGate^T @ input
+        var dGateT = gpuEngine.TransposeGpu(dGate2D);
+        var gateWeightsGrad = gpuEngine.MatMulGpuTensors(dGateT, input2D);
+        _gateWeightsGradient = gateWeightsGrad.ToTensor();
+
+        // Linear bias gradient: sum(dLinear, axis=0)
+        var linearBiasGrad = gpuEngine.SumAxisGpu(dLinear2D, 0);
+        _linearBiasGradient = linearBiasGrad.ToTensor().Reshape([outputDim]);
+
+        // Gate bias gradient: sum(dGate, axis=0)
+        var gateBiasGrad = gpuEngine.SumAxisGpu(dGate2D, 0);
+        _gateBiasGradient = gateBiasGrad.ToTensor().Reshape([outputDim]);
+
+        // Input gradient: dLinear @ linearWeights + dGate @ gateWeights
+        // Note: weights are [outputDim, inputDim], need to transpose
+        var linearWeightsT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_linearWeights), GpuTensorRole.Weight);
+        var gateWeightsT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_gateWeights), GpuTensorRole.Weight);
+
+        var dInputFromLinear = gpuEngine.MatMulGpuTensors(dLinear2D, linearWeightsT);
+        var dInputFromGate = gpuEngine.MatMulGpuTensors(dGate2D, gateWeightsT);
+        var inputGradient = gpuEngine.AddGpu(dInputFromLinear, dInputFromGate);
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -883,6 +957,11 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gateWeightsGradient = null;
         _linearBiasGradient = null;
         _gateBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuLinearOutput = null;
+        _gpuGateOutput = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

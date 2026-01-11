@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -303,7 +304,6 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         return updatedParams;
     }
 
-
     /// <summary>
     /// Updates the adaptive parameters of the Adagrad optimizer.
     /// </summary>
@@ -558,4 +558,63 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         // Reverse: params_old = params_new + updates
         return (Vector<T>)Engine.Add(updatedParameters, updates);
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for accumulated squared gradients.
+    /// </summary>
+    private IGpuBuffer? _gpuAccumulatedGrad;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes Adagrad optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuAccumulatedGrad != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuAccumulatedGrad = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the Adagrad kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuAccumulatedGrad == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.AdagradUpdate(
+            parameters,
+            gradients,
+            _gpuAccumulatedGrad!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.Epsilon,
+            0.0f, // Adagrad doesn't have weight decay in these options
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuAccumulatedGrad?.Dispose();
+        _gpuAccumulatedGrad = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

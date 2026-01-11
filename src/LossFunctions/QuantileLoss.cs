@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -88,24 +90,57 @@ public class QuantileLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
+        
+        var result = new T[predicted.Length];
+        
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(actual[i], predicted[i]);
-
+            
             if (NumOps.GreaterThan(diff, NumOps.Zero))
             {
-                // If actual > predicted, derivative is -quantile
-                derivative[i] = NumOps.Negate(_quantile);
+                // Underestimation: derivative is -quantile
+                result[i] = NumOps.Negate(_quantile);
             }
             else
             {
-                // If actual <= predicted, derivative is (1-quantile)
-                derivative[i] = NumOps.Subtract(NumOps.One, _quantile);
+                // Overestimation: derivative is (1 - quantile)
+                result[i] = NumOps.Subtract(NumOps.One, _quantile);
             }
         }
+        
+        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
+    }
 
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
+    /// <summary>
+    /// Calculates both Quantile loss and gradient on GPU in a single efficient pass.
+    /// </summary>
+    /// <param name="predicted">The predicted GPU tensor from the model.</param>
+    /// <param name="actual">The actual (target) GPU tensor.</param>
+    /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var backend = engine?.GetBackend();
+
+        if (backend == null)
+        {
+            return base.CalculateLossAndGradientGpu(predicted, actual);
+        }
+
+        int size = predicted.ElementCount;
+        float quantile = Convert.ToSingle(NumOps.ToDouble(_quantile));
+
+        // Compute loss on GPU
+        float lossValue = backend.QuantileLoss(predicted.Buffer, actual.Buffer, size, quantile);
+
+        // Allocate gradient buffer and compute gradient on GPU
+        var gradientBuffer = backend.AllocateBuffer(size);
+        backend.QuantileBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, quantile);
+
+        // Create gradient tensor
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+
+        return (NumOps.FromDouble(lossValue), gradientTensor);
     }
 }

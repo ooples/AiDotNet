@@ -191,7 +191,7 @@ public class CoreLayersIntegrationTests
         int inputSize = 8;
         int outputSize = 4;
         var layer = new DenseLayer<float>(inputSize, outputSize);
-        var newWeights = CreateRandomTensor([outputSize, inputSize], 99);
+        var newWeights = CreateRandomTensor([inputSize, outputSize], 99);
 
         // Act - Use SetParameter from IWeightLoadable instead of protected SetWeights
         layer.SetParameter("weight", newWeights);

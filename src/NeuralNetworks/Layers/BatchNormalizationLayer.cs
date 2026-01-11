@@ -133,6 +133,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _betaGradient;
 
+    // GPU-resident cached tensors for GPU training pipeline
+    private IGpuTensor<T>? _lastInputGpu;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
     /// </summary>
@@ -473,11 +476,49 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // Store saved values for backward pass (if training)
         if (IsTrainingMode && saveMean is not null && saveVar is not null)
         {
+            _lastInputGpu = input;
             _lastMean = saveMean;
             _lastVariance = saveVar;
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for the batch normalization layer.
+    /// Computes gradients for input, gamma, and beta entirely on GPU.
+    /// </summary>
+    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
+    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
+
+        if (_lastInputGpu == null || _lastMean == null || _lastVariance == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
+
+        float epsilon = (float)NumOps.ToDouble(_epsilon);
+
+        // Upload saved mean and variance to GPU
+        var saveMeanGpu = gpuEngine.UploadToGpu(_lastMean, GpuTensorRole.Intermediate);
+        var saveVarGpu = gpuEngine.UploadToGpu(_lastVariance, GpuTensorRole.Intermediate);
+
+        // Compute backward using GPU-resident operation
+        var (gradInput, gradGamma, gradBeta) = gpuEngine.BatchNormBackwardGpu<T>(
+            outputGradient,
+            _lastInputGpu,
+            _gamma,
+            saveMeanGpu,
+            saveVarGpu,
+            epsilon);
+
+        // Download gradients for parameter update
+        _gammaGradient = gradGamma.ToTensor();
+        _betaGradient = gradBeta.ToTensor();
+
+        return gradInput;
     }
 
     /// <summary>
@@ -861,11 +902,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
+        // Clear CPU cached values
         _lastInput = null;
         _lastMean = null;
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
+
+        // Clear GPU cached tensors
+        _lastInputGpu = null;
     }
 
     /// <summary>

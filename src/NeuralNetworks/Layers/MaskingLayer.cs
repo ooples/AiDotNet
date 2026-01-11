@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -130,6 +131,9 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskingLayer{T}"/> class.
     /// </summary>
@@ -235,6 +239,35 @@ public class MaskingLayer<T> : LayerBase<T>
         }
 
         return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <inheritdoc/>
+
+    /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// The backward pass applies the same mask to the gradient that was used in the forward pass,
+    /// ensuring that gradients for masked values remain zero.
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        if (_lastMaskGpu == null)
+            throw new InvalidOperationException("Forward pass must be called in training mode before backward pass.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Apply mask to gradient: gradInput = outputGradient * mask
+        int size = outputGradient.ElementCount;
+        var gradInputBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(outputGradient.Buffer, _lastMaskGpu.Buffer, gradInputBuffer, size);
+
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>

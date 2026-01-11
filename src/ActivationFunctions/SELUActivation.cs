@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -153,4 +154,54 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.SELU(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether SELU supports GPU-resident training.
+    /// </summary>
+    /// <value>True because SELU has GPU kernels for both forward and backward passes.</value>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the SELU activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// SELU on GPU: output[i] = lambda * (input[i] >= 0 ? input[i] : alpha * (exp(input[i]) - 1))
+    /// Uses fixed lambda ≈ 1.0507 and alpha ≈ 1.6733 for self-normalization.
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        float alpha = (float)NumOps.ToDouble(_alpha);
+        float lambda = (float)NumOps.ToDouble(_lambda);
+        backend.Selu(input, output, alpha, lambda, size);
+    }
+
+    /// <summary>
+    /// Calculates the SELU backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for SELU (can be null). SELU backward uses forward input.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// SELU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] >= 0 ? lambda : lambda * alpha * exp(input[i]))
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "SELU backward requires the input from forward pass.");
+
+        float alpha = (float)NumOps.ToDouble(_alpha);
+        float lambda = (float)NumOps.ToDouble(_lambda);
+        backend.SeluBackward(gradOutput, input, gradInput, alpha, lambda, size);
+    }
+
+    #endregion
 }

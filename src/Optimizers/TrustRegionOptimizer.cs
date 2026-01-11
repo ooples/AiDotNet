@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -523,6 +524,16 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
+    }
+
+    /// <summary>
+    /// Updates parameters using GPU-accelerated Trust Region method.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        // Trust Region requires complex Hessian computations - use CPU fallback for now
+        // TODO: Implement full GPU Trust Region with Hessian approximation
+        throw new NotSupportedException("Trust Region GPU update requires Hessian computation - use CPU optimizer or different method");
     }
 
     /// <summary>

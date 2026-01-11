@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -102,6 +103,28 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// Cached pre-activation tensor from forward pass for use in activation derivative calculation.
     /// </summary>
     private Tensor<T>? _lastPreActivation;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuPatchesFlat;
+    private int _gpuBatchSize;
+    private bool _gpuHasBatch;
+
+    #region GPU Weight Storage Fields
+
+    // GPU tensors for GPU-resident training
+    private GpuTensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuBias;
+    private GpuTensor<T>? _gpuWeightGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+    private GpuTensor<T>? _gpuWeightVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+    private GpuTensor<T>? _gpuWeightM;
+    private GpuTensor<T>? _gpuWeightV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
+
+    #endregion
 
     /// <summary>
     /// Indicates whether this layer supports training.
@@ -636,6 +659,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _lastPreActivation = null;
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuPatchesFlat = null;
+        _gpuBatchSize = 0;
+        _gpuHasBatch = false;
     }
 
     /// <summary>
@@ -708,13 +737,26 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // 6. Reshape back to 3D: [B, N, embedDim]
         var output = gpuEngine.ReshapeGpu(projectedFlat, [batchSize, _numPatches, _embeddingDim]);
 
-        // Dispose intermediate GPU tensors that are no longer needed
-        if (processInput != input)
-            processInput.Dispose();
+        // Cache GPU tensors for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuInput = processInput != input ? processInput : input;
+            _gpuPatchesFlat = patchesFlat;
+            _gpuBatchSize = batchSize;
+            _gpuHasBatch = hasBatch;
+        }
+        else
+        {
+            // Dispose intermediate GPU tensors if not training
+            if (processInput != input)
+                processInput.Dispose();
+            patchesFlat.Dispose();
+        }
+
+        // Dispose other intermediate GPU tensors that are no longer needed
         reshaped.Dispose();
         permuted.Dispose();
         patches.Dispose();
-        patchesFlat.Dispose();
         projectedFlat.Dispose();
 
         // Remove batch dimension if input didn't have it
@@ -726,6 +768,200 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident backward pass for patch embedding.
+    /// </summary>
+    /// <param name="outputGradient">The gradient from subsequent layer [B, N, embedDim].</param>
+    /// <returns>The gradient with respect to input [B, C, H, W].</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuPatchesFlat == null || _gpuInput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // outputGradient shape: [B, N, embedDim] or [N, embedDim] if no batch
+        int patchDim = _channels * _patchSize * _patchSize;
+
+        // Reshape output gradient for linear backward: [B, N, embedDim] -> [B*N, embedDim]
+        IGpuTensor<T> gradFlat;
+        if (outputGradient.Shape.Length == 2)
+        {
+            // [N, embedDim] -> [1*N, embedDim]
+            gradFlat = outputGradient;
+        }
+        else
+        {
+            // [B, N, embedDim] -> [B*N, embedDim]
+            gradFlat = gpuEngine.ReshapeGpu(outputGradient, [_gpuBatchSize * _numPatches, _embeddingDim]);
+        }
+
+        // Step 1: Backprop through linear projection
+        // Weight gradient: patches^T @ gradOutput -> [patchDim, B*N] @ [B*N, embedDim] = [patchDim, embedDim]
+        var patchesFlatT = gpuEngine.TransposeGpu<T>(_gpuPatchesFlat);
+        var weightGradGpu = gpuEngine.MatMulGpuTensors<T>(patchesFlatT, gradFlat);
+        _projectionWeightsGradient = weightGradGpu.ToTensor();
+
+        // Bias gradient: sum of gradOutput along batch dimension -> [embedDim]
+        var biasGradGpu = gpuEngine.SumAxisGpu<T>(gradFlat, 0);
+        _projectionBiasGradient = biasGradGpu.ToTensor();
+
+        // Store GPU gradients for GPU-resident training
+        _gpuWeightGradient?.Dispose();
+        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+        _gpuBiasGradient?.Dispose();
+        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+
+        // Input gradient: gradOutput @ weights^T -> [B*N, embedDim] @ [embedDim, patchDim] = [B*N, patchDim]
+        var weightsGpu = gpuEngine.UploadToGpu<T>(_projectionWeights, GpuTensorRole.Weight);
+        var weightsT = gpuEngine.TransposeGpu<T>(weightsGpu);
+        var patchGrad = gpuEngine.MatMulGpuTensors<T>(gradFlat, weightsT);
+
+        // Step 2: Reshape patch gradient back to image space
+        // [B*N, patchDim] -> [B, N, patchDim] -> [B, Nh, Nw, C, P, P]
+        var patchGrad3D = gpuEngine.ReshapeGpu(patchGrad, [_gpuBatchSize, _numPatches, patchDim]);
+        var patchGradSpatial = gpuEngine.ReshapeGpu(patchGrad3D,
+            [_gpuBatchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize]);
+
+        // Step 3: Reverse permute: [B, Nh, Nw, C, P, P] -> [B, C, Nh, P, Nw, P]
+        var gradPermuted = gpuEngine.PermuteGpu(patchGradSpatial, [0, 3, 1, 4, 2, 5]);
+
+        // Step 4: Reshape back to image: [B, C, Nh, P, Nw, P] -> [B, C, H, W]
+        var inputGrad = gpuEngine.ReshapeGpu(gradPermuted, [_gpuBatchSize, _channels, _imageHeight, _imageWidth]);
+
+        // Dispose intermediate tensors
+        patchesFlatT.Dispose();
+        weightGradGpu.Dispose();
+        biasGradGpu.Dispose();
+        weightsGpu.Dispose();
+        weightsT.Dispose();
+        patchGrad.Dispose();
+        patchGrad3D.Dispose();
+        patchGradSpatial.Dispose();
+        gradPermuted.Dispose();
+        if (gradFlat != outputGradient)
+            gradFlat.Dispose();
+
+        // Remove batch dimension if input didn't have it
+        if (!_gpuHasBatch)
+        {
+            var result = gpuEngine.ReshapeGpu(inputGrad, [_channels, _imageHeight, _imageWidth]);
+            inputGrad.Dispose();
+            return result;
+        }
+
+        return inputGrad;
+    }
+
+    /// <summary>
+    /// Updates layer parameters using GPU-resident optimizer.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Ensure GPU weights are initialized
+        _gpuWeights ??= new GpuTensor<T>(backend, _projectionWeights, GpuTensorRole.Weight);
+        _gpuBias ??= new GpuTensor<T>(backend, _projectionBias, GpuTensorRole.Bias);
+
+        // Verify gradients exist
+        if (_gpuWeightGradient == null || _gpuBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Ensure optimizer state buffers exist
+        EnsurePatchEmbeddingOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        int weightCount = _projectionWeights.Length;
+        int biasCount = _projectionBias.Length;
+
+        config.ApplyUpdate(backend, _gpuWeights.Buffer, _gpuWeightGradient.Buffer, BuildPatchEmbeddingOptimizerState("weights"), weightCount);
+        config.ApplyUpdate(backend, _gpuBias.Buffer, _gpuBiasGradient.Buffer, BuildPatchEmbeddingOptimizerState("bias"), biasCount);
+
+        // Sync back to CPU tensors for compatibility
+        _projectionWeights = _gpuWeights.ToTensor();
+        _projectionBias = _gpuBias.ToTensor();
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_projectionWeights);
+        Engine.InvalidatePersistentTensor(_projectionBias);
+    }
+
+    /// <summary>
+    /// Ensures optimizer state buffers are allocated for the given optimizer type.
+    /// </summary>
+    private void EnsurePatchEmbeddingOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int weightSize = _projectionWeights.Length;
+        int biasSize = _projectionBias.Length;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Momentum-based optimizers need velocity buffers
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // Adam-family optimizers need M (first moment) and V (second moment) buffers
+                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // RmsProp/Adagrad need squared average/accumulated gradient - reuse velocity buffers
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for the specified parameter.
+    /// </summary>
+    private GpuOptimizerState BuildPatchEmbeddingOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "weights" => new GpuOptimizerState
+            {
+                Velocity = _gpuWeightVelocity?.Buffer,
+                M = _gpuWeightM?.Buffer,
+                V = _gpuWeightV?.Buffer,
+                SquaredAvg = _gpuWeightVelocity?.Buffer,
+                AccumulatedGrad = _gpuWeightVelocity?.Buffer
+            },
+            "bias" => new GpuOptimizerState
+            {
+                Velocity = _gpuBiasVelocity?.Buffer,
+                M = _gpuBiasM?.Buffer,
+                V = _gpuBiasV?.Buffer,
+                SquaredAvg = _gpuBiasVelocity?.Buffer,
+                AccumulatedGrad = _gpuBiasVelocity?.Buffer
+            },
+            _ => throw new ArgumentException($"Unknown parameter: {paramName}", nameof(paramName))
+        };
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -117,4 +118,54 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
         // SiLU is mathematically equivalent to Swish: x * sigmoid(x)
         return TensorOperations<T>.Swish(input);
     }
+
+    #region GPU Training Support
+
+    /// <summary>
+    /// Gets whether SiLU supports GPU-resident training.
+    /// </summary>
+    /// <value>True because SiLU has GPU kernels for both forward and backward passes.</value>
+    /// <remarks>
+    /// SiLU is mathematically equivalent to Swish, so it uses the same GPU kernels.
+    /// </remarks>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
+    /// Applies the SiLU activation function on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="input">The input GPU buffer.</param>
+    /// <param name="output">The output GPU buffer to store the activated values.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// SiLU on GPU: output[i] = input[i] * sigmoid(input[i])
+    /// Uses the Swish kernel since SiLU and Swish are mathematically identical.
+    /// </remarks>
+    public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
+    {
+        backend.Swish(input, output, size);
+    }
+
+    /// <summary>
+    /// Calculates the SiLU backward pass gradient on GPU.
+    /// </summary>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
+    /// <param name="input">The input buffer from the forward pass.</param>
+    /// <param name="output">Not used for SiLU (can be null). SiLU backward uses forward input.</param>
+    /// <param name="gradInput">The output buffer to store the input gradient.</param>
+    /// <param name="size">The number of elements to process.</param>
+    /// <remarks>
+    /// SiLU backward on GPU: gradInput[i] = gradOutput[i] * (sigmoid(input[i]) + input[i] * sigmoid(input[i]) * (1 - sigmoid(input[i])))
+    /// Uses the Swish backward kernel since SiLU and Swish are mathematically identical.
+    /// </remarks>
+    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input), "SiLU backward requires the input from forward pass.");
+
+        backend.SwishBackward(gradOutput, input, gradInput, size);
+    }
+
+    #endregion
 }

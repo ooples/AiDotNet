@@ -215,7 +215,8 @@ extern ""C"" __global__ void conv_transpose2d(
     const float* input, const float* kernel, float* output,
     int batch, int inChannels, int inHeight, int inWidth,
     int outChannels, int outHeight, int outWidth,
-    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW)
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW)
 {
     int ow = blockIdx.x * blockDim.x + threadIdx.x;
     int oh = blockIdx.y * blockDim.y + threadIdx.y;
@@ -243,6 +244,82 @@ extern ""C"" __global__ void conv_transpose2d(
         }
     }
     output[((b * outChannels + oc) * outHeight + oh) * outWidth + ow] = sum;
+}
+
+// Transposed Conv2D backward pass for input gradients
+extern ""C"" __global__ void conv_transpose2d_backward_input(
+    const float* gradOutput, const float* kernel, float* gradInput,
+    int batch, int inChannels, int inHeight, int inWidth,
+    int outChannels, int outHeight, int outWidth,
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW, int totalInput)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalInput) return;
+
+    int iw = idx % inWidth;
+    int ih = (idx / inWidth) % inHeight;
+    int ic = (idx / (inWidth * inHeight)) % inChannels;
+    int b = idx / (inWidth * inHeight * inChannels);
+
+    // Effective output dimensions excluding output padding
+    int outHeight_eff = outHeight - outputPadH;
+    int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+    for (int oc = 0; oc < outChannels; oc++) {
+        for (int kh = 0; kh < kernelH; kh++) {
+            for (int kw = 0; kw < kernelW; kw++) {
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                    sum += gradOutput[goIdx] * kernel[kIdx];
+                }
+            }
+        }
+    }
+    gradInput[idx] = sum;
+}
+
+// Transposed Conv2D backward pass for kernel gradients
+extern ""C"" __global__ void conv_transpose2d_backward_kernel(
+    const float* input, const float* gradOutput, float* gradKernel,
+    int batch, int inChannels, int inHeight, int inWidth,
+    int outChannels, int outHeight, int outWidth,
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW, int totalKernel)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalKernel) return;
+
+    int kw = idx % kernelW;
+    int kh = (idx / kernelW) % kernelH;
+    int oc = (idx / (kernelW * kernelH)) % outChannels;
+    int ic = idx / (kernelW * kernelH * outChannels);
+
+    // Effective output dimensions excluding output padding
+    int outHeight_eff = outHeight - outputPadH;
+    int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+    for (int b = 0; b < batch; b++) {
+        for (int ih = 0; ih < inHeight; ih++) {
+            for (int iw = 0; iw < inWidth; iw++) {
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    sum += input[inIdx] * gradOutput[goIdx];
+                }
+            }
+        }
+    }
+    gradKernel[idx] = sum;
 }
 
 extern ""C"" __global__ void conv3d_direct(
@@ -289,7 +366,8 @@ extern ""C"" __global__ void conv3d_direct(
         return new[]
         {
             "im2col", "col2im", "conv2d_direct", "conv2d_backward_input",
-            "conv2d_backward_kernel", "depthwise_conv2d", "conv_transpose2d", "conv3d_direct"
+            "conv2d_backward_kernel", "depthwise_conv2d", "conv_transpose2d",
+            "conv_transpose2d_backward_input", "conv_transpose2d_backward_kernel", "conv3d_direct"
         };
     }
 }

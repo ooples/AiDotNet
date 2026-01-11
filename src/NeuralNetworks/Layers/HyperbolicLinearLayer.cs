@@ -77,6 +77,32 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     private Matrix<T>? _biasesGradient;
 
+    // GPU caching fields for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private int[]? _gpuInputShape;
+
+    #region GPU Weight Storage Fields
+
+    // GPU weight tensors for GPU-resident training
+    private GpuTensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuBiases;
+
+    // GPU gradient tensors from BackwardGpu
+    private GpuTensor<T>? _gpuWeightGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+
+    // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    private GpuTensor<T>? _gpuWeightVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+
+    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    private GpuTensor<T>? _gpuWeightM;
+    private GpuTensor<T>? _gpuWeightV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
+
+    #endregion
+
     /// <summary>
     /// Gets the number of input features.
     /// </summary>
@@ -340,6 +366,13 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             throw new ArgumentException($"Input size {inputLen} does not match expected {InputFeatures}.");
         }
 
+        // Cache input for backward pass if in training mode
+        if (IsTrainingMode)
+        {
+            _gpuInput = input;
+            _gpuInputShape = input.Shape.ToArray();
+        }
+
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
         var weightsFlat = new float[OutputFeatures * InputFeatures];
         for (int o = 0; o < OutputFeatures; o++)
@@ -408,6 +441,144 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             weightsBuffer?.Dispose();
             biasesBuffer?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Performs the backward pass on GPU for the hyperbolic linear layer.
+    /// Computes gradients using Riemannian geometry in the Poincaré ball model.
+    /// </summary>
+    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
+    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuInputShape == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
+        }
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU backend unavailable.");
+        }
+
+        // Determine batch size from cached input shape
+        int batchSize;
+        if (_gpuInputShape.Length == 1)
+        {
+            batchSize = 1;
+        }
+        else if (_gpuInputShape.Length == 2)
+        {
+            batchSize = _gpuInputShape[0];
+        }
+        else
+        {
+            batchSize = 1;
+            for (int d = 0; d < _gpuInputShape.Length - 1; d++)
+            {
+                batchSize *= _gpuInputShape[d];
+            }
+        }
+
+        float curvature = _numOps.ToFloat(_curvature);
+
+        // Upload weights to GPU (needed for input gradient computation)
+        var weightsFlat = new float[OutputFeatures * InputFeatures];
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                weightsFlat[o * InputFeatures + i] = _numOps.ToFloat(_weights[o, i]);
+            }
+        }
+
+        IGpuBuffer? weightsBuffer = null;
+        IGpuBuffer? gradInputBuffer = null;
+        IGpuBuffer? gradWeightsBuffer = null;
+        IGpuBuffer? gradBiasesBuffer = null;
+
+        try
+        {
+            weightsBuffer = backend.AllocateBuffer(weightsFlat);
+
+            // Allocate gradient buffers
+            gradInputBuffer = backend.AllocateBuffer(batchSize * InputFeatures);
+            gradWeightsBuffer = backend.AllocateBuffer(OutputFeatures * InputFeatures);
+            gradBiasesBuffer = backend.AllocateBuffer(OutputFeatures * InputFeatures);
+
+            // Compute input gradient
+            backend.HyperbolicLinearBackwardInput(
+                outputGradient.Buffer, _gpuInput.Buffer, weightsBuffer, gradInputBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Compute weight gradient
+            backend.HyperbolicLinearBackwardWeights(
+                outputGradient.Buffer, _gpuInput.Buffer, gradWeightsBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Compute bias gradient
+            backend.HyperbolicLinearBackwardBiases(
+                outputGradient.Buffer, _gpuInput.Buffer, gradBiasesBuffer,
+                batchSize, InputFeatures, OutputFeatures, curvature);
+
+            // Download weight gradients from GPU and store for UpdateParameters
+            var weightsGradFlat = new float[OutputFeatures * InputFeatures];
+            backend.DownloadBuffer(gradWeightsBuffer, weightsGradFlat);
+
+            _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _weightsGradient[o, i] = _numOps.FromFloat(weightsGradFlat[o * InputFeatures + i]);
+                }
+            }
+
+            // Download bias gradients from GPU and store for UpdateParameters
+            var biasesGradFlat = new float[OutputFeatures * InputFeatures];
+            backend.DownloadBuffer(gradBiasesBuffer, biasesGradFlat);
+
+            _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _biasesGradient[o, i] = _numOps.FromFloat(biasesGradFlat[o * InputFeatures + i]);
+                }
+            }
+
+            // Store gradients as GPU tensors for UpdateParametersGpu
+            var weightsGradientTensor = new Tensor<T>([OutputFeatures * InputFeatures],
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(weightsGradFlat)));
+            var biasesGradientTensor = new Tensor<T>([OutputFeatures * InputFeatures],
+                new Vector<T>(DirectGpuEngine.FromFloatArray<T>(biasesGradFlat)));
+            _gpuWeightGradient = new GpuTensor<T>(backend, weightsGradientTensor, GpuTensorRole.Gradient);
+            _gpuBiasGradient = new GpuTensor<T>(backend, biasesGradientTensor, GpuTensorRole.Gradient);
+
+            // Create output gradient tensor with proper shape
+            var inputGradient = new GpuTensor<T>(backend, gradInputBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
+
+            // Clear GPU cache after backward pass
+            _gpuInput = null;
+
+            // Prevent disposal of gradInputBuffer since it's owned by the returned tensor
+            gradInputBuffer = null;
+
+            return inputGradient;
+        }
+        finally
+        {
+            weightsBuffer?.Dispose();
+            gradWeightsBuffer?.Dispose();
+            gradBiasesBuffer?.Dispose();
+            gradInputBuffer?.Dispose();
         }
     }
 
@@ -762,4 +933,110 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         }
         return origin;
     }
+
+    #region GPU Parameter Updates
+
+    /// <summary>
+    /// Updates parameters using GPU-based optimizer.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        if (_gpuWeightGradient == null || _gpuBiasGradient == null)
+            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
+
+        // Convert weights and biases to flat tensors for GPU operations
+        int weightSize = OutputFeatures * InputFeatures;
+        int biasSize = OutputFeatures * InputFeatures;
+        var weightTensor = new Tensor<T>([weightSize]);
+        var biasTensor = new Tensor<T>([biasSize]);
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                weightTensor.Data[o * InputFeatures + i] = _weights[o, i];
+                biasTensor.Data[o * InputFeatures + i] = _biases[o, i];
+            }
+        }
+
+        // Ensure GPU weight tensors exist
+        _gpuWeights ??= new GpuTensor<T>(backend, weightTensor, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, biasTensor, GpuTensorRole.Bias);
+
+        // Ensure optimizer state buffers exist
+        EnsureHyperbolicOptimizerState(backend, config.OptimizerType);
+
+        // Apply updates using polymorphic optimizer dispatch
+        config.ApplyUpdate(backend, _gpuWeights.Buffer, _gpuWeightGradient.Buffer, BuildHyperbolicOptimizerState("weights"), weightSize);
+        config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildHyperbolicOptimizerState("biases"), biasSize);
+
+        // Sync back to CPU matrices for compatibility
+        var updatedWeights = _gpuWeights.ToTensor();
+        var updatedBiases = _gpuBiases.ToTensor();
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                _weights[o, i] = updatedWeights.Data[o * InputFeatures + i];
+                _biases[o, i] = updatedBiases.Data[o * InputFeatures + i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures GPU optimizer state buffers exist for all hyperbolic parameters.
+    /// </summary>
+    private void EnsureHyperbolicOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
+    {
+        int weightSize = OutputFeatures * InputFeatures;
+        int biasSize = OutputFeatures * InputFeatures;
+
+        switch (optimizerType)
+        {
+            case GpuOptimizerType.Sgd:
+            case GpuOptimizerType.Nag:
+            case GpuOptimizerType.Lars:
+                // Velocity buffers
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.Adam:
+            case GpuOptimizerType.AdamW:
+            case GpuOptimizerType.Lamb:
+                // M and V buffers for Adam-family
+                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+
+            case GpuOptimizerType.RmsProp:
+            case GpuOptimizerType.Adagrad:
+                // Squared average buffers (reuse velocity fields)
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Builds the optimizer state for a specific hyperbolic parameter.
+    /// </summary>
+    private GpuOptimizerState BuildHyperbolicOptimizerState(string paramName)
+    {
+        return paramName switch
+        {
+            "weights" => new GpuOptimizerState { Velocity = _gpuWeightVelocity?.Buffer, M = _gpuWeightM?.Buffer, V = _gpuWeightV?.Buffer, SquaredAvg = _gpuWeightVelocity?.Buffer, AccumulatedGrad = _gpuWeightVelocity?.Buffer },
+            "biases" => new GpuOptimizerState { Velocity = _gpuBiasVelocity?.Buffer, M = _gpuBiasM?.Buffer, V = _gpuBiasV?.Buffer, SquaredAvg = _gpuBiasVelocity?.Buffer, AccumulatedGrad = _gpuBiasVelocity?.Buffer },
+            _ => new GpuOptimizerState()
+        };
+    }
+
+    #endregion
 }

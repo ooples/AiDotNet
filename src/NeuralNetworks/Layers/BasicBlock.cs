@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -58,6 +59,11 @@ public class BasicBlock<T> : LayerBase<T>
     private Tensor<T>? _lastBn2Output;
     private Tensor<T>? _lastIdentity;
     private Tensor<T>? _lastPreActivation;
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuBn1Out;
+    private IGpuTensor<T>? _gpuBn2Out;
+    private IGpuTensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -203,9 +209,16 @@ public class BasicBlock<T> : LayerBase<T>
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
         var conv1Out = _conv1.ForwardGpu(input);
         var bn1Out = _bn1.ForwardGpu(conv1Out);
+
+        // Cache bn1Out for backward pass (ReLU1 backward needs it)
+        _gpuBn1Out = bn1Out;
+
         var relu1Out = gpuEngine.ReluGpu(bn1Out);
         var conv2Out = _conv2.ForwardGpu(relu1Out);
         var bn2Out = _bn2.ForwardGpu(conv2Out);
+
+        // Cache bn2Out for backward pass (ReLU2/final backward needs it)
+        _gpuBn2Out = bn2Out;
 
         // Identity/skip branch
         IGpuTensor<T> identity;
@@ -222,8 +235,93 @@ public class BasicBlock<T> : LayerBase<T>
         // Add residual connection
         var preActivation = gpuEngine.AddGpu(bn2Out, identity);
 
+        // Cache preActivation for backward pass (final ReLU backward needs it)
+        _gpuPreActivation = preActivation;
+
         // Final ReLU
         return gpuEngine.ReluGpu(preActivation);
+    }
+
+    /// <summary>
+    /// GPU-accelerated backward pass through the BasicBlock.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
+    /// <returns>GPU-resident gradient of the loss with respect to the input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        if (_gpuPreActivation is null || _gpuBn1Out is null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        // Gradient through final ReLU - uses cached preActivation
+        var gradPreActivation = gpuEngine.ReluBackwardGpu<T>(outputGradient, _gpuPreActivation);
+
+        // The gradient splits to both branches (residual add) - both get the same gradient
+        var gradMain = gradPreActivation;
+
+        // Backward through main branch: bn2 -> conv2 -> relu1 -> bn1 -> conv1
+        var gradBn2 = CallBackwardGpu(_bn2, gradMain, backend, gpuEngine);
+        var gradConv2 = CallBackwardGpu(_conv2, gradBn2, backend, gpuEngine);
+
+        // ReLU1 backward - uses cached bn1Out (input to ReLU1)
+        var gradRelu1 = gpuEngine.ReluBackwardGpu<T>(gradConv2, _gpuBn1Out);
+
+        var gradBn1 = CallBackwardGpu(_bn1, gradRelu1, backend, gpuEngine);
+        var gradConv1 = CallBackwardGpu(_conv1, gradBn1, backend, gpuEngine);
+
+        // Backward through identity branch
+        int elementCount = gradConv1.ElementCount;
+        int[] resultShape = (int[])gradConv1.Shape.Clone();
+        IGpuTensor<T> gradInput;
+
+        if (_hasDownsample && _downsampleBn is not null && _downsampleConv is not null)
+        {
+            var gradDsBn = CallBackwardGpu(_downsampleBn, gradPreActivation, backend, gpuEngine);
+            var gradDsConv = CallBackwardGpu(_downsampleConv, gradDsBn, backend, gpuEngine);
+
+            // Sum gradients from both branches
+            var resultBuffer = backend.AllocateBuffer(elementCount);
+            backend.Add(gradConv1.Buffer, gradDsConv.Buffer, resultBuffer, elementCount);
+            gradInput = new GpuTensor<T>(backend, resultBuffer, resultShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        else
+        {
+            // Identity branch: gradient flows directly, sum with main branch
+            var resultBuffer = backend.AllocateBuffer(elementCount);
+            backend.Add(gradConv1.Buffer, gradPreActivation.Buffer, resultBuffer, elementCount);
+            gradInput = new GpuTensor<T>(backend, resultBuffer, resultShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+
+        return gradInput;
+    }
+
+    /// <summary>
+    /// Helper method to call BackwardGpu on inner layers via reflection.
+    /// Falls back to CPU if BackwardGpu is not available.
+    /// </summary>
+    private IGpuTensor<T> CallBackwardGpu(LayerBase<T> layer, IGpuTensor<T> gradient, IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var layerType = layer.GetType();
+        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
+
+        if (backwardGpuMethod is not null)
+        {
+            return (IGpuTensor<T>)backwardGpuMethod.Invoke(layer, new object[] { gradient })!;
+        }
+        else
+        {
+            // CPU fallback
+            var gradData = backend.DownloadBuffer(gradient.Buffer);
+            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape);
+            var cpuResult = layer.Backward(cpuGrad);
+            return gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
+        }
     }
 
     /// <summary>

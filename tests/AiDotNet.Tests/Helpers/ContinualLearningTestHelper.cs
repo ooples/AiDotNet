@@ -339,8 +339,6 @@ public class MockLayer<T> : ILayer<T>
         }
     }
 
-    public string Name => "MockLayer";
-
     // ILayer<T> members
     public int[] GetInputShape() => [10];
 
@@ -496,5 +494,28 @@ public class MockLayer<T> : ILayer<T>
     public WeightLoadResult LoadWeights(Dictionary<string, Tensor<T>> weights, Func<string, string?>? mapping = null, bool strict = false)
     {
         return new WeightLoadResult { Success = true };
+    }
+
+    // GPU Training interface members (mock implementations)
+    public bool SupportsGpuTraining => false;
+
+    public void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void UploadWeightsToGpu()
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void DownloadWeightsFromGpu()
+    {
+        // No-op for mock - GPU training not supported
+    }
+
+    public void ZeroGradientsGpu()
+    {
+        // No-op for mock - GPU training not supported
     }
 }

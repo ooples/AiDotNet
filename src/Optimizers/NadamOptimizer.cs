@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -52,6 +53,16 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// Stores the pre-update snapshot of the time step for accurate reverse updates.
     /// </summary>
     private int _previousT;
+
+    /// <summary>
+    /// GPU buffer for first moment estimates (m).
+    /// </summary>
+    private IGpuBuffer? _gpuM;
+
+    /// <summary>
+    /// GPU buffer for second moment estimates (v).
+    /// </summary>
+    private IGpuBuffer? _gpuV;
 
     /// <summary>
     /// Initializes a new instance of the NadamOptimizer class.
@@ -535,6 +546,66 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             _t = reader.ReadInt32();
         }
+    }
+
+    /// <summary>
+    /// Initializes Nadam optimizer state on the GPU.
+    /// </summary>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">GPU backend for memory allocation.</param>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuM != null && _gpuV != null)
+            return;
+
+        // Allocate GPU buffers for first and second moment estimates (initialized to zero)
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+        _gpuV = backend.AllocateBuffer(zeros);
+
+        _t = 0;
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on GPU using Nadam optimization.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuM == null || _gpuV == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        // Call the Nadam GPU kernel
+        // Note: Nadam doesn't have weight decay option, passing 0.0f
+        backend.NadamUpdate(
+            parameters,
+            gradients,
+            _gpuM!,
+            _gpuV!,
+            (float)_options.InitialLearningRate,
+            (float)_options.Beta1,
+            (float)_options.Beta2,
+            (float)_options.Epsilon,
+            0.0f, // Nadam doesn't use weight decay
+            _t,
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuM?.Dispose();
+        _gpuM = null;
+        _gpuV?.Dispose();
+        _gpuV = null;
+        _gpuStateInitialized = false;
     }
 
     /// <summary>

@@ -62,6 +62,19 @@ public class InputLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to the input on the GPU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    /// <remarks>
+    /// InputLayer is an identity operation, so the gradient passes through unchanged.
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        return outputGradient;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with the specified input size.
     /// </summary>
     /// <param name="inputSize">The size of the input vector.</param>

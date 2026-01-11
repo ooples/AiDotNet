@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -94,6 +95,14 @@ public class ReadoutLayer<T> : LayerBase<T>
     private Tensor<T>? _lastPreActivation;
 
     private int[] _originalInputShape = [];
+
+    // GPU cached tensors for backward pass
+    private IGpuTensor<T>? _gpuInput;
+    private IGpuTensor<T>? _gpuPreActivation;
+    private IGpuTensor<T>? _gpuOutput;
+    private int _gpuBatchDim;
+    private int _gpuInputSize;
+    private FusedActivationType _gpuActivationType;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -371,8 +380,19 @@ public class ReadoutLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            // Cache GPU tensors for BackwardGpu
+            _gpuInput = input2D;
             var preActResult = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, FusedActivationType.None);
+            _gpuPreActivation = preActResult;
+            _gpuOutput = result;
+            _gpuBatchDim = batchDim;
+            _gpuInputSize = inputSize;
+            _gpuActivationType = UsingVectorActivation && VectorActivation is SoftmaxActivation<T>
+                ? FusedActivationType.Softmax
+                : (UsingVectorActivation ? FusedActivationType.None : GetFusedActivationType());
+
+            // Also cache CPU tensors for CPU backward compatibility
+            _lastInput = input.ToTensor();
             _lastPreActivation = preActResult.ToTensor();
             _lastOutput = result.ToTensor();
         }
@@ -429,6 +449,96 @@ public class ReadoutLayer<T> : LayerBase<T>
         return UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated backward pass for the readout layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes gradients for weights, biases, and input on GPU:
+    /// - Weight gradient: activationGrad.T @ input
+    /// - Bias gradient: sum(activationGrad, axis=0)
+    /// - Input gradient: activationGrad @ weights
+    /// </para>
+    /// </remarks>
+    /// <param name="outputGradient">GPU tensor containing gradient of loss with respect to layer output.</param>
+    /// <returns>GPU tensor containing gradient with respect to input.</returns>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuInput == null || _gpuPreActivation == null || _gpuOutput == null)
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        int outputSize = OutputShape[0];
+
+        // Reshape outputGradient to 2D [batch, outputSize] if needed
+        IGpuTensor<T> grad2D = outputGradient.Shape.Length == 2
+            ? outputGradient
+            : gpuEngine.ReshapeGpu(outputGradient, [_gpuBatchDim, outputSize]);
+
+        // Step 1: Backprop through activation
+        IGpuTensor<T> activationGrad;
+        if (_gpuActivationType == FusedActivationType.Softmax)
+        {
+            activationGrad = gpuEngine.SoftmaxBackwardGpu<T>(grad2D, _gpuOutput);
+        }
+        else if (_gpuActivationType == FusedActivationType.ReLU)
+        {
+            activationGrad = gpuEngine.ReluBackwardGpu<T>(grad2D, _gpuPreActivation);
+        }
+        else if (_gpuActivationType == FusedActivationType.Sigmoid)
+        {
+            activationGrad = gpuEngine.SigmoidBackwardGpu<T>(grad2D, _gpuOutput);
+        }
+        else if (_gpuActivationType == FusedActivationType.Tanh)
+        {
+            activationGrad = gpuEngine.TanhBackwardGpu<T>(grad2D, _gpuOutput);
+        }
+        else if (_gpuActivationType == FusedActivationType.Swish)
+        {
+            activationGrad = gpuEngine.SwishBackwardGpu<T>(grad2D, _gpuPreActivation);
+        }
+        else if (_gpuActivationType == FusedActivationType.GELU)
+        {
+            activationGrad = gpuEngine.GeluBackwardGpu<T>(grad2D, _gpuPreActivation);
+        }
+        else if (_gpuActivationType == FusedActivationType.LeakyReLU)
+        {
+            activationGrad = gpuEngine.LeakyReluBackwardGpu<T>(grad2D, _gpuPreActivation);
+        }
+        else
+        {
+            // Identity or unknown - gradient passes through
+            activationGrad = grad2D;
+        }
+
+        // Step 2: Compute weight gradient = activationGrad.T @ input
+        // activationGrad: [batch, outputSize], input: [batch, inputSize]
+        // weightGrad: [outputSize, inputSize]
+        var activationGradT = gpuEngine.TransposeGpu<T>(activationGrad);
+        var weightGradGpu = gpuEngine.MatMulGpuTensors<T>(activationGradT, _gpuInput);
+        _weightGradients = weightGradGpu.ToTensor();
+
+        // Step 3: Compute bias gradient = sum(activationGrad, axis=0)
+        var biasGradGpu = gpuEngine.SumAxisGpu<T>(activationGrad, 0);
+        _biasGradients = biasGradGpu.ToTensor();
+
+        // Step 4: Compute input gradient = activationGrad @ weights
+        // activationGrad: [batch, outputSize], weights: [outputSize, inputSize]
+        // inputGrad: [batch, inputSize]
+        var weightsGpu = gpuEngine.UploadToGpu<T>(_weights, GpuTensorRole.Weight);
+        var inputGrad = gpuEngine.MatMulGpuTensors<T>(activationGrad, weightsGpu);
+
+        // Reshape to original input shape
+        if (_originalInputShape.Length != 2)
+        {
+            inputGrad = gpuEngine.ReshapeGpu(inputGrad, _originalInputShape);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
@@ -832,11 +942,16 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
+        // Clear cached CPU values from forward pass
         _lastInput = null;
         _lastOutput = null;
         _lastPreActivation = null;
         _originalInputShape = [];
+
+        // Clear cached GPU tensors
+        _gpuInput = null;
+        _gpuPreActivation = null;
+        _gpuOutput = null;
 
         // Reset gradients using Tensor<T>
         _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);

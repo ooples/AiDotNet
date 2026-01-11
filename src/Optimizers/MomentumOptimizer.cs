@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -504,4 +505,63 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // So: params_old = params_new + velocity
         return (Vector<T>)Engine.Add(updatedParameters, _velocity);
     }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// GPU buffer for velocity state.
+    /// </summary>
+    private IGpuBuffer? _gpuVelocity;
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    public override bool SupportsGpuUpdate => true;
+
+    /// <summary>
+    /// Initializes Momentum optimizer state on the GPU.
+    /// </summary>
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        if (_gpuStateInitialized && _gpuVelocity != null)
+            return;
+
+        var zeros = new float[parameterCount];
+        _gpuVelocity = backend.AllocateBuffer(zeros);
+
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Updates parameters on the GPU using the SGD with momentum kernel.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuVelocity == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        backend.SgdMomentumUpdate(
+            parameters,
+            gradients,
+            _gpuVelocity!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)NumOps.ToDouble(CurrentMomentum),
+            0.0f, // Basic momentum doesn't have weight decay
+            parameterCount
+        );
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuVelocity?.Dispose();
+        _gpuVelocity = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
 }

@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
-
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -53,6 +54,11 @@ public class PaddingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -79,6 +85,9 @@ public class PaddingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
@@ -183,10 +192,59 @@ public class PaddingLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInput = input.ToTensor();
+            _gpuCachedInputShape = (int[])input.Shape.Clone();
         }
 
         return currentTensor;
     }
+
+    /// <summary>
+    /// Performs the backward pass on GPU tensors.
+    /// </summary>
+    /// <param name="outputGradient">The GPU-resident gradient tensor.</param>
+    /// <returns>The gradient with respect to the input (center region extracted).</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass extracts the center region of the gradient tensor, which corresponds
+    /// to the original input positions. This is the reverse of the forward pass padding operation.
+    /// Uses SliceGpu to extract center region for each padded dimension.
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (_gpuCachedInputShape == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        IGpuTensor<T> currentTensor = outputGradient;
+        bool tensorModified = false;
+
+        // Extract center region for each padded dimension using SliceGpu
+        for (int d = 0; d < _padding.Length; d++)
+        {
+            if (_padding[d] == 0) continue;
+
+            int pad = _padding[d];
+            int dimSize = currentTensor.Shape[d];
+            int originalSize = dimSize - 2 * pad;
+
+            // Slice to extract center: [pad : pad + originalSize]
+            var sliced = gpuEngine.SliceGpu(currentTensor, d, pad, pad + originalSize);
+
+            if (tensorModified)
+            {
+                currentTensor.Dispose();
+            }
+            currentTensor = sliced;
+            tensorModified = true;
+        }
+
+        return currentTensor;
+    }
+
+    /// <inheritdoc/>
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PaddingLayer{T}"/> class with the specified input shape,
@@ -477,6 +535,7 @@ public class PaddingLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+        _gpuCachedInputShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

@@ -238,12 +238,13 @@ extern ""C"" __global__ void depthwise_conv2d(
     output[((b * channels + c) * outHeight + oh) * outWidth + ow] = sum;
 }
 
-// Transposed Conv2D (deconvolution)
+// Transposed Conv2D (deconvolution) with output padding support
 extern ""C"" __global__ void conv_transpose2d(
     const float* input, const float* kernel, float* output,
     int batch, int inChannels, int inHeight, int inWidth,
     int outChannels, int outHeight, int outWidth,
-    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW)
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW)
 {
     int ow = blockIdx.x * blockDim.x + threadIdx.x;
     int oh = blockIdx.y * blockDim.y + threadIdx.y;
@@ -254,6 +255,8 @@ extern ""C"" __global__ void conv_transpose2d(
 
     float sum = 0.0f;
 
+    // Output padding shifts which output pixels receive contributions
+    // Effective output position accounting for output padding
     for (int ic = 0; ic < inChannels; ic++) {
         for (int kh = 0; kh < kernelH; kh++) {
             for (int kw = 0; kw < kernelW; kw++) {
@@ -275,6 +278,99 @@ extern ""C"" __global__ void conv_transpose2d(
     }
 
     output[((b * outChannels + oc) * outHeight + oh) * outWidth + ow] = sum;
+}
+
+// Transposed Conv2D backward pass for input gradients
+// dL/dX = conv2d(dL/dY, W) - essentially a regular convolution
+extern ""C"" __global__ void conv_transpose2d_backward_input(
+    const float* gradOutput, const float* kernel, float* gradInput,
+    int batch, int inChannels, int inHeight, int inWidth,
+    int outChannels, int outHeight, int outWidth,
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW, int totalInput)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalInput) return;
+
+    // Decompose linear index into (b, ic, ih, iw)
+    int iw = idx % inWidth;
+    int ih = (idx / inWidth) % inHeight;
+    int ic = (idx / (inWidth * inHeight)) % inChannels;
+    int b = idx / (inWidth * inHeight * inChannels);
+
+    // Effective output dimensions excluding output padding
+    // Output padding adds zeros at the end that don't receive any contributions from input
+    int outHeight_eff = outHeight - outputPadH;
+    int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+
+    // For transposed conv backward w.r.t input, we convolve gradOutput with kernel
+    for (int oc = 0; oc < outChannels; oc++) {
+        for (int kh = 0; kh < kernelH; kh++) {
+            for (int kw = 0; kw < kernelW; kw++) {
+                // Output position that this input element contributed to
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    // Kernel layout: [inChannels, outChannels, kernelH, kernelW]
+                    int kIdx = ((ic * outChannels + oc) * kernelH + kh) * kernelW + kw;
+                    sum += gradOutput[goIdx] * kernel[kIdx];
+                }
+            }
+        }
+    }
+
+    gradInput[idx] = sum;
+}
+
+// Transposed Conv2D backward pass for kernel gradients
+// dL/dW[ic,oc,kh,kw] = sum over batch and positions of input[b,ic,ih,iw] * gradOutput[b,oc,oh,ow]
+extern ""C"" __global__ void conv_transpose2d_backward_kernel(
+    const float* input, const float* gradOutput, float* gradKernel,
+    int batch, int inChannels, int inHeight, int inWidth,
+    int outChannels, int outHeight, int outWidth,
+    int kernelH, int kernelW, int strideH, int strideW, int padH, int padW,
+    int outputPadH, int outputPadW, int totalKernel)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalKernel) return;
+
+    // Decompose linear index into (ic, oc, kh, kw)
+    int kw = idx % kernelW;
+    int kh = (idx / kernelW) % kernelH;
+    int oc = (idx / (kernelW * kernelH)) % outChannels;
+    int ic = idx / (kernelW * kernelH * outChannels);
+
+    // Effective output dimensions excluding output padding
+    // Output padding adds zeros at the end that don't receive any contributions from input
+    int outHeight_eff = outHeight - outputPadH;
+    int outWidth_eff = outWidth - outputPadW;
+
+    float sum = 0.0f;
+
+    // Accumulate gradient over batch and spatial positions
+    for (int b = 0; b < batch; b++) {
+        for (int ih = 0; ih < inHeight; ih++) {
+            for (int iw = 0; iw < inWidth; iw++) {
+                // Output position that this input+kernel contributed to
+                int oh = ih * strideH - padH + kh;
+                int ow = iw * strideW - padW + kw;
+
+                // Only consider positions within effective output (excluding output padding region)
+                if (oh >= 0 && oh < outHeight_eff && ow >= 0 && ow < outWidth_eff) {
+                    int inIdx = ((b * inChannels + ic) * inHeight + ih) * inWidth + iw;
+                    int goIdx = ((b * outChannels + oc) * outHeight + oh) * outWidth + ow;
+                    sum += input[inIdx] * gradOutput[goIdx];
+                }
+            }
+        }
+    }
+
+    gradKernel[idx] = sum;
 }
 
 // Conv3D for volumetric data
@@ -331,6 +427,8 @@ extern ""C"" __global__ void conv3d_direct(
                 "conv2d_backward_kernel",
                 "depthwise_conv2d",
                 "conv_transpose2d",
+                "conv_transpose2d_backward_input",
+                "conv_transpose2d_backward_kernel",
                 "conv3d_direct"
             };
         }

@@ -2,6 +2,9 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.MixedPrecision;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
@@ -180,6 +183,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// with pre-set parameters. This property tells you if the network can learn from data.
     /// </remarks>
     public virtual bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets whether all layers in the network support GPU-resident training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GPU-resident training keeps all data on GPU during the entire training loop:
+    /// - Forward pass runs on GPU
+    /// - Loss computation on GPU
+    /// - Backward pass on GPU
+    /// - Parameter updates on GPU
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> When this returns true, training can be much faster because
+    /// data doesn't need to be copied back and forth between CPU and GPU each step.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsGpuTraining
+    {
+        get
+        {
+            if (Layers.Count == 0) return false;
+
+            // All layers must support GPU training
+            foreach (var layer in Layers)
+            {
+                // Non-LayerBase<T> layers don't support GPU training
+                if (layer is not LayerBase<T>)
+                    return false;
+                if (layer is LayerBase<T> layerBase && !layerBase.SupportsGpuTraining)
+                    return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether GPU-resident training can be used right now.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This combines layer support with GPU engine availability.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Check this before calling TrainBatchGpu(). If false,
+    /// use the standard TrainBatch() method instead.
+    /// </para>
+    /// </remarks>
+    public virtual bool CanTrainOnGpu => SupportsGpuTraining && AiDotNetEngine.Current is DirectGpuTensorEngine;
+
+    /// <summary>
+    /// Gets the GPU tensor engine when available, or null if not using GPU.
+    /// </summary>
+    protected DirectGpuTensorEngine? GpuEngine => AiDotNetEngine.Current as DirectGpuTensorEngine;
 
     /// <summary>
     /// The maximum allowed norm for gradients during training.
@@ -465,6 +522,453 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         return gradientTensor;
     }
+
+    #region GPU Training Methods
+
+    /// <summary>
+    /// Performs a forward pass through the network entirely on GPU.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>The GPU-resident output tensor.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU execution.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method passes data through all layers on GPU without CPU round-trips.
+    /// The output remains on GPU and can be used directly for loss computation.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Like ForwardWithMemory() but everything stays on the GPU.
+    /// This is much faster for training because there's no copying between CPU and GPU.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU forward pass is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                current = layerBase.ForwardGpu(current);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Layer {layer.GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
+            }
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Performs backpropagation through all layers entirely on GPU.
+    /// </summary>
+    /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>
+    /// <returns>The GPU-resident gradient with respect to network input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method backpropagates through all layers on GPU:
+    /// - Each layer computes input gradients and stores weight gradients on GPU
+    /// - No data is transferred to CPU during backpropagation
+    /// - After calling this, call UpdateParametersGpu() to apply the gradients
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Like Backpropagate() but everything stays on GPU.
+    /// The weight gradients are computed and stored on GPU, ready for the update step.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> BackpropagateGpu(IGpuTensor<T> outputGradients)
+    {
+        if (!IsTrainingMode)
+        {
+            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
+        }
+
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU backward pass is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        var gradientTensor = outputGradients;
+
+        // Backpropagate through layers in reverse order
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is LayerBase<T> layerBase)
+            {
+                gradientTensor = layerBase.BackwardGpu(gradientTensor);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Layer {Layers[i].GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
+            }
+        }
+
+        return gradientTensor;
+    }
+
+    /// <summary>
+    /// Performs backpropagation through all layers with deferred GPU execution.
+    /// </summary>
+    /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <returns>The GPU-resident gradient with respect to network input.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses deferred execution to batch all backward pass operations into a single GPU command buffer.
+    /// This reduces CPU-GPU synchronization overhead and improves performance.
+    /// </para>
+    /// </remarks>
+    public virtual IGpuTensor<T> BackpropagateGpuDeferred(
+        IGpuTensor<T> outputGradients,
+        GpuExecutionOptions? options = null)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        if (engine?.GetBackend() == null)
+        {
+            // Fallback to non-deferred if no GPU backend
+            return BackpropagateGpu(outputGradients);
+        }
+
+        var backend = engine.GetBackend() as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            return BackpropagateGpu(outputGradients);
+        }
+
+        return backend.ExecuteDeferred(
+            scope => BackpropagateGpu(outputGradients),
+            options);
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters in the network using GPU-computed gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <param name="momentum">Optional momentum factor (default 0).</param>
+    /// <param name="weightDecay">Optional weight decay / L2 regularization factor (default 0).</param>
+    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using gradients computed by BackpropagateGpu.
+    /// The update uses: w = w - lr * (grad + weightDecay * w) + momentum * velocity
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> After computing gradients with BackpropagateGpu(), call this
+    /// to actually update the weights. Everything happens on GPU for maximum speed.
+    /// </para>
+    /// </remarks>
+    [Obsolete("Use UpdateParametersGpu(IGpuOptimizerConfig) instead for full optimizer support.")]
+    public virtual void UpdateParametersGpu(T learningRate, T? momentum = default, T? weightDecay = default)
+    {
+        // Convert to new config-based API
+        var config = new SgdGpuConfig(
+            NumOps.ToFloat(learningRate),
+            momentum: momentum != null ? NumOps.ToFloat(momentum) : 0.0f,
+            weightDecay: weightDecay != null ? NumOps.ToFloat(weightDecay) : 0f);
+        UpdateParametersGpu(config);
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters in the network using the specified optimizer configuration.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration specifying the update algorithm and hyperparameters.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates weights and biases directly on GPU using gradients computed by BackpropagateGpu.
+    /// Supports all GPU optimizer types: SGD, Adam, AdamW, RMSprop, Adagrad, NAG, LARS, LAMB.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> After computing gradients with BackpropagateGpu(), call this
+    /// to actually update the weights. The config determines which optimizer algorithm to use:
+    /// - SGD: Simple gradient descent with optional momentum
+    /// - Adam: Adaptive learning rates (most popular)
+    /// - AdamW: Adam with proper weight decay (best for transformers)
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU parameter updates are not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase && layerBase.SupportsGpuTraining)
+            {
+                layerBase.UpdateParametersGpu(config);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters with deferred GPU execution.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options.</param>
+    /// <remarks>
+    /// <para>
+    /// Uses deferred execution to batch all parameter update operations into a single GPU command buffer.
+    /// This reduces CPU-GPU synchronization overhead and improves training performance.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParametersGpuDeferred(
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null)
+    {
+        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        if (engine?.GetBackend() == null)
+        {
+            // Fallback to non-deferred if no GPU backend
+            UpdateParametersGpu(config);
+            return;
+        }
+
+        var backend = engine.GetBackend() as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            UpdateParametersGpu(config);
+            return;
+        }
+
+        backend.ExecuteDeferred(
+            scope => UpdateParametersGpu(config),
+            options);
+    }
+
+    /// <summary>
+    /// Performs a complete training step (forward + backward + update) on GPU with deferred execution.
+    /// </summary>
+    /// <param name="input">The GPU-resident input batch.</param>
+    /// <param name="target">The GPU-resident target batch.</param>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options for deferred execution.</param>
+    /// <returns>The loss value for this batch.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method wraps forward, backward, and update in a deferred execution scope, allowing the GPU
+    /// to optimize the entire training step as a single execution graph. This provides significant
+    /// performance improvements through:
+    /// - Kernel fusion
+    /// - Memory optimization
+    /// - Stream parallelization
+    /// - Reduced synchronization overhead
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the fastest way to train on GPU. Instead of executing each
+    /// operation immediately, it records all operations and executes them as one optimized graph.
+    /// Think of it like batch processing - more efficient than doing things one at a time.
+    /// </para>
+    /// </remarks>
+    public virtual T TrainBatchGpuDeferred(
+        IGpuTensor<T> input,
+        IGpuTensor<T> target,
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU training is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("GPU training requires a GPU engine.");
+        }
+
+        options ??= new GpuExecutionOptions
+        {
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            EnableGpuResidency = true
+        };
+
+        T lossValue = NumOps.Zero;
+        
+        var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU training requires an async GPU backend.");
+        }
+
+        // Execute the entire training step as a deferred graph
+        backend.ExecuteDeferred(
+            scope =>
+            {
+                // Forward pass
+                var output = ForwardGpu(input);
+
+                // Compute loss
+                var lossResult = LossFunction.CalculateLossAndGradientGpu(output, target);
+                lossValue = lossResult.Loss;
+
+                // Backward pass
+                BackpropagateGpu(lossResult.Gradient);
+
+                // Update parameters
+                UpdateParametersGpu(config);
+            },
+            options);
+
+        return lossValue;
+    }
+
+    /// <summary>
+    /// Performs a complete training step (forward + backward + update) on GPU with deferred execution asynchronously.
+    /// </summary>
+    /// <param name="input">The GPU-resident input batch.</param>
+    /// <param name="target">The GPU-resident target batch.</param>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <param name="options">Optional GPU execution options for deferred execution.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The loss value for this batch.</returns>
+    public virtual async Task<T> TrainBatchGpuDeferredAsync(
+        IGpuTensor<T> input,
+        IGpuTensor<T> target,
+        IGpuOptimizerConfig config,
+        GpuExecutionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanTrainOnGpu)
+        {
+            throw new InvalidOperationException(
+                "GPU training is not supported. Check CanTrainOnGpu before calling this method.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException("GPU training requires a GPU engine.");
+        }
+
+        options ??= new GpuExecutionOptions
+        {
+            EnableGraphCompilation = true,
+            EnableAutoFusion = true,
+            EnableGpuResidency = true
+        };
+
+        T lossValue = NumOps.Zero;
+        
+        var backend = gpuEngine.GetBackend() as IAsyncGpuBackend;
+        if (backend == null)
+        {
+            throw new InvalidOperationException("GPU training requires an async GPU backend.");
+        }
+
+        // Execute the entire training step as a deferred graph asynchronously
+        await backend.ExecuteDeferredAsync(
+            scope =>
+            {
+                // Forward pass
+                var output = ForwardGpu(input);
+
+                // Compute loss
+                var lossResult = LossFunction.CalculateLossAndGradientGpu(output, target);
+                lossValue = lossResult.Loss;
+
+                // Backward pass
+                BackpropagateGpu(lossResult.Gradient);
+
+                // Update parameters
+                UpdateParametersGpu(config);
+
+                return lossValue;
+            },
+            options,
+            cancellationToken);
+
+        return lossValue;
+    }
+
+    /// <summary>
+    /// Uploads all layer weights to GPU for GPU-resident training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this once before starting GPU training to:
+    /// - Create GPU buffers for all weights and biases
+    /// - Copy current CPU values to GPU
+    /// - Create GPU buffers for gradients and optimizer states
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This prepares the network for GPU training by copying
+    /// all learned values to the GPU. After this, training can happen entirely on GPU.
+    /// </para>
+    /// </remarks>
+    public virtual void UploadWeightsToGpu()
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                layerBase.UploadWeightsToGpu();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Downloads all layer weights from GPU back to CPU.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this after GPU training to sync updated weights back to CPU for:
+    /// - Model saving/checkpointing
+    /// - CPU inference
+    /// - Weight inspection
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During GPU training, weights are updated on GPU.
+    /// The CPU copy becomes stale. Call this to get the latest values back to CPU.
+    /// </para>
+    /// </remarks>
+    public virtual void DownloadWeightsFromGpu()
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                layerBase.DownloadWeightsFromGpu();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Zeros all GPU gradient accumulators in preparation for a new batch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this at the start of each training batch to clear gradients from the previous batch.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Before processing a new batch, you need to clear the old gradients.
+    /// Otherwise they accumulate and training goes wrong.
+    /// </para>
+    /// </remarks>
+    public virtual void ZeroGradientsGpu()
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                layerBase.ZeroGradientsGpu();
+            }
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Extracts a single example from a batch tensor and formats it as a tensor with shape [1, features].
@@ -754,81 +1258,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             // Clean up on error
             if (ownsCurrentTensor && current is not null)
-            {
-                current.Dispose();
-            }
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass with GPU-resident input.
-    /// Use this overload when chaining multiple networks or when input is already on GPU.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no GPU backend is available or the engine is not a DirectGpuTensorEngine.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this version when your data is already on the GPU
-    /// (for example, from a previous network's output). This avoids an extra upload step.
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(IGpuTensor<T> input)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires DirectGpuTensorEngine. Current engine: " +
-                Engine.GetType().Name);
-        }
-
-        IGpuTensor<T> current = input;
-        bool ownsCurrentTensor = false; // Don't own the input
-
-        try
-        {
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                var layer = Layers[i];
-
-                if (layer.CanExecuteOnGpu)
-                {
-                    var next = layer.ForwardGpu(current);
-
-                    // Dispose intermediate if we own it (but not the original input)
-                    if (ownsCurrentTensor)
-                    {
-                        current.Dispose();
-                    }
-
-                    current = next;
-                    ownsCurrentTensor = true;
-                }
-                else
-                {
-                    // Layer doesn't support GPU - fall back to CPU
-                    var cpuInput = current.ToTensor();
-                    if (ownsCurrentTensor)
-                    {
-                        current.Dispose();
-                    }
-
-                    var cpuOutput = layer.Forward(cpuInput);
-
-                    // Upload result back to GPU
-                    current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-                    ownsCurrentTensor = true;
-                }
-            }
-
-            return current;
-        }
-        catch (Exception)
-        {
-            if (ownsCurrentTensor)
             {
                 current.Dispose();
             }

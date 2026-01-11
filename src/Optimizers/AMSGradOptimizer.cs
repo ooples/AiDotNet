@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Optimizers;
 
@@ -41,6 +42,10 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// The current time step.
     /// </summary>
     private int _t;
+
+    private IGpuBuffer? _gpuM;
+    private IGpuBuffer? _gpuV;
+    private IGpuBuffer? _gpuVMax;
 
     /// <summary>
     /// Initializes a new instance of the AMSGradOptimizer class.
@@ -280,6 +285,57 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Reverse: original = updated + update
         return (Vector<T>)Engine.Add(updatedParameters, update);
+    }
+
+    public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        var zeros = new float[parameterCount];
+        _gpuM = backend.AllocateBuffer(zeros);
+        _gpuV = backend.AllocateBuffer(zeros);
+        _gpuVMax = backend.AllocateBuffer(zeros);
+
+        base.InitializeGpuState(parameterCount, backend);
+    }
+
+    /// <summary>
+    /// GPU-accelerated parameter update for AMSGrad optimizer.
+    /// </summary>
+    public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        if (!_gpuStateInitialized || _gpuM == null || _gpuV == null || _gpuVMax == null)
+        {
+            InitializeGpuState(parameterCount, backend);
+        }
+
+        _t++;
+
+        backend.AmsgradUpdate(
+            parameters,
+            gradients,
+            _gpuM!,
+            _gpuV!,
+            _gpuVMax!,
+            (float)NumOps.ToDouble(CurrentLearningRate),
+            (float)_options.Beta1,
+            (float)_options.Beta2,
+            (float)_options.Epsilon,
+            0.0f, // AMSGrad doesn't use weight decay in standard formulation
+            _t,
+            parameterCount);
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    public override void DisposeGpuState()
+    {
+        _gpuM?.Dispose();
+        _gpuM = null;
+        _gpuV?.Dispose();
+        _gpuV = null;
+        _gpuVMax?.Dispose();
+        _gpuVMax = null;
+        _gpuStateInitialized = false;
     }
 
     /// <summary>
