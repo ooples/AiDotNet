@@ -1734,7 +1734,7 @@ __kernel void instancenorm_backward(
 
 __kernel void conv3d_backward_input(
     __global const float* gradOutput,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* gradInput,
     const int N, const int inC, const int D, const int H, const int W,
     const int outC, const int outD, const int outH, const int outW,
@@ -1770,7 +1770,7 @@ __kernel void conv3d_backward_input(
                         if (od >= 0 && od < outD && oh >= 0 && oh < outH && ow >= 0 && ow < outW) {
                             int gradOutIdx = ((n * outC + oc) * outD + od) * outH * outW + oh * outW + ow;
                             int kernelIdx = ((oc * inC + ic) * kD + kd) * kH * kW + kh * kW + kw;
-                            sum += gradOutput[gradOutIdx] * kernel[kernelIdx];
+                            sum += gradOutput[gradOutIdx] * weights[kernelIdx];
                         }
                     }
                 }
