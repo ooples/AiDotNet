@@ -54,17 +54,17 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
         // Default: fall back to CPU
         var predictedCpu = predicted.ToTensor();
         var actualCpu = actual.ToTensor();
-        
+
         var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
         var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
-        
+
         var gradientTensor = new Tensor<T>(predictedCpu.Shape);
         Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
-        
+
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
         var gradientGpu = new GpuTensor<T>(backend, gradientTensor, GpuTensorRole.Gradient);
-        
+
         return (loss, gradientGpu);
     }
 
