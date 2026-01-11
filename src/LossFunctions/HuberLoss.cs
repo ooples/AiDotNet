@@ -92,14 +92,14 @@ public class HuberLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         var result = new T[predicted.Length];
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
             T absDiff = NumOps.Abs(diff);
-            
+
             if (NumOps.LessThanOrEquals(absDiff, _delta))
             {
                 // Quadratic region: derivative is diff
@@ -111,7 +111,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
                 result[i] = NumOps.Multiply(_delta, NumOps.SignOrZero(diff));
             }
         }
-        
+
         return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
     }
 

@@ -1,5 +1,5 @@
-using Newtonsoft.Json;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 

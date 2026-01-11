@@ -42,11 +42,11 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         var diff = predicted - actual;
         var mse = diff.PointwiseMultiply(diff).Average();
         var rmse = NumOps.Sqrt(mse);
-        
+
         if (NumOps.Equals(rmse, NumOps.Zero))
         {
             var zeros = new T[predicted.Length];
@@ -54,10 +54,10 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
                 zeros[i] = NumOps.Zero;
             return new Vector<T>(zeros);
         }
-        
+
         var n = NumOps.FromDouble(predicted.Length);
         return diff.Divide(NumOps.Multiply(rmse, n));
     }
 
-    
+
 }

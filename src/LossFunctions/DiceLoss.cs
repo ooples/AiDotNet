@@ -78,21 +78,21 @@ public class DiceLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        
+
         T intersection = NumOps.Zero;
         T sumPredicted = NumOps.Zero;
         T sumActual = NumOps.Zero;
-        
+
         for (int i = 0; i < predicted.Length; i++)
         {
             intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
             sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
-        
+
         T denominator = NumOps.Add(sumPredicted, sumActual);
         T twoIntersection = NumOps.Multiply(NumOps.FromDouble(2.0), intersection);
-        
+
         var result = new T[predicted.Length];
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -109,9 +109,9 @@ public class DiceLoss<T> : LossFunctionBase<T>
                 )
             );
         }
-        
+
         return new Vector<T>(result);
     }
 
-    
+
 }
