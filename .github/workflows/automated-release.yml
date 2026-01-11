@@ -334,7 +334,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify TFMs in package (net471, net8.0)
+      - name: Verify TFMs in package (net471, net10.0)
         run: |
           set -e
           shopt -s nullglob
@@ -348,7 +348,7 @@ jobs:
             echo "Inspecting $pkg"
             files=$(unzip -Z1 "$pkg")
 
-            for tfm in net471 net8.0; do
+            for tfm in net471 net10.0; do
               if ! echo "$files" | grep -qE "^lib/${tfm}/.+\\.dll$"; then
                 echo "Error: Missing ${tfm} lib in package"
                 exit 1
