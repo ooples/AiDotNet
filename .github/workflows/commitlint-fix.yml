@@ -215,21 +215,24 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const body = [
+              '### Commit Messages Auto-Fixed',
+              '',
+              'The commitlint check failed because one or more commit messages did not follow Conventional Commits format.',
+              '',
+              '**Action taken** - All non-compliant commits have been fixed to follow the conventional commits format.',
+              '',
+              '**Changes made:**',
+              '- Subject lines are now lowercase (all types including deps)',
+              '- Types are now one of: feat, fix, docs, refactor, perf, test, chore, ci, style, or deps',
+              '',
+              'The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to git pull --rebase.'
+            ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Commit Messages Auto-Fixed
-
-The commitlint check failed because one or more commit messages didn't follow [Conventional Commits](https://www.conventionalcommits.org/) format.
-
-**Action taken** — All non-compliant commits have been fixed to follow the conventional commits format.
-
-**Changes made:**
-- Subject lines are now lowercase (all types including 'deps')
-- Types are now one of: \`feat\`, \`fix\`, \`docs\`, \`refactor\`, \`perf\`, \`test\`, \`chore\`, \`ci\`, \`style\`, or \`deps\`
-
-The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to \`git pull --rebase\`.`
+              body: body
             });
 
   handle-dependabot:
@@ -318,19 +321,23 @@ The PR branch has been force-pushed with the fixed commits. If you had local cha
         uses: actions/github-script@v7
         with:
           script: |
-            const newSubject = `${{ steps.check-needs-fix.outputs.new_subject }}`;
+            const newSubject = '${{ steps.check-needs-fix.outputs.new_subject }}';
+            const originalSubject = '${{ steps.get-commit.outputs.first_line }}';
+            const body = [
+              '### Dependabot Commit Message Fixed',
+              '',
+              'The commitlint check failed because the dependabot commit message did not follow the required format.',
+              '',
+              '**Action taken** - Fixed the subject line to be lowercase.',
+              '',
+              '**Original:** ' + originalSubject,
+              '**Fixed:** ' + newSubject,
+              '',
+              'The PR branch has been force-pushed with the fixed commit.'
+            ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### 🤖 Dependabot Commit Message Fixed
-
-The commitlint check failed because the dependabot commit message didn't follow the required format.
-
-**Action taken** — Fixed the subject line to be lowercase.
-
-**Original:** \`${{ steps.get-commit.outputs.first_line }}\`
-**Fixed:** \`${newSubject}\`
-
-The PR branch has been force-pushed with the fixed commit.`
+              body: body
             });
