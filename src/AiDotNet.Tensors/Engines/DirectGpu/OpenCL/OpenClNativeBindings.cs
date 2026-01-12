@@ -591,7 +591,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 try
                 {
-                    int err = GetPlatformIDs(0, null, out uint numPlatforms);   
+                    int err = GetPlatformIDs(0, null, out uint numPlatforms); // lgtm[cs/call-to-unmanaged-code]
                     bool available = err == CL_SUCCESS && numPlatforms > 0;     
                     LogDiagnostic($"[OpenCL Diagnostics] GetPlatformIDs returned error code: {err}, platforms found: {numPlatforms}, available: {available}");
                     return available;

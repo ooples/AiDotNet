@@ -1461,13 +1461,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                         if (timingEnabled) { Synchronize(); packBTime = sw!.ElapsedTicks; }
                     }
 
-                    // Pad C if needed (for beta != 0) - NO TRANSPOSE
+                    // Pad C if needed (for non-zero beta) - NO TRANSPOSE
                     if (cNeedsPad)
                     {
                         if (timingEnabled) { sw!.Restart(); }
                         cTemp = AllocateBuffer((int)cSize);
                         if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
-                        if (beta != 0.0f)
+                        if (!IsEffectivelyZero(beta))
                         {
                             // C is M×N row-major. Reinterpreted as column-major, it's N×M.
                             // We need mCeiled×nCeiled.
@@ -1577,7 +1577,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                         cTemp = AllocateBuffer((int)cSize);
                         cBuf = cTemp;
                         if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
-                        if (beta != 0.0f)
+                        if (!IsEffectivelyZero(beta))
                         {
                             ClBlastCopyMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
                             if (timingEnabled) { Synchronize(); packCTime = sw!.ElapsedTicks; }
@@ -1692,9 +1692,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return IsClBlastBaselineKernel0(config) || IsClBlastBaselineKernel1(config);
         }
 
+        private const float ZeroTolerance = 1e-8f;
+
         private static bool IsEffectivelyZero(float value)
         {
-            return Math.Abs(value) <= float.Epsilon;
+            return Math.Abs(value) <= ZeroTolerance;
         }
 
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
@@ -1849,10 +1851,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             int kPad = CeilDiv(K, kUnit) * kUnit;
 
             bool useColumnMajorA = config.UseColumnMajorA;
-            bool useColumnMajorC = config.StrideN; // For beginners: StrideN indicates column-major output preference
             bool needsPadding = mPad != M || nPad != N || kPad != K;
             
-            if (!needsPadding && !useColumnMajorA && !useColumnMajorC)
+            if (!needsPadding && !useColumnMajorA)
                 return TryExecuteDynamicGemm(A, B, C, M, N, K, alpha, beta, config);
 
             long aSize = (long)mPad * kPad;
@@ -1877,29 +1878,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             PadCopyMatrix(B, bPad, K, N, kPad, nPad);
 
-            if (useColumnMajorC)
-            {
-                if (!IsEffectivelyZero(beta))
-                    PadCopyTransposeMatrix(C, cPad, M, N, mPad, nPad);
-                else
-                    // Clear buffer if not using input C values
-                    Fill(cPad, 0.0f, (int)cSize);
-            }
+            if (!IsEffectivelyZero(beta))
+                PadCopyMatrix(C, cPad, M, N, mPad, nPad);
             else
-            {
-                if (!IsEffectivelyZero(beta))
-                    PadCopyMatrix(C, cPad, M, N, mPad, nPad);
-                else
-                    Fill(cPad, 0.0f, (int)cSize);
-            }
+                ZeroBuffer(cPad, (int)cSize);
 
             if (!TryExecuteDynamicGemm(aPad, bPad, cPad, mPad, nPad, kPad, alpha, beta, config))
                 return false;
 
-            if (useColumnMajorC)
-                PadCopyFromColumnMajorMatrix(cPad, C, mPad, nPad, M, N);
-            else
-                CopySubmatrix(cPad, C, M, N, nPad, N);
+            CopySubmatrix(cPad, C, M, N, nPad, N);
 
             return true;
         }
@@ -8783,9 +8770,18 @@ KERNEL VARIANTS (A/B testing):
 
         private void ZeroBuffer(IGpuBuffer buffer, int size)
         {
+            if (_context != null && _kernelCache.TryGetValue("zero_buffer", out var kernel))
+            {
+                var buf = ((DirectOpenClGpuBuffer)buffer).Buffer;
+                kernel.SetArg(0, buf.Handle);
+                kernel.SetArg(1, size);
+                kernel.Execute1D(size, Math.Min(256, size));
+                return;
+            }
+
             var data = new float[size];
-            var buf = ((DirectOpenClGpuBuffer)buffer).Buffer;
-            buf.CopyFromHost(data);
+            var fallback = ((DirectOpenClGpuBuffer)buffer).Buffer;
+            fallback.CopyFromHost(data);
         }
 
         private void ScaleBuffer(IGpuBuffer buffer, float scale, int size)
