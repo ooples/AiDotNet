@@ -2228,10 +2228,11 @@ public class CpuEngine : IEngine
         var aSpan = a.AsSpan();
         var bSpan = b.AsSpan();
         var resultSpan = result.AsWritableSpan();
+        bool checkZero = !MathHelper.IsFloatingPoint<T>();
         for (int i = 0; i < bSpan.Length; i++)
         {
             var divisor = bSpan[i];
-            if (numOps.Equals(divisor, numOps.Zero))
+            if (checkZero && numOps.Equals(divisor, numOps.Zero))
             {
                 throw new DivideByZeroException($"Division by zero at index {i}");
             }
@@ -14956,11 +14957,18 @@ public class CpuEngine : IEngine
             // Use optimized fused operations for float type
             if (typeof(T) == typeof(float))
             {
-                // Cast arrays directly (boxing avoids generic constraint issues)
-                var inputArray = (float[])(object)input.Data;
-                var weightsArray = (float[])(object)weights.Data;
-                var biasArray = bias != null ? (float[])(object)bias.Data : null;
-                var outputArray = (float[])(object)result.Data;
+                var inputData = input.Data;
+                var weightsData = weights.Data;
+                var outputData = result.Data;
+                var inputArray = Unsafe.As<T[], float[]>(ref inputData);
+                var weightsArray = Unsafe.As<T[], float[]>(ref weightsData);
+                var outputArray = Unsafe.As<T[], float[]>(ref outputData);
+                float[]? biasArray = null;
+                if (bias is not null)
+                {
+                    var biasData = bias.Data;
+                    biasArray = Unsafe.As<T[], float[]>(ref biasData);
+                }
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
@@ -14972,10 +14980,18 @@ public class CpuEngine : IEngine
             // Use optimized fused operations for double type
             if (typeof(T) == typeof(double))
             {
-                var inputArray = (double[])(object)input.Data;
-                var weightsArray = (double[])(object)weights.Data;
-                var biasArray = bias != null ? (double[])(object)bias.Data : null;
-                var outputArray = (double[])(object)result.Data;
+                var inputData = input.Data;
+                var weightsData = weights.Data;
+                var outputData = result.Data;
+                var inputArray = Unsafe.As<T[], double[]>(ref inputData);
+                var weightsArray = Unsafe.As<T[], double[]>(ref weightsData);
+                var outputArray = Unsafe.As<T[], double[]>(ref outputData);
+                double[]? biasArray = null;
+                if (bias is not null)
+                {
+                    var biasData = bias.Data;
+                    biasArray = Unsafe.As<T[], double[]>(ref biasData);
+                }
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,

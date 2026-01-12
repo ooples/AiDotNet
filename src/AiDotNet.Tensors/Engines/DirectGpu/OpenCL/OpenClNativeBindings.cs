@@ -16,6 +16,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
     {
         // OpenCL library name varies by platform
         private const string OpenClLibrary = "OpenCL";
+        public static bool EnableDiagnostics { get; set; }
 
         #region Error Codes
 
@@ -355,12 +356,12 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         #region Helper Methods
 
         /// <summary>
-        /// Prints diagnostic information about OpenCL DLL search paths.
+        /// Prints diagnostic information about OpenCL DLL search paths.        
         /// Call this to debug DLL loading issues.
         /// </summary>
         public static void PrintDllSearchDiagnostics()
         {
-            Trace.WriteLine("[OpenCL DLL Diagnostics] Searching for OpenCL.dll...");
+            LogDiagnostic("[OpenCL DLL Diagnostics] Searching for OpenCL.dll...");
 
             // Check common Windows locations for OpenCL.dll
             var searchPaths = new[]
@@ -373,12 +374,12 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             foreach (var path in searchPaths)
             {
                 bool exists = System.IO.File.Exists(path);
-                Trace.WriteLine($"[OpenCL DLL Diagnostics] {path} - {(exists ? "FOUND" : "not found")}");
+                LogDiagnostic($"[OpenCL DLL Diagnostics] {path} - {(exists ? "FOUND" : "not found")}");
             }
 
             // Check PATH environment variable
-            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-            Trace.WriteLine("[OpenCL DLL Diagnostics] Checking PATH directories...");
+            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";     
+            LogDiagnostic("[OpenCL DLL Diagnostics] Checking PATH directories...");
 
             var pathDirs = pathEnv.Split(';');
             bool foundInPath = false;
@@ -390,7 +391,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     var openClPath = System.IO.Path.Combine(dir.Trim(), "OpenCL.dll");
                     if (System.IO.File.Exists(openClPath))
                     {
-                        Trace.WriteLine($"[OpenCL DLL Diagnostics] Found in PATH: {openClPath}");
+                        LogDiagnostic($"[OpenCL DLL Diagnostics] Found in PATH: {openClPath}");
                         foundInPath = true;
                     }
                 }
@@ -402,13 +403,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             if (!foundInPath)
             {
-                Trace.WriteLine("[OpenCL DLL Diagnostics] OpenCL.dll NOT found in any PATH directory");
+                LogDiagnostic("[OpenCL DLL Diagnostics] OpenCL.dll NOT found in any PATH directory");
             }
 
-            Trace.WriteLine("[OpenCL DLL Diagnostics] If OpenCL.dll is missing, install GPU drivers:");
-            Trace.WriteLine("[OpenCL DLL Diagnostics]   - NVIDIA: Install GeForce or CUDA drivers");
-            Trace.WriteLine("[OpenCL DLL Diagnostics]   - AMD: Install Adrenalin drivers");
-            Trace.WriteLine("[OpenCL DLL Diagnostics]   - Intel: Install Intel Graphics drivers or OpenCL Runtime");
+            LogDiagnostic("[OpenCL DLL Diagnostics] If OpenCL.dll is missing, install GPU drivers:");
+            LogDiagnostic("[OpenCL DLL Diagnostics]   - NVIDIA: Install GeForce or CUDA drivers");
+            LogDiagnostic("[OpenCL DLL Diagnostics]   - AMD: Install Adrenalin drivers");
+            LogDiagnostic("[OpenCL DLL Diagnostics]   - Intel: Install Intel Graphics drivers or OpenCL Runtime");
         }
 
         /// <summary>
@@ -590,23 +591,29 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 try
                 {
-                    int err = GetPlatformIDs(0, null, out uint numPlatforms);
-                    bool available = err == CL_SUCCESS && numPlatforms > 0;
-                    Trace.WriteLine($"[OpenCL Diagnostics] GetPlatformIDs returned error code: {err}, platforms found: {numPlatforms}, available: {available}");
+                    int err = GetPlatformIDs(0, null, out uint numPlatforms);   
+                    bool available = err == CL_SUCCESS && numPlatforms > 0;     
+                    LogDiagnostic($"[OpenCL Diagnostics] GetPlatformIDs returned error code: {err}, platforms found: {numPlatforms}, available: {available}");
                     return available;
                 }
                 catch (DllNotFoundException ex)
                 {
-                    Trace.WriteLine($"[OpenCL Diagnostics] DllNotFoundException: {ex.Message}");
+                    LogDiagnostic($"[OpenCL Diagnostics] DllNotFoundException: {ex.Message}");
                     PrintDllSearchDiagnostics();
                     return false;
                 }
                 catch (Exception ex)
                 {
-                    Trace.WriteLine($"[OpenCL Diagnostics] Exception during OpenCL availability check: {ex.GetType().Name}: {ex.Message}");
+                    LogDiagnostic($"[OpenCL Diagnostics] Exception during OpenCL availability check: {ex.GetType().Name}: {ex.Message}");
                     return false;
                 }
             }
+        }
+
+        private static void LogDiagnostic(string message)
+        {
+            if (EnableDiagnostics)
+                Trace.WriteLine(message);
         }
 
         /// <summary>

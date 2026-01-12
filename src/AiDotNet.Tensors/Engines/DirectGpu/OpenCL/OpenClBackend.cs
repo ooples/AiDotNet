@@ -1692,6 +1692,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return IsClBlastBaselineKernel0(config) || IsClBlastBaselineKernel1(config);
         }
 
+        private static bool IsEffectivelyZero(float value)
+        {
+            return Math.Abs(value) <= float.Epsilon;
+        }
+
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
         {
             if (_dynamicGemm == null)
@@ -1799,12 +1804,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
                 if (safeKernel)
                 {
-                    _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_medium_tile (safe mode)", M, N, K);
+                    if (EnableTuningDiagnostics || traceEnabled)
+                        _logger?.LogDebug("[GEMM {M}x{N}x{K}] Kernel: gemm_medium_tile (safe mode)", M, N, K);
                     GemmMediumTile(A, B, C, M, N, K, alpha, beta);
                 }
                 else
                 {
-                    _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_double_buffered", M, N, K);
+                    if (EnableTuningDiagnostics || traceEnabled)
+                        _logger?.LogDebug("[GEMM {M}x{N}x{K}] Kernel: gemm_double_buffered (fallback)", M, N, K);
                     GemmDoubleBuffered(A, B, C, M, N, K, alpha, beta);
                 }
             }
@@ -1872,7 +1879,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             if (useColumnMajorC)
             {
-                if (beta != 0.0f)
+                if (!IsEffectivelyZero(beta))
                     PadCopyTransposeMatrix(C, cPad, M, N, mPad, nPad);
                 else
                     // Clear buffer if not using input C values
@@ -1880,7 +1887,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
             else
             {
-                if (beta != 0.0f)
+                if (!IsEffectivelyZero(beta))
                     PadCopyMatrix(C, cPad, M, N, mPad, nPad);
                 else
                     Fill(cPad, 0.0f, (int)cSize);
