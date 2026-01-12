@@ -23,13 +23,14 @@ namespace AiDotNet.NeuralNetworks
         private readonly int _vocabSize;
         private readonly int _embeddingDimension;
         private readonly ITokenizer _tokenizer;
+        private readonly int _maxTokens;
 
         #endregion
 
         #region Properties
 
         public int EmbeddingDimension => _embeddingDimension;
-        public int MaxTokens => 10000;
+        public int MaxTokens => _maxTokens;
 
         #endregion
 
@@ -40,12 +41,14 @@ namespace AiDotNet.NeuralNetworks
             ITokenizer? tokenizer = null,
             int vocabSize = 10000,
             int embeddingDimension = 100,
+            int maxTokens = 512,
             ILossFunction<T>? lossFunction = null)
             : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
         {
-            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.BERT);
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;
+            _maxTokens = maxTokens;
 
             InitializeLayers();
         }
@@ -60,7 +63,6 @@ namespace AiDotNet.NeuralNetworks
 
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
-                // Use custom layers from architecture
                 foreach (var layer in Architecture.Layers)
                 {
                     AddLayerToCollection(layer);
@@ -68,9 +70,7 @@ namespace AiDotNet.NeuralNetworks
             }
             else
             {
-                // Use default layers via LayerHelper
                 var defaultLayers = LayerHelper<T>.CreateDefaultGloVeLayers(
-                    Architecture,
                     _vocabSize,
                     _embeddingDimension);
 
@@ -87,12 +87,10 @@ namespace AiDotNet.NeuralNetworks
 
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            // GloVe training is non-standard (weighted least squares on co-occurrence)
-            // Here we use standard backprop as a placeholder for the NN structure
             var output = ForwardWithMemory(input);
             var outputVec = output.ToVector();
             var expectedVec = expectedOutput.ToVector();
-
+            
             var gradVec = LossFunction.CalculateDerivative(outputVec, expectedVec);
             var grad = Tensor<T>.FromVector(gradVec, output.Shape);
             
@@ -108,7 +106,7 @@ namespace AiDotNet.NeuralNetworks
                 if (count > 0)
                 {
                     var layerParams = parameters.SubVector(offset, count);
-                    layer.UpdateParameters(layerParams);
+                    layer.SetParameters(layerParams);
                     offset += count;
                 }
             }
@@ -116,6 +114,9 @@ namespace AiDotNet.NeuralNetworks
 
         public override Tensor<T> Predict(Tensor<T> input)
         {
+            if (TryForwardGpuOptimized(input, out var gpuResult))
+                return gpuResult;
+
             // Standard prediction uses main embedding layer (first layer)
             return Layers[0].Forward(input);
         }
@@ -126,41 +127,36 @@ namespace AiDotNet.NeuralNetworks
                 return new Vector<T>(_embeddingDimension);
 
             var tokenResult = _tokenizer.Encode(text);
-            var tokenIds = tokenResult.TokenIds;
+            var tokenIds = tokenResult.TokenIds.Take(_maxTokens).ToList();
 
             if (tokenIds.Count == 0)
                 return new Vector<T>(_embeddingDimension);
 
+            var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
+            var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
+            
+            // In GloVe, final word vector is often W + W_tilde
+            // W is layer 0, W_tilde is layer 1
+            var w = Layers[0].Forward(inputTensor);
+            var w_tilde = Layers[1].Forward(inputTensor);
+            
             var sumVector = new Vector<T>(_embeddingDimension);
-            int count = 0;
-
-            foreach (var id in tokenIds)
+            for (int s = 0; s < tokenIds.Count; s++)
             {
-                if (id >= 0 && id < _vocabSize)
+                for (int d = 0; d < _embeddingDimension; d++)
                 {
-                    var inputVec = new Vector<T>(new[] { NumOps.FromDouble(id) });
-                    var inputTensor = Tensor<T>.FromVector(inputVec);
-                    
-                    // Use main embedding layer (first layer)
-                    var w = Layers[0].Forward(inputTensor);
-                    
-                    for (int i = 0; i < _embeddingDimension; i++)
-                    {
-                        sumVector[i] = NumOps.Add(sumVector[i], w[0, i]);
-                    }
-                    count++;
+                    T val = NumOps.Add(w[s, d], w_tilde[s, d]);
+                    sumVector[d] = NumOps.Add(sumVector[d], val);
                 }
             }
 
-            if (count == 0) return new Vector<T>(_embeddingDimension);
-
             var meanVector = new Vector<T>(_embeddingDimension);
-            for (int i = 0; i < _embeddingDimension; i++)
+            for (int d = 0; d < _embeddingDimension; d++)
             {
-                meanVector[i] = NumOps.Divide(sumVector[i], NumOps.FromDouble(count));
+                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(tokenIds.Count));
             }
 
-            return NormalizeVector(meanVector);
+            return meanVector.Normalize();
         }
 
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
@@ -180,27 +176,6 @@ namespace AiDotNet.NeuralNetworks
             return result;
         }
 
-        private Vector<T> NormalizeVector(Vector<T> vector)
-        {
-            T sumSquares = NumOps.Zero;
-            for (int i = 0; i < vector.Length; i++)
-            {
-                sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-            }
-
-            T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-            if (NumOps.ToDouble(norm) < 1e-10)
-                return vector;
-
-            var normalized = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                normalized[i] = NumOps.Divide(vector[i], norm);
-            }
-
-            return normalized;
-        }
-
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new GloVe<T>(
@@ -208,6 +183,7 @@ namespace AiDotNet.NeuralNetworks
                 _tokenizer,
                 _vocabSize,
                 _embeddingDimension,
+                _maxTokens,
                 LossFunction);
         }
 
@@ -217,12 +193,13 @@ namespace AiDotNet.NeuralNetworks
             {
                 Name = "GloVe",
                 ModelType = ModelType.NeuralNetwork,
-                Description = "GloVe embedding model",
+                Description = "GloVe (Global Vectors) embedding model",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },
-                    { "VocabSize", _vocabSize }
+                    { "VocabSize", _vocabSize },
+                    { "MaxTokens", _maxTokens }
                 }
             };
         }
@@ -231,10 +208,12 @@ namespace AiDotNet.NeuralNetworks
         {
             writer.Write(_vocabSize);
             writer.Write(_embeddingDimension);
+            writer.Write(_maxTokens);
         }
 
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            reader.ReadInt32();
             reader.ReadInt32();
             reader.ReadInt32();
         }

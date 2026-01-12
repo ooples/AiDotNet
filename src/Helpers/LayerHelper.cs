@@ -7980,6 +7980,86 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
     }
 
+    /// <summary>
+    /// Creates default layers for a Word2Vec model (Skip-Gram or CBOW).
+    /// </summary>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a Word2Vec model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Word2Vec learns to represent words as vectors of numbers (embeddings) 
+    /// such that words with similar meanings are close to each other.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWord2VecLayers(
+        int vocabSize,
+        int embeddingDimension)
+    {
+        // Target word embeddings (U matrix)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // Context word embeddings (V matrix)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+    }
+
+    /// <summary>
+    /// Creates default layers for a GloVe (Global Vectors) model.
+    /// </summary>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a GloVe model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence 
+    /// statistics of words. It uses two sets of embeddings and two sets of biases.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGloVeLayers(
+        int vocabSize,
+        int embeddingDimension)
+    {
+        // Main embeddings (W)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // Context embeddings (W_tilde)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // Main biases (b)
+        yield return new EmbeddingLayer<T>(vocabSize, 1);
+
+        // Context biases (b_tilde)
+        yield return new EmbeddingLayer<T>(vocabSize, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for a FastText model.
+    /// </summary>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="bucketSize">The number of buckets for n-gram hashing.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a FastText model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FastText improves on Word2Vec by considering sub-word information 
+    /// (character n-grams). It represents words as the sum of their n-gram embeddings.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
+        int vocabSize,
+        int bucketSize,
+        int embeddingDimension)
+    {
+        // Word Embeddings
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // N-gram Embeddings (Hashing trick)
+        yield return new EmbeddingLayer<T>(bucketSize, embeddingDimension);
+
+        // Context word embeddings (similar to Word2Vec V matrix)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+    }
+
 
     #endregion
 }
