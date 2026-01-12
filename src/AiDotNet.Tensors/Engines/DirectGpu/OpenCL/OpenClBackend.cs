@@ -900,6 +900,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
                 if (ClBlastXgemmDatabase.TryGetConfig(deviceInfo, out var baseline))
                 {
+                    baseline = NormalizeRowMajorConfig(baseline);
                     _clblastBaselineConfig = baseline;
                     config = baseline;
                     return true;
@@ -929,13 +930,45 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     MdimaSize = 16,
                     NdimbSize = 8,
                     UseTrueVectorLDS = true,
-                    UseColumnMajorA = true,
+                    UseColumnMajorA = false,
                     KernelName = "clblast_baseline_k0"
                 };
+                defaultBaseline = NormalizeRowMajorConfig(defaultBaseline);
                 _clblastBaselineConfig = defaultBaseline;
                 config = defaultBaseline;
                 return true;
             }
+        }
+
+        private static GemmConfig NormalizeRowMajorConfig(GemmConfig config)
+        {
+            if (!config.UseColumnMajorA)
+                return config;
+
+            return new GemmConfig
+            {
+                TileM = config.TileM,
+                TileN = config.TileN,
+                TileK = config.TileK,
+                ThreadTileM = config.ThreadTileM,
+                ThreadTileN = config.ThreadTileN,
+                VectorWidthM = config.VectorWidthM,
+                VectorWidthN = config.VectorWidthN,
+                UseDoubleBuffering = config.UseDoubleBuffering,
+                UseVectorizedLoads = config.UseVectorizedLoads,
+                KernelName = config.KernelName,
+                KReg = config.KReg,
+                KUnroll = config.KUnroll,
+                UseSubgroupOps = config.UseSubgroupOps,
+                StrideM = config.StrideM,
+                StrideN = config.StrideN,
+                CacheA = config.CacheA,
+                CacheB = config.CacheB,
+                MdimaSize = config.MdimaSize,
+                NdimbSize = config.NdimbSize,
+                UseTrueVectorLDS = config.UseTrueVectorLDS,
+                UseColumnMajorA = false
+            };
         }
 
         private bool EnsureClBlastPackingKernels()
@@ -1590,8 +1623,6 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         private bool TryExecutePackedDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
         {
-            if (IsClBlastBaselineKernel(config))
-                return TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, config);
 
             int kReg = config.KReg > 0 ? config.KReg : 1;
             int kUnit = config.TileK * kReg;
@@ -1602,8 +1633,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             int nPad = CeilDiv(N, config.TileN) * config.TileN;
             int kPad = CeilDiv(K, kUnit) * kUnit;
 
-            bool useColumnMajorA = config.UseColumnMajorA || IsClBlastBaselineKernel0(config);
-            bool useColumnMajorC = IsClBlastBaselineKernel0(config);
+            bool useColumnMajorA = config.UseColumnMajorA;
+            bool useColumnMajorC = false;
             bool needsPadding = mPad != M || nPad != N || kPad != K;
             if (!needsPadding && !useColumnMajorA && !useColumnMajorC)
                 return TryExecuteDynamicGemm(A, B, C, M, N, K, alpha, beta, config);
@@ -1715,28 +1746,34 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             // DIAGNOSTIC TRACING (always prints for debugging)
             bool traceEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TRACE") == "1";
+            bool enableDynamic = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_ENABLE_DYNAMIC") == "1";
+            bool forceBuiltin = !enableDynamic;
 
-            if (!offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
+            if (!forceBuiltin && !offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
                 if (traceEnabled)
-                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying CLBlast baseline (TileM={baselineConfig.TileM}, TileN={baselineConfig.TileN}, TileK={baselineConfig.TileK})");
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying baseline config (TileM={baselineConfig.TileM}, TileN={baselineConfig.TileN}, TileK={baselineConfig.TileK})");
 
-                if (TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, baselineConfig))
+                if (TryExecutePackedDynamicGemm(A, B, C, M, N, K, alpha, beta, baselineConfig))
                 {
                     if (traceEnabled)
-                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: CLBlast baseline executed");
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: Baseline config executed");
                     return;
                 }
                 if (traceEnabled)
-                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: CLBlast baseline FAILED");
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: Baseline config FAILED");
             }
-            else
+            else if (!forceBuiltin)
             {
                 if (traceEnabled)
                     Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SKIP: CLBlast baseline not available (offline={offlineEnabled})");
             }
+            else if (traceEnabled)
+            {
+                Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Built-in kernels enabled (set AIDOTNET_GEMM_ENABLE_DYNAMIC=1 to use dynamic kernels)");
+            }
 
-            if (_dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
+            if (!forceBuiltin && _dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
                 TryGetTunedConfig(M, N, K, out var tunedConfig))
             {
                 if (traceEnabled)
@@ -1756,33 +1793,26 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: Using built-in kernel (NOT CLBlast!)");
 
             // Choose kernel based on matrix size
-            // Use optimized kernel for matrices >= 128 in any dimension
+            // Use optimized kernel for matrices >= 128 in any dimension        
             if (M >= 128 && N >= 128 && K >= 64)
             {
-                // Large matrix - use CLBlast-style register-blocked kernel
-                // Kernel uses 16x16 work group (256 threads), each computes 4x4 outputs = 64x64 tile
-                _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_double_buffered (expected ~30% slower than CLBlast)", M, N, K);
-                var kernel = _kernelCache["gemm_double_buffered"];
+                bool forceUnsafe = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_UNSAFE") == "1";
+                bool safeKernel = !forceUnsafe && M <= 512 && N <= 512 && K <= 512;
+                if (Environment.GetEnvironmentVariable("AIDOTNET_GEMM_SAFE") == "1")
+                    safeKernel = true;
 
-                kernel.SetArg(0, bufferA.Handle);
-                kernel.SetArg(1, bufferB.Handle);
-                kernel.SetArg(2, bufferC.Handle);
-                kernel.SetArg(3, M);
-                kernel.SetArg(4, N);
-                kernel.SetArg(5, K);
-                kernel.SetArg(6, alpha);
-                kernel.SetArg(7, beta);
-
-                // CRITICAL: Correct global work size calculation for tiled kernel
-                // Each work group processes a 64x64 output tile
-                // Work group size is 16x16 (256 threads)
-                // Each thread computes 4x4 outputs
-                int numTilesM = (M + GemmKernel.TILE_M - 1) / GemmKernel.TILE_M;  // Number of 64-row tiles
-                int numTilesN = (N + GemmKernel.TILE_N - 1) / GemmKernel.TILE_N;  // Number of 64-col tiles
-                int globalSizeX = numTilesM * GemmKernel.WG_SIZE_M;  // 16 threads per tile in M
-                int globalSizeY = numTilesN * GemmKernel.WG_SIZE_N;  // 16 threads per tile in N
-
-                kernel.Execute2D(globalSizeX, globalSizeY, GemmKernel.WG_SIZE_M, GemmKernel.WG_SIZE_N);
+                if (safeKernel)
+                {
+                    _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_medium_tile (safe mode)", M, N, K);
+                    GemmMediumTile(A, B, C, M, N, K, alpha, beta);
+                }
+                else
+                {
+                    // Large matrix - use CLBlast-style register-blocked kernel
+                    // Kernel uses 16x16 work group (256 threads), each computes 4x4 outputs = 64x64 tile
+                    _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_double_buffered (expected ~30% slower than CLBlast)", M, N, K);
+                    GemmDoubleBuffered(A, B, C, M, N, K, alpha, beta);
+                }
             }
             else
             {
@@ -1822,6 +1852,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         public void GemmClblastRdna1(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
         {
             ExecuteGemmKernel("gemm_clblast_rdna1", A, B, C, M, N, K, alpha, beta, 64, 8);
+        }
+
+        /// <summary>
+        /// Double-buffered GEMM kernel used as the built-in fallback for larger matrices.
+        /// </summary>
+        public void GemmDoubleBuffered(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_double_buffered", A, B, C, M, N, K, alpha, beta, 64, 16);
         }
 
         /// <summary>
@@ -4418,7 +4456,11 @@ GPU SPECS (for accurate roofline analysis):
   AIDOTNET_GPU_BANDWIDTH_GBS=N Memory bandwidth in GB/s (e.g., 224 for RX 5500 XT)
 
 DEBUG:
-  AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)
+  AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)       
+  AIDOTNET_GEMM_ENABLE_DYNAMIC=1  Enable dynamic GEMM kernels (default: built-in)
+  AIDOTNET_GEMM_SAFE=1        Use safe GEMM fallback kernel for correctness
+  AIDOTNET_GEMM_UNSAFE=1      Force gemm_double_buffered fallback kernel
+  AIDOTNET_GEMM_VALIDATE=1    Validate GEMM output for NaN/Inf and fall back to CPU
 
 KERNEL VARIANTS (A/B testing):
   AIDOTNET_GEMM_VARIANT=0     Original CLBlast baseline

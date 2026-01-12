@@ -649,6 +649,7 @@ public class DirectGpuTests
         // Test each new kernel against the reference
         var newKernels = new (string Name, Action<IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int> Execute)[]
         {
+            ("gemm_double_buffered", (a, b, c, m, n, k) => backend.GemmDoubleBuffered(a, b, c, m, n, k)),
             ("gemm_kreg4", (a, b, c, m, n, k) => backend.GemmKreg4(a, b, c, m, n, k)),
             ("gemm_prefetch", (a, b, c, m, n, k) => backend.GemmPrefetch(a, b, c, m, n, k)),
             ("gemm_wide_vec", (a, b, c, m, n, k) => backend.GemmWideVec(a, b, c, m, n, k)),

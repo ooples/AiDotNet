@@ -33,8 +33,10 @@ public sealed class DirectGpuEngine : IDisposable
     private readonly KernelFusionManager _fusionManager;
     private readonly bool _isAvailable;
     private bool _disposed;
-    private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";
+    private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";    
     private static readonly string[] DefaultBackendOrder = new[] { "cuda", "opencl", "hip" };
+    private static readonly bool GemmValidateEnabled =
+        Environment.GetEnvironmentVariable("AIDOTNET_GEMM_VALIDATE") == "1";
 
     /// <summary>
     /// Gets whether the direct GPU engine is available.
@@ -400,8 +402,30 @@ public sealed class DirectGpuEngine : IDisposable
         // Download result
         float[] resultFloat = _backend.DownloadBuffer(bufferC);
 
+        if (GemmValidateEnabled && !AllFinite(resultFloat, out int badIndex))
+        {
+            Console.WriteLine($"[DirectGpuEngine] GEMM produced non-finite values (first index {badIndex}). Falling back to CPU.");
+            return null;
+        }
+
         // Convert back to T
         return FromFloatArray<T>(resultFloat);
+    }
+
+    private static bool AllFinite(float[] data, out int badIndex)
+    {
+        for (int i = 0; i < data.Length; i++)
+        {
+            float value = data[i];
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                badIndex = i;
+                return false;
+            }
+        }
+
+        badIndex = -1;
+        return true;
     }
 
     /// <summary>
@@ -417,6 +441,11 @@ public sealed class DirectGpuEngine : IDisposable
         using var bufferC = _backend.MatMul(bufferInput, cachedWeights, M, N, K);
 
         float[] resultFloat = _backend.DownloadBuffer(bufferC);
+        if (GemmValidateEnabled && !AllFinite(resultFloat, out int badIndex))
+        {
+            Console.WriteLine($"[DirectGpuEngine] GEMM produced non-finite values (first index {badIndex}). Falling back to CPU.");
+            return null;
+        }
         return FromFloatArray<T>(resultFloat);
     }
 
