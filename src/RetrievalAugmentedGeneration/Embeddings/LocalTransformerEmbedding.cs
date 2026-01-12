@@ -8,7 +8,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// Local transformer embedding model for generating embeddings using ONNX Runtime without external API calls.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class LocalTransformerEmbedding<T> : EmbeddingModelBase<T>, IDisposable
+    public class LocalTransformerEmbedding<T> : EmbeddingModelBase<T>
     {
         private readonly ONNXSentenceTransformer<T> _onnxTransformer;
 
@@ -25,9 +25,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return _onnxTransformer.Embed(text);
         }
 
-        public void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            _onnxTransformer.Dispose();
+            if (disposing)
+            {
+                _onnxTransformer.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }

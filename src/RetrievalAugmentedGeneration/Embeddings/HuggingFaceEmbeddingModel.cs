@@ -13,7 +13,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// HuggingFace-based embedding model for generating embeddings via Inference API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class HuggingFaceEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
+    public class HuggingFaceEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelName;
         private readonly string _apiKey;
@@ -84,13 +84,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return new Vector<T>(values);
         }
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (!_disposed)
             {
@@ -100,6 +94,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 }
                 _disposed = true;
             }
+            base.Dispose(disposing);
         }
     }
 }

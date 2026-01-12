@@ -22,7 +22,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
+public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
 {
     /// <summary>
     /// Gets the numeric operations for type T.
@@ -171,5 +171,23 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
         }
 
         return new Matrix<T>(data);
+    }
+
+    /// <summary>
+    /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases unmanaged and - optionally - managed resources.
+    /// </summary>
+    /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        // Base implementation does nothing, intended for overrides
     }
 }

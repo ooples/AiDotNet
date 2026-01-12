@@ -20,7 +20,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Provides access to Google's PaLM (Pathways Language Model) and Gemini embedding capabilities
 /// through the Google Cloud Vertex AI platform.
 /// </remarks>
-public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
+public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _projectId;
     private readonly string _location;
@@ -128,13 +128,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
         public double[] Values { get; set; } = Array.Empty<double>();
     }
 
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
@@ -144,6 +138,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
             }
             _disposed = true;
         }
+        base.Dispose(disposing);
     }
 }
 

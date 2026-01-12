@@ -19,7 +19,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Cohere provides state-of-the-art embeddings with multiple model sizes optimized
 /// for different use cases (English, multilingual, search, classification).
 /// </remarks>
-public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
+public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _apiKey;
     private readonly string _model;
@@ -102,13 +102,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
         public List<double[]> Embeddings { get; set; } = new();
     }
 
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
@@ -118,5 +112,6 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
             }
             _disposed = true;
         }
+        base.Dispose(disposing);
     }
 }

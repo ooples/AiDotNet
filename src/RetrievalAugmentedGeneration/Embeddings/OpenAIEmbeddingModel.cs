@@ -13,7 +13,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// OpenAI embedding model for generating embeddings via OpenAI API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class OpenAIEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
+    public class OpenAIEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _apiKey;
         private readonly string _modelName;
@@ -100,13 +100,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             public double[] Embedding { get; set; } = Array.Empty<double>();
         }
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (!_disposed)
             {
@@ -116,6 +110,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 }
                 _disposed = true;
             }
+            base.Dispose(disposing);
         }
     }
 }

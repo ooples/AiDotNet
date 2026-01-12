@@ -14,7 +14,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// Production-ready sentence transformer for generating semantic embeddings using ONNX Runtime.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>, IDisposable
+    public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelPath;
         private readonly int _dimension;
@@ -138,22 +138,32 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return new Vector<T>(values);
         }
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+                protected override void Dispose(bool disposing)
+
+                {
+
+                    if (!_disposed)
+
+                    {
+
+                        if (disposing)
+
+                        {
+
+                            _session.Dispose();
+
+                        }
+
+                        _disposed = true;
+
+                    }
+
+                    base.Dispose(disposing);
+
+                }
+
+            }
+
         }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    _session.Dispose();
-                }
-                _disposed = true;
-            }
-        }
-    }
-}
+        

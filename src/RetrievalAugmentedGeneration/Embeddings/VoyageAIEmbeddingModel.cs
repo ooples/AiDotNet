@@ -9,7 +9,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Voyage AI-compatible embedding model using ONNX for high-performance local inference.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
-public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
+public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _apiKey;
     private readonly string _model;
@@ -56,13 +56,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
         return _onnxTransformer.Embed(text);
     }
 
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
@@ -72,6 +66,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
             }
             _disposed = true;
         }
+        base.Dispose(disposing);
     }
 }
 
