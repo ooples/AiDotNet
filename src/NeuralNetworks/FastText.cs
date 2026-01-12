@@ -21,10 +21,12 @@ namespace AiDotNet.NeuralNetworks
         #region Fields
 
         private readonly int _vocabSize;
-        private readonly int _bucketSize; // Size of n-gram buckets
+        private readonly int _bucketSize;
         private readonly int _embeddingDimension;
-        private readonly ITokenizer _tokenizer;
+        private readonly ITokenizer? _tokenizer;
         private readonly int _maxTokens;
+        private readonly ILossFunction<T> _lossFunction;
+        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
@@ -40,18 +42,22 @@ namespace AiDotNet.NeuralNetworks
         public FastText(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             int vocabSize = 10000,
             int bucketSize = 2000000,
             int embeddingDimension = 100,
             int maxTokens = 512,
-            ILossFunction<T>? lossFunction = null)
-            : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
+            ILossFunction<T>? lossFunction = null,
+            double maxGradNorm = 1.0)
+            : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
         {
-            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            _tokenizer = tokenizer;
             _vocabSize = vocabSize;
             _bucketSize = bucketSize;
             _embeddingDimension = embeddingDimension;
             _maxTokens = maxTokens;
+            _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayers();
         }
@@ -62,26 +68,18 @@ namespace AiDotNet.NeuralNetworks
 
         protected override void InitializeLayers()
         {
-            ClearLayers();
-
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
-                foreach (var layer in Architecture.Layers)
-                {
-                    AddLayerToCollection(layer);
-                }
+                Layers.AddRange(Architecture.Layers);
+                ValidateCustomLayers(Layers);
             }
             else
             {
-                var defaultLayers = LayerHelper<T>.CreateDefaultFastTextLayers(
+                Layers.AddRange(LayerHelper<T>.CreateDefaultFastTextLayers(
+                    Architecture,
                     _vocabSize,
                     _bucketSize,
-                    _embeddingDimension);
-
-                foreach (var layer in defaultLayers)
-                {
-                    AddLayerToCollection(layer);
-                }
+                    _embeddingDimension));
             }
         }
 
@@ -89,40 +87,73 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            var output = ForwardWithMemory(input);
-            var outputVec = output.ToVector();
-            var expectedVec = expectedOutput.ToVector();
-            
-            var gradVec = LossFunction.CalculateDerivative(outputVec, expectedVec);
-            var grad = Tensor<T>.FromVector(gradVec, output.Shape);
-            
-            Backpropagate(grad);
-        }
-
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int offset = 0;
-            foreach (var layer in Layers)
-            {
-                int count = layer.ParameterCount;
-                if (count > 0)
-                {
-                    var layerParams = parameters.SubVector(offset, count);
-                    layer.SetParameters(layerParams);
-                    offset += count;
-                }
-            }
-        }
-
         public override Tensor<T> Predict(Tensor<T> input)
+        {
+            return Forward(input);
+        }
+
+        public Tensor<T> Forward(Tensor<T> input)
         {
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
 
-            // Simple prediction returns word embeddings
-            return Layers[0].Forward(input);
+            Tensor<T> output = input;
+            foreach (var layer in Layers)
+            {
+                output = layer.Forward(output);
+            }
+
+            return output;
+        }
+
+        public Tensor<T> Backward(Tensor<T> outputGradient)
+        {
+            for (int i = Layers.Count - 1; i >= 0; i--)
+            {
+                outputGradient = Layers[i].Backward(outputGradient);
+            }
+
+            return outputGradient;
+        }
+
+        public override void UpdateParameters(Vector<T> parameters)
+        {
+            int index = 0;
+            foreach (var layer in Layers)
+            {
+                int layerParameterCount = layer.ParameterCount;
+                if (layerParameterCount > 0)
+                {
+                    var layerParameters = parameters.Slice(index, layerParameterCount);
+                    layer.UpdateParameters(layerParameters);
+                    index += layerParameterCount;
+                }
+            }
+        }
+
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            var prediction = Predict(input);
+            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+
+            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+
+            var gradients = new List<Tensor<T>>();
+            var currentGradient = outputGradientTensor;
+            for (int i = Layers.Count - 1; i >= 0; i--)
+            {
+                currentGradient = Layers[i].Backward(currentGradient);
+                gradients.Insert(0, currentGradient);
+            }
+
+            UpdateParameters(gradients);
+        }
+
+        private void UpdateParameters(List<Tensor<T>> gradients)
+        {
+            ClipGradients(gradients);
+            _optimizer.UpdateParameters(Layers);
         }
 
         public Vector<T> Embed(string text)
@@ -130,21 +161,21 @@ namespace AiDotNet.NeuralNetworks
             if (string.IsNullOrWhiteSpace(text))
                 return new Vector<T>(_embeddingDimension);
 
-            var tokenResult = _tokenizer.Encode(text);
+            var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            var tokenResult = tokenizer.Encode(text);
             var tokenIds = tokenResult.TokenIds.Take(_maxTokens).ToList();
-            if (tokenIds.Count == 0) return new Vector<T>(_embeddingDimension);
+
+            if (tokenIds.Count == 0)
+                return new Vector<T>(_embeddingDimension);
 
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
             
-            // FastText word vector = word_embedding + sum(ngram_embeddings)
-            // Layers[0] = Word Embeddings
-            // Layers[1] = N-gram Embeddings
+            // FastText uses word embeddings (layer 0) and n-gram embeddings (layer 1)
             var wordEmbeds = Layers[0].Forward(inputTensor);
             
-            // Note: A true FastText implementation would generate n-grams from the text
-            // and look them up in Layers[1]. Simplified here for structure.
-            
+            // Simplified: return mean of word embeddings for now
+            // A true FastText implementation would generate n-grams and add them
             var sumVector = new Vector<T>(_embeddingDimension);
             for (int s = 0; s < tokenIds.Count; s++)
             {
@@ -185,11 +216,13 @@ namespace AiDotNet.NeuralNetworks
             return new FastText<T>(
                 Architecture,
                 _tokenizer,
+                _optimizer,
                 _vocabSize,
                 _bucketSize,
                 _embeddingDimension,
                 _maxTokens,
-                LossFunction);
+                _lossFunction,
+                Convert.ToDouble(MaxGradNorm));
         }
 
         public override ModelMetadata<T> GetModelMetadata()
@@ -220,10 +253,6 @@ namespace AiDotNet.NeuralNetworks
 
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
-            reader.ReadInt32();
-            reader.ReadInt32();
-            reader.ReadInt32();
-            reader.ReadInt32();
         }
 
         #endregion
