@@ -1692,11 +1692,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return IsClBlastBaselineKernel0(config) || IsClBlastBaselineKernel1(config);
         }
 
-        private const float ZeroTolerance = 1e-8f;
-
         private static bool IsEffectivelyZero(float value)
         {
-            return Math.Abs(value) <= ZeroTolerance;
+            return value == 0.0f;
         }
 
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
