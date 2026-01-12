@@ -1694,7 +1694,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         private static bool IsEffectivelyZero(float value)
         {
-            return value == 0.0f;
+            return !float.IsNaN(value) && !(value > 0.0f || value < 0.0f);
         }
 
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
