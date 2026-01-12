@@ -787,6 +787,26 @@ public class Int64Operations : INumericOperations<long>
     /// <returns>The value as a double.</returns>
     public double ToDouble(long value) => (double)value;
 
+    /// <summary>
+    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
+    /// Int64 values are always finite.
+    /// </summary>
+    public bool AllFinite(ReadOnlySpan<long> x, out int badIndex)
+    {
+        badIndex = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if any element in the span is NaN or Infinity.
+    /// Int64 values are always finite.
+    /// </summary>
+    public bool IsAnyNonFinite(ReadOnlySpan<long> x, out int badIndex)
+    {
+        badIndex = -1;
+        return false;
+    }
+
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => true;
 

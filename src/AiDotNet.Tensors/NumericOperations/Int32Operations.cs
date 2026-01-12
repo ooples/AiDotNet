@@ -740,8 +740,29 @@ public class Int32Operations : INumericOperations<int>
     /// <returns>The value as a double.</returns>
     public double ToDouble(int value) => (double)value;
 
+    /// <summary>
+    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
+    /// Int32 values are always finite.
+    /// </summary>
+    public bool AllFinite(ReadOnlySpan<int> x, out int badIndex)
+    {
+        badIndex = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if any element in the span is NaN or Infinity.
+    /// Int32 values are always finite.
+    /// </summary>
+    public bool IsAnyNonFinite(ReadOnlySpan<int> x, out int badIndex)
+    {
+        badIndex = -1;
+        return false;
+    }
+
     /// <inheritdoc/>
-    public bool SupportsCpuAcceleration => true;
+    public bool SupportsCpuAcceleration => false;
+
 
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;

@@ -4,11 +4,28 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Benchmarks.Helpers;
 
 namespace AiDotNet.Tensors.Benchmarks;
 
+/// <summary>
+/// Provides diagnostic tools and performance benchmarks for GPU-based matrix multiplication.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> GPUs are incredibly fast at math, but they can sometimes be 
+/// tricky to set up. This class helps us make sure the GPU is giving the exact same 
+/// answers as the CPU, and measures exactly how much faster it is (the speedup).</para>
+/// </remarks>
 public static class GpuMatMulDiagnostics
 {
+    /// <summary>
+    /// Runs a series of GPU correctness and performance tests.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method runs the actual tests. It first checks if the 
+    /// GPU is even available, then it tests various math problem sizes to ensure accuracy 
+    /// and measure throughput in GFLOPS (billions of operations per second).</para>
+    /// </remarks>
     public static void Run()
     {
         Console.WriteLine("=== GPU Matrix Multiply Diagnostics ===");
@@ -29,19 +46,19 @@ public static class GpuMatMulDiagnostics
 
         foreach (int size in correctnessSizes)
         {
-            var a = CreateRandomMatrix(size, size, random);
-            var b = CreateRandomMatrix(size, size, random);
+            var a = BenchmarkHelper.CreateRandomMatrix(size, size, random);
+            var b = BenchmarkHelper.CreateRandomMatrix(size, size, random);
 
             Console.WriteLine($"Correctness check (safe): {size}x{size}");
             SetKernelMode(forceSafe: true, forceUnsafe: false);
-            var safeStats = Compare(cpuEngine, gpuEngine, a, b);
+            var safeStats = CompareInternal(cpuEngine, gpuEngine, a, b);
             PrintStats(safeStats);
 
             if (size <= 512)
             {
                 Console.WriteLine($"Correctness check (unsafe): {size}x{size}");
                 SetKernelMode(forceSafe: false, forceUnsafe: true);
-                var unsafeStats = Compare(cpuEngine, gpuEngine, a, b);
+                var unsafeStats = CompareInternal(cpuEngine, gpuEngine, a, b);
                 PrintStats(unsafeStats);
             }
 
@@ -53,10 +70,12 @@ public static class GpuMatMulDiagnostics
         int[] perfSizes = { 1024, 2048 };
         foreach (int perfSize in perfSizes)
         {
-            var perfA = CreateRandomMatrix(perfSize, perfSize, random);
-            var perfB = CreateRandomMatrix(perfSize, perfSize, random);
+            var perfA = BenchmarkHelper.CreateRandomMatrix(perfSize, perfSize, random);
+            var perfB = BenchmarkHelper.CreateRandomMatrix(perfSize, perfSize, random);
 
             Console.WriteLine($"GPU performance: {perfSize}x{perfSize}");
+            
+            // Warmup pass
             _ = gpuEngine.MatrixMultiply(perfA, perfB);
 
             int perfIterations = perfSize >= 2048 ? 2 : 3;
@@ -79,18 +98,7 @@ public static class GpuMatMulDiagnostics
         }
     }
 
-    private static Matrix<float> CreateRandomMatrix(int rows, int cols, Random random)
-    {
-        var matrix = new Matrix<float>(rows, cols);
-        var data = matrix.AsWritableSpan();
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = (float)((random.NextDouble() * 2.0) - 1.0);
-        }
-        return matrix;
-    }
-
-    private static (double maxError, double avgError, int nonFiniteCount) Compare(
+    private static (double maxError, double avgError, int nonFiniteCount) CompareInternal(
         CpuEngine cpuEngine,
         IEngine gpuEngine,
         Matrix<float> a,
@@ -99,32 +107,7 @@ public static class GpuMatMulDiagnostics
         var cpuResult = cpuEngine.MatrixMultiply(a, b);
         var gpuResult = gpuEngine.MatrixMultiply(a, b);
 
-        var cpuSpan = cpuResult.AsSpan();
-        var gpuSpan = gpuResult.AsSpan();
-
-        double maxError = 0;
-        double sumError = 0;
-        int count = 0;
-        int nonFiniteCount = 0;
-
-        for (int i = 0; i < gpuSpan.Length; i++)
-        {
-            float gpuValue = gpuSpan[i];
-            if (float.IsNaN(gpuValue) || float.IsInfinity(gpuValue))
-            {
-                nonFiniteCount++;
-                continue;
-            }
-
-            double error = Math.Abs(cpuSpan[i] - gpuValue);
-            sumError += error;
-            if (error > maxError)
-                maxError = error;
-            count++;
-        }
-
-        double avgError = count > 0 ? sumError / count : double.NaN;
-        return (maxError, avgError, nonFiniteCount);
+        return BenchmarkHelper.Compare(cpuResult, gpuResult);
     }
 
     private static void PrintStats((double maxError, double avgError, int nonFiniteCount) stats)

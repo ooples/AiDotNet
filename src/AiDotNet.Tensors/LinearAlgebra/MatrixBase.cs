@@ -65,6 +65,18 @@ public abstract class MatrixBase<T>
     }
 
     /// <summary>
+    /// Internal constructor to wrap an existing array.
+    /// </summary>
+    internal MatrixBase(int rows, int cols, T[] data)
+    {
+        _rows = rows;
+        _cols = cols;
+        _data = data ?? throw new ArgumentNullException(nameof(data));
+        if (data.Length < rows * cols)
+            throw new ArgumentException("Data array is too small for the specified dimensions.");
+    }
+
+    /// <summary>
     /// Creates a matrix from a collection of row values.
     /// </summary>
     /// <param name="values">A collection where each inner collection represents a row of the matrix.</param>

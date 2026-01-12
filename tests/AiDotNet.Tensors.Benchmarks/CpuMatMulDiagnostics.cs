@@ -5,11 +5,28 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Operators;
+using AiDotNet.Tensors.Benchmarks.Helpers;
 
 namespace AiDotNet.Tensors.Benchmarks;
 
+/// <summary>
+/// Provides diagnostic tools and performance benchmarks for CPU-based matrix multiplication.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Matrix multiplication is one of the most critical operations in AI. 
+/// This class helps us measure how fast the computer's "brain" (the CPU) can perform these 
+/// calculations and ensures the specialized optimizations are working as intended.</para>
+/// </remarks>
 public static class CpuMatMulDiagnostics
 {
+    /// <summary>
+    /// Runs a comprehensive suite of CPU matrix multiplication benchmarks.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method executes various tests on different matrix sizes. 
+    /// It provides a "warmup" phase to let the CPU get ready, and then performs multiple 
+    /// iterations to get an accurate average speed, measured in GFLOPS (Billions of operations per second).</para>
+    /// </remarks>
     public static void Run()
     {
         Console.WriteLine("=== CPU Matrix Multiply Diagnostics ===");
@@ -27,8 +44,8 @@ public static class CpuMatMulDiagnostics
             Console.WriteLine(new string('-', 48));
 
             var random = RandomHelper.CreateSeededRandom(42);
-            var a = CreateRandomMatrix(size, size, random);
-            var b = CreateRandomMatrix(size, size, random);
+            var a = BenchmarkHelper.CreateRandomMatrix(size, size, random);
+            var b = BenchmarkHelper.CreateRandomMatrix(size, size, random);
 
             for (int i = 0; i < warmupIterations; i++)
             {
@@ -76,16 +93,5 @@ public static class CpuMatMulDiagnostics
         }
 
         return new[] { 256, 512, 1024, 2048 };
-    }
-
-    private static Matrix<float> CreateRandomMatrix(int rows, int cols, Random random)
-    {
-        var matrix = new Matrix<float>(rows, cols);
-        var data = matrix.AsWritableSpan();
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = (float)((random.NextDouble() * 2.0) - 1.0);
-        }
-        return matrix;
     }
 }

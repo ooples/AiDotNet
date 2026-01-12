@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -32,6 +33,20 @@ namespace AiDotNet.Tensors.Engines;
 /// - You're using custom numeric types
 /// </para>
 /// </remarks>
+/// <summary>
+/// CPU-based execution engine using INumericOperations for type-generic operations.
+/// </summary>
+/// <remarks>
+/// <para>
+/// CpuEngine provides the default execution backend for AiDotNet. It works with
+/// any numeric type that implements INumericOperations{T}, including decimal,
+/// BigInteger, and custom numeric types.
+/// </para>
+/// <para><b>For Beginners:</b> This is the standard, "always works" mode. 
+/// It uses your computer's main processor (CPU) to do the math. While not as 
+/// fast as a graphics card (GPU) for huge problems, it is very reliable 
+/// and works on every computer without any extra setup.</para>
+/// </remarks>
 public class CpuEngine : IEngine
 {
     private const int CpuMatMulTileSizeFloat = 64;
@@ -41,13 +56,16 @@ public class CpuEngine : IEngine
         Environment.GetEnvironmentVariable("AIDOTNET_CPU_MATMUL_TRACE") == "1";
     private static readonly bool CpuMatMulSingleThread =
         Environment.GetEnvironmentVariable("AIDOTNET_CPU_MATMUL_SINGLE_THREAD") == "1";
+
     /// <inheritdoc/>
     public string Name => "CPU Engine";
 
     /// <inheritdoc/>
     public bool SupportsGpu => false;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the direct GPU engine if available, for potential offloading.
+    /// </summary>
     public DirectGpu.DirectGpuEngine? DirectGpu => Engine.DirectGpu;
 
     /// <inheritdoc/>
@@ -1434,7 +1452,7 @@ public class CpuEngine : IEngine
 #endif
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(a.Rows, b.Columns);
+        var genericResult = new Matrix<T>(a.Rows, b.Columns);
 
         // Standard O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) matrix multiplication
         for (int i = 0; i < a.Rows; i++)
@@ -1446,11 +1464,11 @@ public class CpuEngine : IEngine
                 {
                     sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
                 }
-                result[i, j] = sum;
+                genericResult[i, j] = sum;
             }
         }
 
-        return result;
+        return genericResult;
     }
 
 #if NET6_0_OR_GREATER
@@ -1472,7 +1490,7 @@ public class CpuEngine : IEngine
 
         if (CpuMatMulTraceEnabled)
         {
-            Console.WriteLine($"[CpuMatMul] float {m}x{k}x{n} tile={tileSize} parallel={useParallel}");
+            Trace.WriteLine($"[CpuMatMul] float {m}x{k}x{n} tile={tileSize} parallel={useParallel}");
         }
 
         var aSpan = a.AsSpan();
@@ -1519,7 +1537,7 @@ public class CpuEngine : IEngine
 
         if (CpuMatMulTraceEnabled)
         {
-            Console.WriteLine($"[CpuMatMul] double {m}x{k}x{n} tile={tileSize} parallel={useParallel}");
+            Trace.WriteLine($"[CpuMatMul] double {m}x{k}x{n} tile={tileSize} parallel={useParallel}");
         }
 
         var aSpan = a.AsSpan();
@@ -1567,8 +1585,8 @@ public class CpuEngine : IEngine
         if (m <= 0 || n <= 0 || k <= 0)
             return false;
 
-        long mn = Math.BigMul(m, n);
-        long ops = mn > long.MaxValue / k ? long.MaxValue : mn * k;
+        // Use double to avoid 64-bit overflow during operation count estimation
+        double ops = (double)m * n * k;
         return ops >= CpuMatMulParallelThresholdOps;
     }
 

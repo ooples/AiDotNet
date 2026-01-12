@@ -153,7 +153,7 @@ public sealed class GemmAutoTuner
             catch
             {
                 if (EnableDiagnostics && Logger == null)
-                    Console.WriteLine(logLine);
+                    Trace.WriteLine(logLine);
             }
         }
         else if (EnableDiagnostics && Logger == null)
@@ -180,7 +180,7 @@ public sealed class GemmAutoTuner
     {
         if (Console.IsOutputRedirected)
         {
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
             return;
         }
 
@@ -189,12 +189,12 @@ public sealed class GemmAutoTuner
         {
             var previous = Console.ForegroundColor;
             Console.ForegroundColor = color.Value;
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
             Console.ForegroundColor = previous;
         }
         else
         {
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
         }
     }
 

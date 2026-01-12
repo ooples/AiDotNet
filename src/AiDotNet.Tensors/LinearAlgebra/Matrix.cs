@@ -26,6 +26,13 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Initializes a new matrix by wrapping an existing array.
+    /// </summary>
+    internal Matrix(int rows, int cols, T[] data) : base(rows, cols, data)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new matrix from a collection of collections, where each inner collection represents a row.
     /// </summary>
     /// <param name="values">A collection of collections, where each inner collection represents a row of the matrix.</param>
