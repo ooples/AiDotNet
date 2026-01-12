@@ -78,7 +78,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private int _clblastMinIndirectSize;
 
         /// <inheritdoc/>
-        public bool IsAvailable { get; }
+        public bool IsAvailable { get; } = false;
 
         /// <inheritdoc/>
         public string BackendName => "OpenCL";
@@ -86,27 +86,27 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// <summary>
         /// Gets the name of the GPU device.
         /// </summary>
-        public string DeviceName { get; }
+        public string DeviceName { get; } = "None";
 
         /// <summary>
         /// Gets the vendor of the GPU device (e.g., AMD, NVIDIA).
         /// </summary>
-        public string DeviceVendor { get; }
+        public string DeviceVendor { get; } = "None";
 
         /// <summary>
         /// Gets the number of compute units available on the device.
         /// </summary>
-        public int ComputeUnits { get; }
+        public int ComputeUnits { get; } = 0;
 
         /// <summary>
         /// Gets the total amount of global memory in bytes.
         /// </summary>
-        public long GlobalMemoryBytes { get; }
+        public long GlobalMemoryBytes { get; } = 0;
 
         /// <summary>
         /// Gets the amount of local (shared) memory in bytes.
         /// </summary>
-        public long LocalMemoryBytes { get; }
+        public long LocalMemoryBytes { get; } = 0;
 
         // IAsyncGpuBackend properties
         public bool SupportsMultiStream => true;
@@ -8768,6 +8768,8 @@ KERNEL VARIANTS (A/B testing):
 
         private void ZeroBuffer(IGpuBuffer buffer, int size)
         {
+            if (size <= 0)
+                return;
             if (_context != null && _kernelCache.TryGetValue("zero_buffer", out var kernel))
             {
                 var buf = ((DirectOpenClGpuBuffer)buffer).Buffer;
