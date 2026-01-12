@@ -999,30 +999,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (!config.UseColumnMajorA)
                 return config;
 
-            return new GemmConfig
-            {
-                TileM = config.TileM,
-                TileN = config.TileN,
-                TileK = config.TileK,
-                ThreadTileM = config.ThreadTileM,
-                ThreadTileN = config.ThreadTileN,
-                VectorWidthM = config.VectorWidthM,
-                VectorWidthN = config.VectorWidthN,
-                UseDoubleBuffering = config.UseDoubleBuffering,
-                UseVectorizedLoads = config.UseVectorizedLoads,
-                KernelName = config.KernelName,
-                KReg = config.KReg,
-                KUnroll = config.KUnroll,
-                UseSubgroupOps = config.UseSubgroupOps,
-                StrideM = config.StrideM,
-                StrideN = config.StrideN,
-                CacheA = config.CacheA,
-                CacheB = config.CacheB,
-                MdimaSize = config.MdimaSize,
-                NdimbSize = config.NdimbSize,
-                UseTrueVectorLDS = config.UseTrueVectorLDS,
-                UseColumnMajorA = false
-            };
+            return config.WithColumnMajorA(false);
         }
 
         private bool EnsureClBlastPackingKernels()
@@ -1754,7 +1731,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             // DIAGNOSTIC TRACING (uses Trace for library-level logging)
             bool traceEnabled = GetEnvBool("AIDOTNET_GEMM_TRACE");
-            bool enableDynamic = GetEnvBool("AIDOTNET_GEMM_ENABLE_DYNAMIC", defaultValue: true);
+            bool enableDynamic = GetEnvBool("AIDOTNET_GEMM_ENABLE_DYNAMIC", defaultValue: false);
 
             if (enableDynamic && !offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
@@ -4510,7 +4487,7 @@ GPU SPECS (for accurate roofline analysis):
 
 DEBUG:
   AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)
-  AIDOTNET_GEMM_ENABLE_DYNAMIC=1  Enable dynamic GEMM kernels (default: built-in)
+  AIDOTNET_GEMM_ENABLE_DYNAMIC=1  Enable dynamic GEMM kernels (default: off)
   AIDOTNET_GEMM_SAFE=1        Use safe GEMM fallback kernel for correctness
   AIDOTNET_GEMM_UNSAFE=1      Force gemm_double_buffered fallback kernel
   AIDOTNET_GEMM_VALIDATE=1    Validate GEMM output for NaN/Inf and fall back to CPU
