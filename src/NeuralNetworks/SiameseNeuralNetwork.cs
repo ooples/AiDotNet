@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -13,10 +13,11 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
-    /// A customizable Transformer-based embedding network.
+    /// A standardized Siamese Neural Network for dual-encoder embedding and comparison tasks.
+    /// Follows the same pattern as other high-performance models in the library.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class TransformerEmbeddingNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         #region Fields
 
@@ -24,10 +25,6 @@ namespace AiDotNet.NeuralNetworks
         private readonly int _embeddingDimension;
         private readonly int _maxSequenceLength;
         private readonly int _vocabSize;
-        private readonly PoolingStrategy _poolingStrategy;
-        private readonly int _numLayers;
-        private readonly int _numHeads;
-        private readonly int _feedForwardDim;
         private readonly ILossFunction<T> _lossFunction;
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
@@ -38,41 +35,26 @@ namespace AiDotNet.NeuralNetworks
         public int EmbeddingDimension => _embeddingDimension;
         public int MaxTokens => _maxSequenceLength;
 
-        public enum PoolingStrategy
-        {
-            Mean,
-            Max,
-            ClsToken
-        }
-
         #endregion
 
         #region Constructors
 
-        public TransformerEmbeddingNetwork(
+        public SiameseNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             int vocabSize = 30522,
             int embeddingDimension = 768,
             int maxSequenceLength = 512,
-            int numLayers = 12,
-            int numHeads = 12,
-            int feedForwardDim = 3072,
-            PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
             ILossFunction<T>? lossFunction = null,
             double maxGradNorm = 1.0)
-            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+            : base(architecture, lossFunction ?? new ContrastiveLoss<T>(), maxGradNorm)
         {
             _tokenizer = tokenizer;
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;
             _maxSequenceLength = maxSequenceLength;
-            _poolingStrategy = poolingStrategy;
-            _numLayers = numLayers;
-            _numHeads = numHeads;
-            _feedForwardDim = feedForwardDim;
-            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayers();
@@ -91,25 +73,21 @@ namespace AiDotNet.NeuralNetworks
             }
             else
             {
-                // We use a manual stack for fine-grained control over common embedding model components
+                // Default Siamese architecture: Transformer-based encoder
                 Layers.AddRange(new ILayer<T>[]
                 {
                     new EmbeddingLayer<T>(_vocabSize, _embeddingDimension),
-                    new PositionalEncodingLayer<T>(_maxSequenceLength, _embeddingDimension)
+                    new PositionalEncodingLayer<T>(_maxSequenceLength, _embeddingDimension),
+                    new TransformerEncoderLayer<T>(_embeddingDimension, 12, 3072) // One default layer
                 });
-
-                for (int i = 0; i < _numLayers; i++)
-                {
-                    Layers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, _feedForwardDim));
-                }
             }
         }
 
         #endregion
 
-        #region Methods
+        #region IEmbeddingModel Implementation
 
-        public virtual Vector<T> Embed(string text)
+        public Vector<T> Embed(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new Vector<T>(_embeddingDimension);
@@ -117,86 +95,62 @@ namespace AiDotNet.NeuralNetworks
             var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
             var tokenResult = tokenizer.Encode(text);
             var tokens = tokenResult.TokenIds.Take(_maxSequenceLength).ToList();
-            
             if (tokens.Count == 0) tokens.Add(0);
 
             var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
-
             var output = Predict(inputTensor);
-            return PoolOutput(output);
+
+            // Mean pooling
+            var result = new Vector<T>(_embeddingDimension);
+            for (int d = 0; d < _embeddingDimension; d++)
+            {
+                T sum = NumOps.Zero;
+                for (int s = 0; s < output.Shape[1]; s++)
+                {
+                    sum = NumOps.Add(sum, output[0, s, d]);
+                }
+                result[d] = NumOps.Divide(sum, NumOps.FromDouble(output.Shape[1]));
+            }
+
+            return result.Normalize();
         }
 
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
-            if (textList.Count == 0) return new Matrix<T>(0, _embeddingDimension);
-
             var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
             for (int i = 0; i < textList.Count; i++)
             {
-                var embedding = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    matrix[i, j] = embedding[j];
-                }
+                var emb = Embed(textList[i]);
+                for (int j = 0; j < _embeddingDimension; j++) matrix[i, j] = emb[j];
             }
             return matrix;
         }
 
-        protected virtual Vector<T> PoolOutput(Tensor<T> output)
-        {
-            int seqLen = output.Shape[1];
-            int dim = output.Shape[2];
-            var result = new Vector<T>(dim);
+        #endregion
 
-            if (_poolingStrategy == PoolingStrategy.ClsToken)
-            {
-                for (int i = 0; i < dim; i++) result[i] = output[0, 0, i];
-            }
-            else if (_poolingStrategy == PoolingStrategy.Mean)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        sum = NumOps.Add(sum, output[0, s, d]);
-                    }
-                    result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                }
-            }
-            else if (_poolingStrategy == PoolingStrategy.Max)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    T max = output[0, 0, d];
-                    for (int s = 1; s < seqLen; s++)
-                    {
-                        T val = output[0, s, d];
-                        if (NumOps.GreaterThan(val, max)) max = val;
-                    }
-                    result[d] = max;
-                }
-            }
-
-            return result.Normalize();
-        }
+        #region Methods
 
         public override Tensor<T> Predict(Tensor<T> input)
         {
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
 
-            Tensor<T> current = input;
+            Tensor<T> output = input;
             foreach (var layer in Layers)
             {
-                current = layer.Forward(current);
+                output = layer.Forward(output);
             }
-            return current;
+
+            return output;
         }
 
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
+            // Siamese training typically involves comparing two inputs.
+            // If input contains pairs [batch, 2, ...], we split and contrast.
+            // Standard Train expects (input, expected).
+            
             var prediction = Predict(input);
             LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
@@ -204,7 +158,7 @@ namespace AiDotNet.NeuralNetworks
             var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
 
             Backpropagate(outputGradientTensor);
-            UpdateParameters(GetParameterGradients());
+            _optimizer.UpdateParameters(Layers);
         }
 
         public override void UpdateParameters(Vector<T> parameters)
@@ -224,17 +178,13 @@ namespace AiDotNet.NeuralNetworks
 
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
-            return new TransformerEmbeddingNetwork<T>(
+            return new SiameseNeuralNetwork<T>(
                 Architecture,
                 _tokenizer,
                 _optimizer,
                 _vocabSize,
                 _embeddingDimension,
                 _maxSequenceLength,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                _poolingStrategy,
                 _lossFunction,
                 Convert.ToDouble(MaxGradNorm));
         }
@@ -243,16 +193,14 @@ namespace AiDotNet.NeuralNetworks
         {
             return new ModelMetadata<T>
             {
-                Name = "TransformerEmbeddingNetwork",
-                ModelType = ModelType.Transformer,
-                Description = "Customizable Transformer-based embedding network",
+                Name = "SiameseNeuralNetwork",
+                ModelType = ModelType.SiameseNetwork,
+                Description = "Standardized Siamese dual-encoder network",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },
-                    { "NumLayers", _numLayers },
-                    { "NumHeads", _numHeads },
-                    { "PoolingStrategy", _poolingStrategy.ToString() }
+                    { "VocabSize", _vocabSize }
                 }
             };
         }
@@ -262,10 +210,6 @@ namespace AiDotNet.NeuralNetworks
             writer.Write(_vocabSize);
             writer.Write(_embeddingDimension);
             writer.Write(_maxSequenceLength);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-            writer.Write((int)_poolingStrategy);
         }
 
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)

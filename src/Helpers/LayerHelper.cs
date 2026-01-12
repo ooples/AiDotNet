@@ -8133,5 +8133,179 @@ public static class LayerHelper<T>
         // 6. LM Head
         yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
     }
+    /// <summary>
+    /// Creates default layers for a SimCSE (Simple Contrastive Learning of Sentence Embeddings) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSimCSELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Embedding Layer
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // 2. Positional Encoding
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+
+        // 3. Transformer Encoder Layers (SimCSE uses standard BERT/RoBERTa stacks)
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 4. MLM Head (Optional, but often used in SimCSE training)
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a ColBERT (Contextualized Late Interaction over BERT) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 128, // ColBERT typically projects down to smaller dimension
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder (e.g. BERT)
+        yield return new EmbeddingLayer<T>(vocabSize, 768);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+        }
+
+        // 2. Projection Layer (maps to token-level late interaction embeddings)
+        yield return new DenseLayer<T>(768, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a SPLADE (Sparse Lexical and Expansion Model) embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSPLADELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 2. SPLADE Head (maps token representations back to vocabulary log-space)
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Matryoshka Representation Learning (MRL) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMRLLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int maxEmbeddingDimension = 1536,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, 768);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+        }
+
+        // 2. Final projection to max Matryoshka dimension
+        yield return new DenseLayer<T>(768, maxEmbeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for an Instructor/E5 (Instruction-Tuned) embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultInstructorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 2. Instruction Pooling/Projection
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+    /// <summary>
+    /// Creates default layers for a BGE (BAAI General Embedding) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBGELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // BGE is typically a BERT-style encoder with specialized multi-stage training
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // BGE often uses an additional normalization/projection head for retrieval
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+    }
+
+    /// <summary>
+    /// Creates default layers for an SGPT (Sentence GPT) decoder-only embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 50257, // GPT-2 vocab size
+        int embeddingDimension = 768,
+        int maxSequenceLength = 1024,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // SGPT uses a decoder-only architecture (e.g. GPT-2, GPT-Neo)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Note: In a real decoder, we would use TransformerDecoderLayer with causal masking
+            // For embedding extraction, a simple TransformerEncoderLayer is often used as a proxy 
+            // if we aren't doing autoregressive generation.
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // SGPT uses the last token's representation
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>?)null);
+    }
     #endregion
 }

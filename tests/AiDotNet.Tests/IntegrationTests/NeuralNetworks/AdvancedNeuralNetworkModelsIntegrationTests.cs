@@ -573,42 +573,32 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact]
     public void SiameseNetwork_Predict_ProducesOutput()
     {
-        // Arrange - SiameseNetwork uses CNN internally, which requires ThreeDimensional input
-        var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.BinaryClassification,
-            complexity: NetworkComplexity.Simple,
-            inputDepth: 1,
-            inputHeight: 8,
-            inputWidth: 8,
-            outputSize: 1);
-
-        var network = new SiameseNetwork<float>(architecture);
-        // SiameseNetwork expects [batchSize, 2, channels, height, width] - 2 images to compare
-        var input = CreateRandomTensor([1, 2, 1, 8, 8]);
+        // Arrange - SiameseNeuralNetwork uses Transformer-based encoder by default
+        var inputShape = new[] { 1, 32 }; // One sequence of 32 tokens
+        var architecture = new NeuralNetworkArchitecture<float>(inputShape, 768);
+        
+        var network = new SiameseNeuralNetwork<float>(architecture);
+        
+        // SiameseNeuralNetwork expects [batchSize, seqLen] for simple embedding lookup
+        var input = Tensor<float>.CreateRandom([1, 32]);
+        for (int i = 0; i < input.Length; i++) input.SetFlat(i, (float)Math.Floor(input.GetFlat(i) * 100));
 
         // Act
-        var output = network.Predict(input);
+        var result = network.Predict(input);
 
         // Assert
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0, "Output should have elements");
+        Assert.NotNull(result);
+        Assert.Equal(new[] { 1, 32, 768 }, result.Shape);
     }
 
     [Fact]
     public void SiameseNetwork_GetModelMetadata_ReturnsValidData()
     {
-        // Arrange - SiameseNetwork uses CNN internally, which requires ThreeDimensional input
-        var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.BinaryClassification,
-            complexity: NetworkComplexity.Simple,
-            inputDepth: 1,
-            inputHeight: 8,
-            inputWidth: 6,
-            outputSize: 1);
-
-        var network = new SiameseNetwork<float>(architecture);
+        // Arrange
+        var inputShape = new[] { 1, 32 };
+        var architecture = new NeuralNetworkArchitecture<float>(inputShape, 768);
+        
+        var network = new SiameseNeuralNetwork<float>(architecture);
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -616,6 +606,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         // Assert
         Assert.NotNull(metadata);
         Assert.Equal(ModelType.SiameseNetwork, metadata.ModelType);
+        Assert.Equal("SiameseNeuralNetwork", metadata.Name);
     }
 
     #endregion
