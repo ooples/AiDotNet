@@ -90,7 +90,7 @@ jobs:
       - name: Create or update PR
         if: steps.changes.outputs.has_changes == 'true'
         id: pr
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
+        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a # v7
         with:
           script: |
             const owner = context.repo.owner;
@@ -155,7 +155,7 @@ jobs:
 
       - name: Request review and enable auto-merge
         if: steps.changes.outputs.has_changes == 'true' && steps.pr.outputs.pull_number != ''
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
+        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a # v7
         env:
           PULL_NUMBER: ${{ steps.pr.outputs.pull_number }}
         with:
