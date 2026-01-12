@@ -60,7 +60,6 @@ namespace AiDotNet.Agents;
 /// </remarks>
 public class ChainOfThoughtAgent<T> : AgentBase<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly bool _allowTools;
 
     /// <summary>
@@ -405,14 +404,14 @@ Final answer:";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers if present
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object without code blocks
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
+        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -429,8 +428,8 @@ Final answer:";
         var result = new ChainOfThoughtResponse();
 
         // Try to extract steps
-        var stepMatches = Regex.Matches(response, @"(?:Step\s*\d+:|^\d+\.)\s*(.+?)(?=(?:Step\s*\d+:|\d+\.|Final Answer:|$))",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline, RegexTimeout);
+        var stepMatches = RegexHelper.Matches(response, @"(?:Step\s*\d+:|^\d+\.)\s*(.+?)(?=(?:Step\s*\d+:|\d+\.|Final Answer:|$))",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline);
 
         foreach (Match match in stepMatches)
         {
@@ -442,8 +441,8 @@ Final answer:";
         }
 
         // Try to extract final answer
-        var answerMatch = Regex.Match(response, @"Final\s*Answer:\s*(.+?)$",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline, RegexTimeout);
+        var answerMatch = RegexHelper.Match(response, @"Final\s*Answer:\s*(.+?)$",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline);
         if (answerMatch.Success)
         {
             result.FinalAnswer = answerMatch.Groups[1].Value.Trim();
@@ -503,3 +502,7 @@ Final answer:";
         public string? Result { get; set; }
     }
 }
+
+
+
+

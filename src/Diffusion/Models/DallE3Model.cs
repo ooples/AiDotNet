@@ -43,29 +43,24 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     private readonly IReadOnlyList<DallE3ImageSize> _supportedSizes;
     private readonly int? _userSeed;
 
-    /// <summary>
-    /// Timeout for regex operations to prevent ReDoS attacks.
-    /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-
     // Safety patterns for content filtering - using regex for more accurate matching
     private static readonly Regex[] UnsafePatterns =
     [
         // Violence patterns - match word boundaries to avoid false positives
-        new Regex(@"\b(violen(ce|t)|gore|blood(y|shed)?|murder|kill(ing)?|weapon|assault|attack(ing)?)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout),
+        RegexHelper.Create(@"\b(violen(ce|t)|gore|blood(y|shed)?|murder|kill(ing)?|weapon|assault|attack(ing)?)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
         // Explicit content patterns
-        new Regex(@"\b(explicit|nude|naked|porn(ograph(y|ic))?|nsfw|sexual|erotic)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout),
+        RegexHelper.Create(@"\b(explicit|nude|naked|porn(ograph(y|ic))?|nsfw|sexual|erotic)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
         // Harmful content patterns
-        new Regex(@"\b(harm(ful)?|dangerous|toxic|poison|self[-\s]?harm|suicide)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout),
+        RegexHelper.Create(@"\b(harm(ful)?|dangerous|toxic|poison|self[-\s]?harm|suicide)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
         // Illegal activity patterns
-        new Regex(@"\b(illegal|drug(s)?|contraband|trafficking|smuggl(e|ing))\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout),
+        RegexHelper.Create(@"\b(illegal|drug(s)?|contraband|trafficking|smuggl(e|ing))\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
         // Hate speech patterns
-        new Regex(@"\b(hate(ful)?|racist|discrimination|bigot(ry)?|slur)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout)
+        RegexHelper.Create(@"\b(hate(ful)?|racist|discrimination|bigot(ry)?|slur)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled)
     ];
 
     // Category names corresponding to each pattern
@@ -799,3 +794,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
     #endregion
 }
+
+
+
+

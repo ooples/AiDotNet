@@ -29,7 +29,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// </remarks>
 public class QueryRewritingProcessor<T> : QueryProcessorBase
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T>? _llmGenerator;
     private readonly List<string> _conversationHistory;
 
@@ -81,12 +80,12 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         var rewritten = query;
 
         // Case-insensitive replacements for common text speak
-        rewritten = Regex.Replace(rewritten, @"\br\b", "are", RegexOptions.IgnoreCase, RegexTimeout);
-        rewritten = Regex.Replace(rewritten, @"\bu\b", "you", RegexOptions.IgnoreCase, RegexTimeout);
-        rewritten = Regex.Replace(rewritten, @"\bwht\b", "what", RegexOptions.IgnoreCase, RegexTimeout);
-        rewritten = Regex.Replace(rewritten, @"\bhw\b", "how", RegexOptions.IgnoreCase, RegexTimeout);
-        rewritten = Regex.Replace(rewritten, @" w/ ", " with ", RegexOptions.IgnoreCase, RegexTimeout);
-        rewritten = Regex.Replace(rewritten, @" w/o ", " without ", RegexOptions.IgnoreCase, RegexTimeout);
+        rewritten = RegexHelper.Replace(rewritten, @"\br\b", "are", RegexOptions.IgnoreCase);
+        rewritten = RegexHelper.Replace(rewritten, @"\bu\b", "you", RegexOptions.IgnoreCase);
+        rewritten = RegexHelper.Replace(rewritten, @"\bwht\b", "what", RegexOptions.IgnoreCase);
+        rewritten = RegexHelper.Replace(rewritten, @"\bhw\b", "how", RegexOptions.IgnoreCase);
+        rewritten = RegexHelper.Replace(rewritten, @" w/ ", " with ", RegexOptions.IgnoreCase);
+        rewritten = RegexHelper.Replace(rewritten, @" w/o ", " without ", RegexOptions.IgnoreCase);
 
         return rewritten.Trim();
     }
@@ -126,8 +125,8 @@ Rewritten query:";
             if (!string.IsNullOrEmpty(topic))
             {
                 // Anchor pattern to match only at the start of the query
-                var result = System.Text.RegularExpressions.Regex.Replace(query, @"^what about\b", $"what about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase, RegexTimeout);
-                result = System.Text.RegularExpressions.Regex.Replace(result, @"^how about\b", $"how about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase, RegexTimeout);
+                var result = RegexHelper.Replace(query, @"^what about\b", $"what about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                result = RegexHelper.Replace(result, @"^how about\b", $"how about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 return result;
             }
         }
@@ -170,3 +169,6 @@ Rewritten query:";
         return words[0];
     }
 }
+
+
+

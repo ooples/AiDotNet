@@ -24,7 +24,6 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
     /// Pattern rules for each category.
@@ -251,7 +250,7 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
             {
                 try
                 {
-                    if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
+                    if (RegexHelper.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexHelper.FastTimeout))
                     {
                         matchCount++;
                     }
@@ -329,3 +328,6 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
         public Dictionary<string, List<string>>? CategoryPatterns { get; set; }
     }
 }
+
+
+

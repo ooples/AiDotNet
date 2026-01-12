@@ -43,6 +43,7 @@ using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.Scalers;
@@ -139,6 +140,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
+    private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
@@ -320,6 +322,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 new StandardScaler<T>());
         }
 
+        // Set global registry so all models automatically use this pipeline
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
+
         return this;
     }
 
@@ -360,6 +365,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
+
+        // Set global registry so all models automatically use this pipeline
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -402,6 +410,118 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
+
+        // Set global registry so all models automatically use this pipeline
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the output postprocessing pipeline for the model using a fluent builder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The postprocessing pipeline transforms model outputs into the desired format.
+    /// This includes operations like applying softmax, decoding labels, filtering results,
+    /// and formatting outputs for specific use cases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets you chain multiple postprocessing steps together:
+    /// <code>
+    /// builder.ConfigurePostprocessing(pipeline => pipeline
+    ///     .Add(new SoftmaxTransformer&lt;double&gt;())
+    ///     .Add(new LabelDecoder&lt;double&gt;(labels)));
+    /// </code>
+    /// The pipeline will apply these transformations in order to model outputs,
+    /// and can reverse them if needed.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+        Action<PostprocessingPipeline<T, TOutput, TOutput>>? pipelineBuilder = null)
+    {
+        _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
+
+        if (pipelineBuilder is not null)
+        {
+            pipelineBuilder(_postprocessingPipeline);
+        }
+        // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
+        // because the appropriate postprocessing depends heavily on the model type
+        // (classification vs regression vs generation, etc.)
+
+        // Set global registry so all models automatically use this pipeline
+        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the output postprocessing using a single transformer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this overload when you only need a single postprocessing transformer.
+    /// For multiple transformers, use the overload that takes an Action to build a pipeline.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a simple way to add just one postprocessing step:
+    /// <code>
+    /// builder.ConfigurePostprocessing(new SoftmaxTransformer&lt;double&gt;());
+    /// </code>
+    /// If you need multiple steps, use the pipeline builder overload instead.
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+        IDataTransformer<T, TOutput, TOutput>? transformer = null)
+    {
+        _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
+
+        if (transformer is not null)
+        {
+            _postprocessingPipeline.Add(transformer);
+        }
+        // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
+        // because the appropriate postprocessing depends heavily on the model type
+
+        // Set global registry so all models automatically use this pipeline
+        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the output postprocessing using an existing pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this overload when you have a pre-configured PostprocessingPipeline instance.
+    /// If null is passed, an empty postprocessing pipeline will be created.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you've already created a pipeline elsewhere:
+    /// <code>
+    /// var myPipeline = new PostprocessingPipeline&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .Add(new SoftmaxTransformer&lt;double&gt;());
+    ///
+    /// builder.ConfigurePostprocessing(myPipeline);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+        PostprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
+    {
+        if (pipeline is not null)
+        {
+            _postprocessingPipeline = pipeline;
+        }
+        else
+        {
+            // Create empty pipeline - no default postprocessing
+            // because appropriate postprocessing depends on model type
+            _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
+        }
+
+        // Set global registry so all models automatically use this pipeline
+        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
+
         return this;
     }
 

@@ -120,7 +120,6 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class LogiQABenchmark<T> : IBenchmark<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -378,7 +377,7 @@ D) The exam was too difficult",
 
         foreach (var pattern in patterns)
         {
-            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
+            var match = RegexHelper.Match(text, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline);
             if (match.Success)
             {
                 return match.Groups[1].Value.ToUpperInvariant();
@@ -391,7 +390,7 @@ D) The exam was too difficult",
             return text;
         }
 
-        var anyMatch = Regex.Match(text, @"\b([A-D])\b", RegexOptions.IgnoreCase, RegexTimeout);
+        var anyMatch = RegexHelper.Match(text, @"\b([A-D])\b", RegexOptions.IgnoreCase);
         if (anyMatch.Success)
         {
             return anyMatch.Groups[1].Value.ToUpperInvariant();
@@ -400,3 +399,6 @@ D) The exam was too difficult",
         return null;
     }
 }
+
+
+

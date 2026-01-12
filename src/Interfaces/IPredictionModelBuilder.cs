@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.ProgramSynthesis.Serving;
@@ -128,6 +129,86 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         Action<PreprocessingPipeline<T, TInput, TInput>> configure);
+
+    /// <summary>
+    /// Configures the output postprocessing pipeline for the model using a single transformer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Postprocessing transforms model outputs into the desired format.
+    /// This includes operations like softmax application, label decoding, output formatting,
+    /// and converting tensor outputs to structured data.
+    /// </para>
+    /// <para><b>For Beginners:</b> Postprocessing is like formatting the final presentation of results.
+    /// It involves:
+    /// - Converting raw model outputs to probabilities (Softmax)
+    /// - Decoding indices to human-readable labels (LabelDecoder)
+    /// - Applying thresholds and confidence filtering
+    /// - Formatting outputs for specific use cases
+    ///
+    /// Example with a single transformer:
+    /// <code>
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
+    ///     .ConfigurePostprocessing(new SoftmaxTransformer&lt;double&gt;())
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="transformer">The postprocessing transformer to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(IDataTransformer<T, TOutput, TOutput> transformer);
+
+    /// <summary>
+    /// Configures the output postprocessing pipeline for the model using a fluent builder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This overload accepts a configuration action that allows you to build a postprocessing
+    /// pipeline with multiple transformers in a fluent style.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you need multiple postprocessing steps.
+    ///
+    /// Example with multiple steps:
+    /// <code>
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
+    ///     .ConfigurePostprocessing(pipeline => pipeline
+    ///         .Add(new SoftmaxTransformer&lt;double&gt;())
+    ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configure">An action that configures the postprocessing pipeline.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+        Action<PostprocessingPipeline<T, TOutput, TOutput>> configure);
+
+    /// <summary>
+    /// Configures the output postprocessing pipeline for the model using an existing pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this overload when you have a pre-configured PostprocessingPipeline instance.
+    /// If null is passed, a default postprocessing pipeline will be created with
+    /// industry-standard transformers for the model type.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you've already created a pipeline elsewhere:
+    /// <code>
+    /// var myPipeline = new PostprocessingPipeline&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .Add(new SoftmaxTransformer&lt;double&gt;());
+    ///
+    /// builder.ConfigurePostprocessing(myPipeline);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="pipeline">The postprocessing pipeline to use, or null for industry defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+        PostprocessingPipeline<T, TOutput, TOutput>? pipeline = null);
 
     /// <summary>
     /// Configures the regularization component for the model.

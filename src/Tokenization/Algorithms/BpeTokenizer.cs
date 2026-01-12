@@ -41,7 +41,6 @@ namespace AiDotNet.Tokenization.Algorithms
     /// </remarks>
     public class BpeTokenizer : TokenizerBase
     {
-        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
         private readonly Dictionary<(string, string), int> _bpeMerges;
         private readonly Dictionary<string, List<string>> _cache;
         private readonly Regex _patternRegex;
@@ -71,7 +70,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Default GPT-2 pattern for pre-tokenization
             pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
-            _patternRegex = new Regex(pattern, RegexOptions.Compiled, RegexTimeout);
+            _patternRegex = RegexHelper.Create(pattern, RegexOptions.Compiled);
         }
 
         /// <summary>
@@ -126,7 +125,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Step 2: Pre-tokenize and get word frequencies
             pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
-            var preTokenRegex = new Regex(pattern, RegexOptions.Compiled, RegexTimeout);
+            var preTokenRegex = RegexHelper.Create(pattern, RegexOptions.Compiled);
 
             var wordFreqs = new Dictionary<string, int>();
             foreach (var text in corpusList)
@@ -308,3 +307,6 @@ namespace AiDotNet.Tokenization.Algorithms
         }
     }
 }
+
+
+

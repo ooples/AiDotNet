@@ -53,7 +53,6 @@ namespace AiDotNet.Reasoning.Strategies;
 /// </remarks>
 public class ChainOfThoughtStrategy<T> : ReasoningStrategyBase<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly bool _useJsonFormat;
 
     /// <summary>
@@ -269,12 +268,10 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         var steps = new List<ReasoningStep<T>>();
 
         // Match patterns like "Step 1:", "Step 2:", or numbered lists "1.", "2."
-        var stepMatches = Regex.Matches(
+        var stepMatches = RegexHelper.Matches(
             response,
             @"(?:Step\s*\d+:|^\d+\.)\s*(.+?)(?=(?:Step\s*\d+:|\d+\.|Final Answer:|$))",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline,
-            RegexTimeout
-        );
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline);
 
         int stepNum = 1;
         foreach (Match match in stepMatches)
@@ -313,14 +310,14 @@ Maximum {config.MaxSteps} steps. Think step by step.";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers if present
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object without code blocks
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
+        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -351,12 +348,10 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         }
 
         // Try regex for "Final Answer:" pattern
-        var answerMatch = Regex.Match(
+        var answerMatch = RegexHelper.Match(
             response,
             @"Final\s*Answer\s*:\s*(.+?)(?:\n\n|$)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline,
-            RegexTimeout
-        );
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
         if (answerMatch.Success)
         {
@@ -373,3 +368,6 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         return response.Trim();
     }
 }
+
+
+

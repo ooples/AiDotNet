@@ -39,7 +39,6 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
     /// <summary>
     /// Regex timeout to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Initializes a new instance of the ComplexityAnalyzer class.
@@ -104,7 +103,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
         }
 
         // Check sentence length
-        var sentences = Regex.Split(prompt, @"[.!?]+", RegexOptions.None, RegexTimeout).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        var sentences = RegexHelper.Split(prompt, @"[.!?]+", RegexOptions.None).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
         var longSentences = sentences.Where(s => CountWords(s) > 40).ToList();
         if (longSentences.Count > 0)
         {
@@ -170,7 +169,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
     /// </summary>
     private static int CountSentences(string text)
     {
-        var sentences = Regex.Split(text, @"[.!?]+", RegexOptions.None, RegexTimeout)
+        var sentences = RegexHelper.Split(text, @"[.!?]+", RegexOptions.None)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
         return Math.Max(1, sentences.Count);
@@ -198,7 +197,7 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
         }
 
         // Count vowel groups
-        var vowelGroups = Regex.Matches(word, @"[aeiouy]+", RegexOptions.None, RegexTimeout).Count;
+        var vowelGroups = RegexHelper.Matches(word, @"[aeiouy]+", RegexOptions.None).Count;
 
         // Adjust for silent e at end
         if (word.EndsWith("e") && vowelGroups > 1)
@@ -252,9 +251,12 @@ public class ComplexityAnalyzer : PromptAnalyzerBase
     /// </summary>
     private static int CountInstructions(string text)
     {
-        return Regex.Matches(text,
+        return RegexHelper.Matches(text,
             @"\b(must|should|need to|required|ensure|make sure|do not|don't|never|always|important|note that|remember|keep in mind)\b",
-            RegexOptions.IgnoreCase, RegexTimeout).Count;
+            RegexOptions.IgnoreCase).Count;
     }
 
 }
+
+
+

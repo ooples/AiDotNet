@@ -59,7 +59,6 @@ public class MultiQueryExpansion : QueryExpansionBase
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
@@ -159,7 +158,7 @@ public class MultiQueryExpansion : QueryExpansionBase
 
     private string SimplifyQuery(string query)
     {
-        var words = Regex.Split(query, @"\s+", RegexOptions.None, RegexTimeout)
+        var words = RegexHelper.Split(query, @"\s+", RegexOptions.None)
             .Where(w => w.Length > 3)
             .Take(5)
             .ToArray();
@@ -194,3 +193,6 @@ public class MultiQueryExpansion : QueryExpansionBase
         return string.Join(" ", words);
     }
 }
+
+
+

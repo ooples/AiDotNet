@@ -82,7 +82,6 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class ARCAGIBenchmark<T> : IBenchmark<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -373,12 +372,10 @@ What is the transformation rule? Provide the output grid.",
         try
         {
             // Try to find JSON array in text
-            var match = System.Text.RegularExpressions.Regex.Match(
+            var match = RegexHelper.Match(
                 text,
                 @"\[\s*\[[\d\s,]*\](?:\s*,\s*\[[\d\s,]*\])*\s*\]",
-                System.Text.RegularExpressions.RegexOptions.None,
-                RegexTimeout
-            );
+                System.Text.RegularExpressions.RegexOptions.None);
 
             if (match.Success)
             {
@@ -422,3 +419,6 @@ What is the transformation rule? Provide the output grid.",
         return true;
     }
 }
+
+
+

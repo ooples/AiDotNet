@@ -25,7 +25,6 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
     /// <summary>
     /// Regex timeout to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly Func<string, int>? _tokenCounter;
     private readonly decimal _costPerThousandTokens;
@@ -201,7 +200,7 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
     /// </summary>
     protected static int CountVariables(string prompt)
     {
-        var matches = Regex.Matches(prompt, @"\{[^}]+\}", RegexOptions.None, RegexTimeout);
+        var matches = RegexHelper.Matches(prompt, @"\{[^}]+\}", RegexOptions.None);
         return matches.Count;
     }
 
@@ -224,7 +223,7 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         int count = 0;
         foreach (var pattern in patterns)
         {
-            count += Regex.Matches(prompt, pattern, RegexOptions.IgnoreCase, RegexTimeout).Count;
+            count += RegexHelper.Matches(prompt, pattern, RegexOptions.IgnoreCase).Count;
         }
 
         return count;
@@ -239,44 +238,44 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         var lowerPrompt = prompt.ToLowerInvariant();
 
         // Question detection
-        if (Regex.IsMatch(prompt, @"\?(?:\s|$)", RegexOptions.None, RegexTimeout) ||
-            Regex.IsMatch(lowerPrompt, @"\b(what|who|where|when|why|how|which|can you|could you|do you)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"\?(?:\s|$)", RegexOptions.None) ||
+            RegexHelper.IsMatch(lowerPrompt, @"\b(what|who|where|when|why|how|which|can you|could you|do you)\b", RegexOptions.None))
         {
             patterns.Add("question");
         }
 
         // Instruction detection
-        if (Regex.IsMatch(lowerPrompt, @"\b(write|create|generate|produce|make|build|design)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(write|create|generate|produce|make|build|design)\b", RegexOptions.None))
         {
             patterns.Add("generation");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(summarize|summarise|summary|tldr|condense)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(summarize|summarise|summary|tldr|condense)\b", RegexOptions.None))
         {
             patterns.Add("summarization");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(translate|translation|convert.*to|from.*to)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(translate|translation|convert.*to|from.*to)\b", RegexOptions.None))
         {
             patterns.Add("translation");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(analyze|analyse|analysis|examine|evaluate|assess)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(analyze|analyse|analysis|examine|evaluate|assess)\b", RegexOptions.None))
         {
             patterns.Add("analysis");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(extract|identify|find|list|get)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(extract|identify|find|list|get)\b", RegexOptions.None))
         {
             patterns.Add("extraction");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(step.?by.?step|first.*then|reasoning|think.*through|let'?s think)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(step.?by.?step|first.*then|reasoning|think.*through|let'?s think)\b", RegexOptions.None))
         {
             patterns.Add("chain-of-thought");
         }
 
-        if (Regex.IsMatch(lowerPrompt, @"\b(you are|act as|pretend|role|persona)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(you are|act as|pretend|role|persona)\b", RegexOptions.None))
         {
             patterns.Add("role-playing");
         }
@@ -313,20 +312,20 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         else if (tokenCount > 100) score += 0.1;
 
         // Sentence complexity (0-0.2)
-        var sentences = Regex.Split(prompt, @"[.!?]+", RegexOptions.None, RegexTimeout).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        var sentences = RegexHelper.Split(prompt, @"[.!?]+", RegexOptions.None).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
         var avgWordsPerSentence = sentences.Count > 0 ? CountWords(prompt) / (double)sentences.Count : 0;
         if (avgWordsPerSentence > 25) score += 0.2;
         else if (avgWordsPerSentence > 15) score += 0.1;
 
         // Nested structure (0-0.2)
-        var nestedPatterns = Regex.Matches(prompt, @"[\[\(\{<].*?[\]\)\}>]", RegexOptions.None, RegexTimeout).Count;
+        var nestedPatterns = RegexHelper.Matches(prompt, @"[\[\(\{<].*?[\]\)\}>]", RegexOptions.None).Count;
         if (nestedPatterns > 5) score += 0.2;
         else if (nestedPatterns > 2) score += 0.1;
 
         // Instruction count (0-0.2)
-        var instructionKeywords = Regex.Matches(prompt,
+        var instructionKeywords = RegexHelper.Matches(prompt,
             @"\b(must|should|need to|required|ensure|make sure|do not|don't|never|always|important)\b",
-            RegexOptions.IgnoreCase, RegexTimeout).Count;
+            RegexOptions.IgnoreCase).Count;
         if (instructionKeywords > 5) score += 0.2;
         else if (instructionKeywords > 2) score += 0.1;
 
@@ -367,7 +366,7 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         }
 
         // Check for empty variable names
-        var emptyVars = Regex.Matches(prompt, @"\{\s*\}", RegexOptions.None, RegexTimeout);
+        var emptyVars = RegexHelper.Matches(prompt, @"\{\s*\}", RegexOptions.None);
         if (emptyVars.Count > 0)
         {
             issues.Add(new PromptIssue
@@ -379,7 +378,7 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         }
 
         // Check for suspicious variable names (potential typos)
-        var vars = Regex.Matches(prompt, @"\{([^}]+)\}", RegexOptions.None, RegexTimeout);
+        var vars = RegexHelper.Matches(prompt, @"\{([^}]+)\}", RegexOptions.None);
         foreach (Match match in vars)
         {
             var varName = match.Groups[1].Value;
@@ -419,7 +418,7 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
 
         foreach (var (pattern, description) in injectionPatterns)
         {
-            var matches = Regex.Matches(prompt, pattern, RegexOptions.IgnoreCase, RegexTimeout);
+            var matches = RegexHelper.Matches(prompt, pattern, RegexOptions.IgnoreCase);
             foreach (Match match in matches)
             {
                 issues.Add(new PromptIssue
@@ -460,3 +459,6 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         return issues.Where(i => i.Severity >= minSeverity);
     }
 }
+
+
+

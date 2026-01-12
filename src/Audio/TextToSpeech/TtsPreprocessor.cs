@@ -22,7 +22,6 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </remarks>
 public class TtsPreprocessor
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     // Common abbreviations
     private static readonly Dictionary<string, string> Abbreviations = new(StringComparer.OrdinalIgnoreCase)
@@ -142,14 +141,14 @@ public class TtsPreprocessor
         // Expand abbreviations
         foreach (var (abbrev, expansion) in Abbreviations)
         {
-            result = Regex.Replace(result, Regex.Escape(abbrev), expansion, RegexOptions.IgnoreCase, RegexTimeout);
+            result = RegexHelper.Replace(result, RegexHelper.Escape(abbrev), expansion, RegexOptions.IgnoreCase);
         }
 
         // Expand numbers
         result = ExpandNumbers(result);
 
         // Normalize whitespace
-        result = Regex.Replace(result, @"\s+", " ", RegexOptions.None, RegexTimeout).Trim();
+        result = RegexHelper.Replace(result, @"\s+", " ", RegexOptions.None).Trim();
 
         // Convert to lowercase for phoneme lookup
         result = result.ToLowerInvariant();
@@ -173,14 +172,14 @@ public class TtsPreprocessor
     private static string ExpandNumbers(string text)
     {
         // Simple number expansion (would be more comprehensive in production)
-        return Regex.Replace(text, @"\d+", match =>
+        return RegexHelper.Replace(text, @"\d+", match =>
         {
             if (int.TryParse(match.Value, out int number))
             {
                 return NumberToWords(number);
             }
             return match.Value;
-        }, RegexOptions.None, RegexTimeout);
+        }, RegexOptions.None);
     }
 
     /// <summary>
@@ -273,10 +272,13 @@ public class TtsPreprocessor
     {
         // Split on sentence-ending punctuation
         var pattern = @"(?<=[.!?])\s+";
-        var sentences = Regex.Split(text, pattern, RegexOptions.None, RegexTimeout)
+        var sentences = RegexHelper.Split(text, pattern, RegexOptions.None)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
 
         return sentences;
     }
 }
+
+
+
