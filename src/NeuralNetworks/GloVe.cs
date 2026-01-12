@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -17,60 +18,72 @@ namespace AiDotNet.NeuralNetworks
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class GloVe<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
+        #region Fields
+
         private readonly int _vocabSize;
         private readonly int _embeddingDimension;
         private readonly ITokenizer _tokenizer;
-        
-        // GloVe uses two matrices W and W_tilde
-        private EmbeddingLayer<T> _mainEmbeddings;
-        private EmbeddingLayer<T> _contextEmbeddings;
-        
-        // And two bias vectors
-        private EmbeddingLayer<T> _mainBiases;
-        private EmbeddingLayer<T> _contextBiases;
+
+        #endregion
+
+        #region Properties
 
         public int EmbeddingDimension => _embeddingDimension;
         public int MaxTokens => 10000;
 
+        #endregion
+
+        #region Constructors
+
         public GloVe(
             NeuralNetworkArchitecture<T> architecture,
-            ITokenizer tokenizer,
-            int vocabSize,
+            ITokenizer? tokenizer = null,
+            int vocabSize = 10000,
             int embeddingDimension = 100,
             ILossFunction<T>? lossFunction = null)
             : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
         {
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.BERT);
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;
-
-            // Initialize to null!, they will be set in InitializeLayers called by base constructor or explicit call
-            _mainEmbeddings = null!;
-            _contextEmbeddings = null!;
-            _mainBiases = null!;
-            _contextBiases = null!;
 
             InitializeLayers();
         }
 
+        #endregion
+
+        #region Initialization
+
         protected override void InitializeLayers()
         {
             ClearLayers();
-            // Main embeddings W
-            _mainEmbeddings = new EmbeddingLayer<T>(_vocabSize, _embeddingDimension);
-            AddLayerToCollection(_mainEmbeddings);
 
-            // Context embeddings W_tilde
-            _contextEmbeddings = new EmbeddingLayer<T>(_vocabSize, _embeddingDimension);
-            AddLayerToCollection(_contextEmbeddings);
+            if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            {
+                // Use custom layers from architecture
+                foreach (var layer in Architecture.Layers)
+                {
+                    AddLayerToCollection(layer);
+                }
+            }
+            else
+            {
+                // Use default layers via LayerHelper
+                var defaultLayers = LayerHelper<T>.CreateDefaultGloVeLayers(
+                    Architecture,
+                    _vocabSize,
+                    _embeddingDimension);
 
-            // Biases (vocabSize x 1)
-            _mainBiases = new EmbeddingLayer<T>(_vocabSize, 1);
-            AddLayerToCollection(_mainBiases);
-
-            _contextBiases = new EmbeddingLayer<T>(_vocabSize, 1);
-            AddLayerToCollection(_contextBiases);
+                foreach (var layer in defaultLayers)
+                {
+                    AddLayerToCollection(layer);
+                }
+            }
         }
+
+        #endregion
+
+        #region Methods
 
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
@@ -103,23 +116,8 @@ namespace AiDotNet.NeuralNetworks
 
         public override Tensor<T> Predict(Tensor<T> input)
         {
-            // Standard prediction uses main + context embeddings
-            var w = _mainEmbeddings.Forward(input);
-            var w_tilde = _contextEmbeddings.Forward(input);
-            
-            // Result is W + W_tilde
-            // Simplified: return W + W_tilde
-            var result = new Tensor<T>(w.Shape);
-            
-            // Assuming W and W_tilde have same shape [1, dim]
-            for (int i = 0; i < w.Length; i++)
-            {
-                // Simple element-wise addition using flat indices
-                T val = NumOps.Add(w.GetFlat(i), w_tilde.GetFlat(i));
-                result.SetFlat(i, val);
-            }
-            
-            return result; 
+            // Standard prediction uses main embedding layer (first layer)
+            return Layers[0].Forward(input);
         }
 
         public Vector<T> Embed(string text)
@@ -143,14 +141,12 @@ namespace AiDotNet.NeuralNetworks
                     var inputVec = new Vector<T>(new[] { NumOps.FromDouble(id) });
                     var inputTensor = Tensor<T>.FromVector(inputVec);
                     
-                    // GloVe often uses W + W_tilde for final embeddings
-                    var w = _mainEmbeddings.Forward(inputTensor);
-                    var w_tilde = _contextEmbeddings.Forward(inputTensor);
+                    // Use main embedding layer (first layer)
+                    var w = Layers[0].Forward(inputTensor);
                     
                     for (int i = 0; i < _embeddingDimension; i++)
                     {
-                        var val = NumOps.Add(w[0, i], w_tilde[0, i]);
-                        sumVector[i] = NumOps.Add(sumVector[i], val);
+                        sumVector[i] = NumOps.Add(sumVector[i], w[0, i]);
                     }
                     count++;
                 }
@@ -242,5 +238,7 @@ namespace AiDotNet.NeuralNetworks
             reader.ReadInt32();
             reader.ReadInt32();
         }
+
+        #endregion
     }
 }

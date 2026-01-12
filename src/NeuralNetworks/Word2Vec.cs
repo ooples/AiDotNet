@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -17,58 +18,112 @@ namespace AiDotNet.NeuralNetworks
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
+        #region Fields
+
         private readonly int _vocabSize;
         private readonly int _embeddingDimension;
         private readonly int _windowSize;
         private readonly Word2VecType _type;
         private readonly ITokenizer _tokenizer;
-        
-        // Target embeddings (U matrix)
-        private EmbeddingLayer<T> _inputEmbeddings;
-        // Context embeddings (V matrix)
-        private EmbeddingLayer<T> _outputEmbeddings;
+
+        #endregion
+
+        #region Properties
 
         public int EmbeddingDimension => _embeddingDimension;
-        public int MaxTokens => 10000; // Arbitrary limit
+        public int MaxTokens => 10000; // Arbitrary limit, could be configurable
+
+        #endregion
+
+        #region Constructors
 
         public Word2Vec(
             NeuralNetworkArchitecture<T> architecture,
-            ITokenizer tokenizer,
-            int vocabSize,
+            ITokenizer? tokenizer = null,
+            int vocabSize = 10000,
             int embeddingDimension = 100,
             int windowSize = 5,
             Word2VecType type = Word2VecType.SkipGram,
             ILossFunction<T>? lossFunction = null)
             : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
         {
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.BERT);
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;
             _windowSize = windowSize;
             _type = type;
 
-            _inputEmbeddings = null!;
-            _outputEmbeddings = null!;
-
             InitializeLayers();
         }
+
+        #endregion
+
+        #region Initialization
 
         protected override void InitializeLayers()
         {
             ClearLayers();
-            // Input embeddings (target words)
-            _inputEmbeddings = new EmbeddingLayer<T>(_vocabSize, _embeddingDimension);
-            AddLayerToCollection(_inputEmbeddings);
+            
+            if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            {
+                // Use custom layers from architecture
+                foreach (var layer in Architecture.Layers)
+                {
+                    AddLayerToCollection(layer);
+                }
+            }
+            else
+            {
+                // Use default layers via LayerHelper
+                var defaultLayers = LayerHelper<T>.CreateDefaultWord2VecLayers(
+                    Architecture,
+                    _vocabSize,
+                    _embeddingDimension);
 
-            // Output embeddings (context words) - used for training
-            _outputEmbeddings = new EmbeddingLayer<T>(_vocabSize, _embeddingDimension);
-            AddLayerToCollection(_outputEmbeddings);
+                foreach (var layer in defaultLayers)
+                {
+                    AddLayerToCollection(layer);
+                }
+            }
         }
+
+        #endregion
+
+        #region Methods
 
         public override Tensor<T> Predict(Tensor<T> input)
         {
             // Input is index tensor
-            return _inputEmbeddings.Forward(input);
+            // First layer is always the embedding layer
+            return Layers[0].Forward(input);
+        }
+
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            // Standard backpropagation training (simplified for Word2Vec structure)
+            var output = ForwardWithMemory(input);
+            var outputVec = output.ToVector();
+            var expectedVec = expectedOutput.ToVector();
+
+            var gradVec = LossFunction.CalculateDerivative(outputVec, expectedVec);
+            var grad = Tensor<T>.FromVector(gradVec, output.Shape);
+            
+            Backpropagate(grad);
+        }
+
+        public override void UpdateParameters(Vector<T> parameters)
+        {
+            int offset = 0;
+            foreach (var layer in Layers)
+            {
+                int count = layer.ParameterCount;
+                if (count > 0)
+                {
+                    var layerParams = parameters.SubVector(offset, count);
+                    layer.UpdateParameters(layerParams);
+                    offset += count;
+                }
+            }
         }
 
         public Vector<T> Embed(string text)
@@ -155,34 +210,6 @@ namespace AiDotNet.NeuralNetworks
             return normalized;
         }
 
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            // Standard backpropagation training (simplified for Word2Vec structure)
-            var output = ForwardWithMemory(input);
-            var outputVec = output.ToVector();
-            var expectedVec = expectedOutput.ToVector();
-
-            var gradVec = LossFunction.CalculateDerivative(outputVec, expectedVec);
-            var grad = Tensor<T>.FromVector(gradVec, output.Shape);
-            
-            Backpropagate(grad);
-        }
-
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int offset = 0;
-            foreach (var layer in Layers)
-            {
-                int count = layer.ParameterCount;
-                if (count > 0)
-                {
-                    var layerParams = parameters.SubVector(offset, count);
-                    layer.UpdateParameters(layerParams);
-                    offset += count;
-                }
-            }
-        }
-        
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new Word2Vec<T>(
@@ -228,5 +255,7 @@ namespace AiDotNet.NeuralNetworks
             reader.ReadInt32(); // window
             reader.ReadInt32(); // type
         }
+
+        #endregion
     }
 }
