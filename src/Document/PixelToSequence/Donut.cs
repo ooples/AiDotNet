@@ -95,6 +95,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
     // Gradient storage
     private Tensor<T>? _decoderPositionEmbeddingsGradients;
+    private bool _decoderForwardExecuted;
 
     #endregion
 
@@ -298,10 +299,12 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             return;
         }
 
+        ResetLayerGroups();
+
         // Check if user provided custom layers via Architecture
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
+            PopulateLayerGroups(Architecture.Layers);
             ValidateCustomLayers(Layers);
             return;
         }
@@ -323,13 +326,102 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             vocabSize: _vocabSize,
             maxGenerationLength: _maxGenerationLength);
 
-        // Populate encoder layers (includes SwinPatchEmbedding + Swin blocks + PatchMerging)
-        _encoderLayers.AddRange(encoderLayers);
-        Layers.AddRange(_encoderLayers);
+        PopulateLayerGroups(encoderLayers, decoderLayers);
+    }
 
-        // Populate decoder layers (includes Embedding + TransformerDecoder + Output projection)
-        _decoderLayers.AddRange(decoderLayers);
-        Layers.AddRange(_decoderLayers);
+    private void ResetLayerGroups()
+    {
+        Layers.Clear();
+        _patchEmbeddingLayers.Clear();
+        _encoderLayers.Clear();
+        _decoderEmbeddingLayers.Clear();
+        _decoderLayers.Clear();
+        _outputLayers.Clear();
+    }
+
+    private void PopulateLayerGroups(IEnumerable<ILayer<T>> encoderLayers, IEnumerable<ILayer<T>> decoderLayers)
+    {
+        foreach (var layer in encoderLayers)
+        {
+            Layers.Add(layer);
+            if (layer is SwinPatchEmbeddingLayer<T>)
+            {
+                _patchEmbeddingLayers.Add(layer);
+            }
+            else
+            {
+                _encoderLayers.Add(layer);
+            }
+        }
+
+        foreach (var layer in decoderLayers)
+        {
+            Layers.Add(layer);
+            if (layer is EmbeddingLayer<T>)
+            {
+                _decoderEmbeddingLayers.Add(layer);
+            }
+            else if (layer is DenseLayer<T>)
+            {
+                _outputLayers.Add(layer);
+            }
+            else
+            {
+                _decoderLayers.Add(layer);
+            }
+        }
+    }
+
+    private void PopulateLayerGroups(IEnumerable<ILayer<T>> layers)
+    {
+        bool inDecoder = false;
+
+        foreach (var layer in layers)
+        {
+            Layers.Add(layer);
+
+            if (layer is SwinPatchEmbeddingLayer<T>)
+            {
+                _patchEmbeddingLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is EmbeddingLayer<T>)
+            {
+                inDecoder = true;
+                _decoderEmbeddingLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is TransformerDecoderLayer<T>)
+            {
+                inDecoder = true;
+                _decoderLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is DenseLayer<T>)
+            {
+                if (inDecoder)
+                {
+                    _outputLayers.Add(layer);
+                }
+                else
+                {
+                    _encoderLayers.Add(layer);
+                }
+                continue;
+            }
+
+            if (inDecoder)
+            {
+                _decoderLayers.Add(layer);
+            }
+            else
+            {
+                _encoderLayers.Add(layer);
+            }
+        }
     }
 
     private void InitializeEmbeddings()
@@ -797,9 +889,16 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         if (_useNativeMode)
         {
+            _decoderForwardExecuted = true;
+
+            foreach (var layer in _decoderEmbeddingLayers)
+            {
+                output = layer.Forward(output);
+            }
+
             foreach (var layer in _decoderLayers)
             {
-                // Decoder layers would use cross-attention with encoder output
+                // Decoder layers would use cross-attention with encoder output 
                 output = layer.Forward(output);
             }
 
@@ -1140,6 +1239,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         }
 
         SetTrainingMode(true);
+        _decoderForwardExecuted = false;
 
         // Forward pass
         var output = Predict(input);
@@ -1151,20 +1251,23 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
 
-        // Propagate gradients backward through decoder layers
-        for (int i = _outputLayers.Count - 1; i >= 0; i--)
+        if (_decoderForwardExecuted)
         {
-            gradient = _outputLayers[i].Backward(gradient);
-        }
+            // Propagate gradients backward through decoder layers
+            for (int i = _outputLayers.Count - 1; i >= 0; i--)
+            {
+                gradient = _outputLayers[i].Backward(gradient);
+            }
 
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _decoderLayers[i].Backward(gradient);
-        }
+            for (int i = _decoderLayers.Count - 1; i >= 0; i--)
+            {
+                gradient = _decoderLayers[i].Backward(gradient);
+            }
 
-        for (int i = _decoderEmbeddingLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _decoderEmbeddingLayers[i].Backward(gradient);
+            for (int i = _decoderEmbeddingLayers.Count - 1; i >= 0; i--)
+            {
+                gradient = _decoderEmbeddingLayers[i].Backward(gradient);
+            }
         }
 
         // Propagate through encoder layers
