@@ -1422,12 +1422,14 @@ public class CpuEngine : IEngine
 #if NET6_0_OR_GREATER
         if (typeof(T) == typeof(float) && a is Matrix<float> floatA && b is Matrix<float> floatB)
         {
-            return (Matrix<T>)(object)MatrixMultiplyFloat(floatA, floatB);
+            var result = MatrixMultiplyFloat(floatA, floatB);
+            return Unsafe.As<Matrix<float>, Matrix<T>>(ref result);
         }
 
         if (typeof(T) == typeof(double) && a is Matrix<double> doubleA && b is Matrix<double> doubleB)
         {
-            return (Matrix<T>)(object)MatrixMultiplyDouble(doubleA, doubleB);
+            var result = MatrixMultiplyDouble(doubleA, doubleB);
+            return Unsafe.As<Matrix<double>, Matrix<T>>(ref result);
         }
 #endif
 
@@ -1562,7 +1564,11 @@ public class CpuEngine : IEngine
         if (Environment.ProcessorCount <= 1)
             return false;
 
-        long ops = (long)m * n * k;
+        if (m <= 0 || n <= 0 || k <= 0)
+            return false;
+
+        long mn = Math.BigMul(m, n);
+        long ops = mn > long.MaxValue / k ? long.MaxValue : mn * k;
         return ops >= CpuMatMulParallelThresholdOps;
     }
 
@@ -2201,16 +2207,18 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
 
+        var aSpan = a.AsSpan();
         var bSpan = b.AsSpan();
+        var resultSpan = result.AsWritableSpan();
         for (int i = 0; i < bSpan.Length; i++)
         {
-            if (numOps.Equals(bSpan[i], numOps.Zero))
+            var divisor = bSpan[i];
+            if (numOps.Equals(divisor, numOps.Zero))
             {
                 throw new DivideByZeroException($"Division by zero at index {i}");
             }
+            resultSpan[i] = numOps.Divide(aSpan[i], divisor);
         }
-
-        numOps.Divide(a.AsSpan(), bSpan, result.AsWritableSpan());
 
         return result;
     }

@@ -136,7 +136,7 @@ public static class GpuMatMulDiagnostics
 
     private static void SetKernelMode(bool forceSafe, bool forceUnsafe)
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_GEMM_SAFE", forceSafe ? "1" : null);
-        Environment.SetEnvironmentVariable("AIDOTNET_GEMM_UNSAFE", forceUnsafe ? "1" : null);
+        Environment.SetEnvironmentVariable("AIDOTNET_GEMM_SAFE", forceSafe ? "1" : "0");
+        Environment.SetEnvironmentVariable("AIDOTNET_GEMM_UNSAFE", forceUnsafe ? "1" : "0");
     }
 }

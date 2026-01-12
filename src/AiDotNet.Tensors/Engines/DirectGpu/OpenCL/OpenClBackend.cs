@@ -1793,7 +1793,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: Using built-in kernel (NOT CLBlast!)");
 
             // Choose kernel based on matrix size
-            // Use optimized kernel for matrices >= 128 in any dimension        
+            // Use optimized kernel for matrices >= 128 in any dimension
             if (M >= 128 && N >= 128 && K >= 64)
             {
                 bool forceUnsafe = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_UNSAFE") == "1";
@@ -4456,7 +4456,7 @@ GPU SPECS (for accurate roofline analysis):
   AIDOTNET_GPU_BANDWIDTH_GBS=N Memory bandwidth in GB/s (e.g., 224 for RX 5500 XT)
 
 DEBUG:
-  AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)       
+  AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)
   AIDOTNET_GEMM_ENABLE_DYNAMIC=1  Enable dynamic GEMM kernels (default: built-in)
   AIDOTNET_GEMM_SAFE=1        Use safe GEMM fallback kernel for correctness
   AIDOTNET_GEMM_UNSAFE=1      Force gemm_double_buffered fallback kernel

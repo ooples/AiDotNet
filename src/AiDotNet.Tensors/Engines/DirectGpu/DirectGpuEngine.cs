@@ -33,7 +33,7 @@ public sealed class DirectGpuEngine : IDisposable
     private readonly KernelFusionManager _fusionManager;
     private readonly bool _isAvailable;
     private bool _disposed;
-    private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";    
+    private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";
     private static readonly string[] DefaultBackendOrder = new[] { "cuda", "opencl", "hip" };
     private static readonly bool GemmValidateEnabled =
         Environment.GetEnvironmentVariable("AIDOTNET_GEMM_VALIDATE") == "1";
