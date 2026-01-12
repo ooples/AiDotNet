@@ -13,32 +13,82 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
-    /// A standardized Siamese Neural Network for dual-encoder embedding and comparison tasks.
-    /// Follows the same pattern as other high-performance models in the library.
+    /// Siamese Neural Network implementation for dual-encoder comparison and similarity learning.
     /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    /// <remarks>
+    /// <para>
+    /// A Siamese Neural Network consists of two identical subnetworks (sharing the same parameters) 
+    /// that process two different inputs. The outputs are typically compared using a distance metric 
+    /// and optimized via contrastive or triplet loss.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A Siamese Network is like having two identical twins who think exactly 
+    /// the same way. You give a different photo to each twin, and they each describe what they see 
+    /// using a list of numbers. Because the twins think the same way, if the photos are similar, 
+    /// their descriptions will be almost identical. This is the most popular way to build face 
+    /// recognition or "find similar" search systems.
+    /// </para>
+    /// </remarks>
     public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         #region Fields
 
+        /// <summary>
+        /// The tokenizer used to process text inputs into numerical token IDs.
+        /// </summary>
         private readonly ITokenizer? _tokenizer;
+
+        /// <summary>
+        /// The dimensionality of the shared embedding space.
+        /// </summary>
         private readonly int _embeddingDimension;
+
+        /// <summary>
+        /// The maximum length of input sequences the model will process.
+        /// </summary>
         private readonly int _maxSequenceLength;
+
+        /// <summary>
+        /// The number of unique tokens the shared encoder can recognize.
+        /// </summary>
         private readonly int _vocabSize;
+
+        /// <summary>
+        /// The loss function used to evaluate similarity (defaults to ContrastiveLoss).
+        /// </summary>
         private readonly ILossFunction<T> _lossFunction;
+
+        /// <summary>
+        /// The optimization algorithm used to update the shared parameters of the dual encoders.
+        /// </summary>
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
         #region Properties
 
+        /// <inheritdoc/>
         public int EmbeddingDimension => _embeddingDimension;
+
+        /// <inheritdoc/>
         public int MaxTokens => _maxSequenceLength;
 
         #endregion
 
         #region Constructors
 
+        /// <summary>
+        /// Initializes a new instance of the SiameseNeuralNetwork model.
+        /// </summary>
+        /// <param name="architecture">The configuration defining the model's structural metadata.</param>
+        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
+        /// <param name="optimizer">Optional optimizer for training.</param>
+        /// <param name="vocabSize">The size of the shared vocabulary (default: 30522).</param>
+        /// <param name="embeddingDimension">The dimension of the shared embeddings (default: 768).</param>
+        /// <param name="maxSequenceLength">The maximum allowed input length (default: 512).</param>
+        /// <param name="lossFunction">Optional loss function. Defaults to Contrastive Loss.</param>
+        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public SiameseNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -64,6 +114,14 @@ namespace AiDotNet.NeuralNetworks
 
         #region Initialization
 
+        /// <summary>
+        /// Sets up the shared encoder layers for the Siamese twins using defaults from LayerHelper.
+        /// </summary>
+        /// <remarks>
+        /// <b>For Beginners:</b> This method builds the "twin's brain." It sets up a transformer 
+        /// encoder that is shared by both sides of the network to ensure that identical inputs 
+        /// always produce identical results.
+        /// </remarks>
         protected override void InitializeLayers()
         {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -73,13 +131,12 @@ namespace AiDotNet.NeuralNetworks
             }
             else
             {
-                // Default Siamese architecture: Transformer-based encoder
-                Layers.AddRange(new ILayer<T>[]
-                {
-                    new EmbeddingLayer<T>(_vocabSize, _embeddingDimension),
-                    new PositionalEncodingLayer<T>(_maxSequenceLength, _embeddingDimension),
-                    new TransformerEncoderLayer<T>(_embeddingDimension, 12, 3072) // One default layer
-                });
+                // Default Siamese architecture: Transformer-based encoder from LayerHelper
+                Layers.AddRange(LayerHelper<T>.CreateDefaultSiameseLayers(
+                    Architecture,
+                    _vocabSize,
+                    _embeddingDimension,
+                    _maxSequenceLength));
             }
         }
 
@@ -87,6 +144,9 @@ namespace AiDotNet.NeuralNetworks
 
         #region IEmbeddingModel Implementation
 
+        /// <summary>
+        /// Encodes a single string into a normalized embedding vector using the shared encoder brain.
+        /// </summary>
         public Vector<T> Embed(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -100,7 +160,7 @@ namespace AiDotNet.NeuralNetworks
             var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
             var output = Predict(inputTensor);
 
-            // Mean pooling
+            // Standard mean pooling to get a single vector from token representations
             var result = new Vector<T>(_embeddingDimension);
             for (int d = 0; d < _embeddingDimension; d++)
             {
@@ -115,6 +175,9 @@ namespace AiDotNet.NeuralNetworks
             return result.Normalize();
         }
 
+        /// <summary>
+        /// Encodes a batch of strings into a matrix of embedding vectors.
+        /// </summary>
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
@@ -131,7 +194,10 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
-        public override Tensor<T> Predict(Tensor<T> input)
+        /// <summary>
+        /// Performs a forward pass through the shared encoder.
+        /// </summary>
+        public Tensor<T> Forward(Tensor<T> input)
         {
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
@@ -145,22 +211,22 @@ namespace AiDotNet.NeuralNetworks
             return output;
         }
 
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        /// <summary>
+        /// Propagates error signal backward through the shared encoder layers.
+        /// </summary>
+        public Tensor<T> Backward(Tensor<T> outputGradient)
         {
-            // Siamese training typically involves comparing two inputs.
-            // If input contains pairs [batch, 2, ...], we split and contrast.
-            // Standard Train expects (input, expected).
-            
-            var prediction = Predict(input);
-            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+            for (int i = Layers.Count - 1; i >= 0; i--)
+            {
+                outputGradient = Layers[i].Backward(outputGradient);
+            }
 
-            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
-
-            Backpropagate(outputGradientTensor);
-            _optimizer.UpdateParameters(Layers);
+            return outputGradient;
         }
 
+        /// <summary>
+        /// Updates the shared parameters of the dual encoders.
+        /// </summary>
         public override void UpdateParameters(Vector<T> parameters)
         {
             int index = 0;
@@ -176,6 +242,28 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
+        /// <inheritdoc/>
+        public override Tensor<T> Predict(Tensor<T> input)
+        {
+            return Forward(input);
+        }
+
+        /// <summary>
+        /// Trains the model on pairs of inputs using a similarity learning objective.
+        /// </summary>
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            var prediction = Predict(input);
+            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+
+            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+
+            Backpropagate(outputGradientTensor);
+            _optimizer.UpdateParameters(Layers);
+        }
+
+        /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new SiameseNeuralNetwork<T>(
@@ -189,13 +277,16 @@ namespace AiDotNet.NeuralNetworks
                 Convert.ToDouble(MaxGradNorm));
         }
 
+        /// <summary>
+        /// Retrieves metadata about the Siamese dual-encoder model.
+        /// </summary>
         public override ModelMetadata<T> GetModelMetadata()
         {
             return new ModelMetadata<T>
             {
                 Name = "SiameseNeuralNetwork",
                 ModelType = ModelType.SiameseNetwork,
-                Description = "Standardized Siamese dual-encoder network",
+                Description = "Standardized Siamese dual-encoder high-performance network",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
@@ -205,6 +296,7 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
+        /// <inheritdoc/>
         protected override void SerializeNetworkSpecificData(BinaryWriter writer)
         {
             writer.Write(_vocabSize);
@@ -212,6 +304,7 @@ namespace AiDotNet.NeuralNetworks
             writer.Write(_maxSequenceLength);
         }
 
+        /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }

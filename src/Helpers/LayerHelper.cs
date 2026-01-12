@@ -7981,6 +7981,34 @@ public static class LayerHelper<T>
     }
 
             /// <summary>
+            /// Creates default layers for a Siamese neural network using a Transformer-based encoder.
+            /// </summary>
+            /// <param name="architecture">The neural network architecture configuration.</param>
+            /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
+            /// <param name="embeddingDimension">The dimension of the embedding vectors (default: 768).</param>
+            /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
+            /// <returns>A collection of layers forming a Siamese encoder.</returns>
+            /// <remarks>
+            /// <para>
+            /// <b>For Beginners:</b> A Siamese Network uses two identical "twin" networks to process different inputs.
+            /// This method sets up the structure for one of those twins, typically using a Transformer encoder
+            /// to turn text into a coordinate (embedding) that can be compared to others.
+            /// </para>
+            /// </remarks>
+            public static IEnumerable<ILayer<T>> CreateDefaultSiameseLayers(
+                NeuralNetworkArchitecture<T> architecture,
+                int vocabSize = 30522,
+                int embeddingDimension = 768,
+                int maxSequenceLength = 512)
+            {
+                ValidateLayerParameters(1, embeddingDimension, architecture.OutputSize);
+
+                yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+                yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+                yield return new TransformerEncoderLayer<T>(embeddingDimension, 12, 3072);
+            }
+
+            /// <summary>
             /// Creates default layers for a Word2Vec model (Skip-Gram or CBOW).
             /// </summary>
             /// <param name="architecture">The neural network architecture configuration.</param>

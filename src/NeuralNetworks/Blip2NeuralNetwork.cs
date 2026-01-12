@@ -15,12 +15,30 @@ namespace AiDotNet.NeuralNetworks;
 /// <summary>
 /// BLIP-2 (Bootstrapped Language-Image Pre-training 2) neural network for vision-language tasks.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// BLIP-2 is a revolutionary architecture that bridges the gap between pre-trained image encoders 
+/// and large language models (LLMs). It uses a "Q-Former" (Querying Transformer) to extract a fixed 
+/// number of visual features from an image, which are then used as prompts for an LLM to generate 
+/// captions, answer questions, or perform zero-shot classification.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Imagine you have a world-class photographer (the image encoder) and a world-class 
+/// author (the language model). BLIP-2 is the "translator" (the Q-Former) who looks at the photographer's 
+/// work, picks out the 32 most important details, and describes them to the author so the author 
+/// can write a story about the picture. This makes the whole process incredibly efficient and smart.
+/// </para>
+/// </remarks>
 public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 {
     #region Fields
 
+    /// <summary>
+    /// Indicates whether the model is running using native library layers or pre-trained ONNX sessions.
+    /// </summary>
     private readonly bool _useNativeMode;
+
     private readonly InferenceSession? _visionEncoder;
     private readonly InferenceSession? _qformer;
     private readonly InferenceSession? _languageModel;
@@ -44,37 +62,112 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     private ILayer<T>? _itmHead;
     private ILayer<T>? _itcProjection;
 
+    /// <summary>
+    /// The tokenizer used to process text input into numerical token IDs.
+    /// </summary>
     private readonly ITokenizer _tokenizer;
+
+    /// <summary>
+    /// The optimizer used to refine the Q-Former parameters during training.
+    /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// The loss function used to evaluate multimodal alignment (default: ContrastiveLoss).
+    /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The dimension of the shared multimodal embedding space.
+    /// </summary>
     private readonly int _embeddingDimension;
+
+    /// <summary>
+    /// The maximum length of text sequences allowed for processing.
+    /// </summary>
     private readonly int _maxSequenceLength;
+
+    /// <summary>
+    /// The input resolution (width and height) for processed images.
+    /// </summary>
     private readonly int _imageSize;
+
+    /// <summary>
+    /// The hidden dimension of the Q-Former transformer layers.
+    /// </summary>
     private readonly int _qformerHiddenDim;
+
+    /// <summary>
+    /// The number of transformer layers within the Q-Former.
+    /// </summary>
     private readonly int _numQformerLayers;
+
+    /// <summary>
+    /// The number of attention heads per Q-Former layer.
+    /// </summary>
     private readonly int _numHeads;
+
+    /// <summary>
+    /// The number of learnable "query tokens" used to probe visual features.
+    /// </summary>
     private readonly int _numQueryTokens;
+
+    /// <summary>
+    /// The size of image patches processed by the vision encoder.
+    /// </summary>
     private readonly int _patchSize;
+
+    /// <summary>
+    /// The vocabulary size of the text encoder.
+    /// </summary>
     private readonly int _vocabularySize;
+
+    /// <summary>
+    /// The hidden dimensionality of the frozen vision encoder.
+    /// </summary>
     private readonly int _visionHiddenDim;
+
+    /// <summary>
+    /// The hidden dimensionality of the frozen language model.
+    /// </summary>
     private readonly int _lmHiddenDim;
+
+    /// <summary>
+    /// The number of transformer decoder layers in the language model head.
+    /// </summary>
     private readonly int _numLmDecoderLayers;
+
+    /// <summary>
+    /// The specific LLM architecture used as the language backbone.
+    /// </summary>
     private readonly LanguageModelBackbone _languageModelBackbone;
 
     #endregion
 
     #region Properties
 
+    /// <inheritdoc/>
     public int EmbeddingDimension => _embeddingDimension;
+
+    /// <inheritdoc/>
     public int MaxSequenceLength => _maxSequenceLength;
+
+    /// <inheritdoc/>
     public int ImageSize => _imageSize;
+
+    /// <inheritdoc/>
     public int NumQueryTokens => _numQueryTokens;
+
+    /// <inheritdoc/>
     public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
 
     #endregion
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a BLIP-2 network using pre-trained ONNX models for high-speed inference.
+    /// </summary>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string visionEncoderPath,
@@ -117,6 +210,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         InitializeLayers();
     }
 
+    /// <summary>
+    /// Initializes a BLIP-2 network using native library layers for flexible training and research.
+    /// </summary>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int imageSize = 224,
@@ -164,6 +260,14 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     #region Initialization
 
+    /// <summary>
+    /// Configures the multimodal layers for BLIP-2, ensuring that all local state is ready before building the graph.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method builds the "bridge" between sight and speech. It sets up the 
+    /// eyes (vision layers), the brain (Q-Former), and the voice (language layers) using the 
+    /// industry-standard configurations in LayerHelper.
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
@@ -241,11 +345,13 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     #region IMultimodalEmbedding Implementation
 
+    /// <inheritdoc/>
     public Vector<T> EncodeText(string text)
     {
         return _useNativeMode ? GetTextEmbeddingNative(text) : GetTextEmbeddingOnnx(text);
     }
 
+    /// <inheritdoc/>
     public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
         var textList = texts.ToList();
@@ -258,12 +364,14 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return result;
     }
 
+    /// <inheritdoc/>
     public Vector<T> EncodeImage(double[] imageData)
     {
         var imageTensor = Tensor<T>.FromVector(new Vector<T>(imageData.Select(d => NumOps.FromDouble(d)).ToArray()), [3, _imageSize, _imageSize]);
         return GetImageEmbedding(imageTensor);
     }
 
+    /// <inheritdoc/>
     public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
     {
         var batch = imageDataBatch.ToList();
@@ -276,6 +384,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return result;
     }
 
+    /// <inheritdoc/>
     public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
     {
         var imageTensor = Tensor<T>.FromVector(new Vector<T>(imageData.Select(d => NumOps.FromDouble(d)).ToArray()), [3, _imageSize, _imageSize]);
@@ -286,6 +395,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     #region Methods
 
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
@@ -294,6 +404,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return ExtractQFormerFeatures(input);
     }
 
+    /// <summary>
+    /// Trains the Q-Former bridge using multimodal contrastive alignment.
+    /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var prediction = Predict(input);
@@ -306,6 +419,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         _optimizer.UpdateParameters(Layers);
     }
 
+    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int index = 0;
@@ -321,6 +435,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         }
     }
 
+    /// <summary>
+    /// Encodes an image tensor into a normalized multimodal embedding.
+    /// </summary>
     public Vector<T> GetImageEmbedding(Tensor<T> image)
     {
         ValidateImageShape(image);
@@ -336,16 +453,19 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return embedding.Normalize();
     }
 
+    /// <inheritdoc/>
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
     {
         return Engine.DotProduct(textEmbedding, imageEmbedding);
     }
 
+    /// <inheritdoc/>
     public Tensor<T> ExtractQFormerFeatures(Tensor<T> image)
     {
         return _useNativeMode ? ExtractQFormerFeaturesNative(image) : ExtractQFormerFeaturesOnnx(image);
     }
 
+    /// <inheritdoc/>
     public string GenerateCaption(Tensor<T> image, string? prompt = null, int maxLength = 30, int numBeams = 5, double temperature = 1.0)
     {
         var qformerFeatures = ExtractQFormerFeatures(image);
@@ -353,6 +473,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return GenerateWithLm(projectedFeatures, prompt, maxLength, numBeams, temperature);
     }
 
+    /// <inheritdoc/>
     public IEnumerable<(string Caption, T Score)> GenerateCaptions(Tensor<T> image, int numCaptions = 5, string? prompt = null, int maxLength = 30, double temperature = 0.9, double topP = 0.95)
     {
         var qformerFeatures = ExtractQFormerFeatures(image);
@@ -366,32 +487,38 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return results.OrderByDescending(r => NumOps.ToDouble(r.Item2));
     }
 
+    /// <inheritdoc/>
     public string AnswerQuestion(Tensor<T> image, string question, int maxLength = 30)
     {
         string prompt = _languageModelBackbone == LanguageModelBackbone.FlanT5 ? $"Question: {question} Answer:" : $"Question: {question} Short answer:";
         return GenerateCaption(image, prompt, maxLength, numBeams: 3, temperature: 0.7);
     }
 
+    /// <inheritdoc/>
     public T ComputeImageTextMatch(Tensor<T> image, string text)
     {
         return _useNativeMode ? ComputeItmNative(image, text) : ComputeItmOnnx(image, text);
     }
 
+    /// <inheritdoc/>
     public T ComputeContrastiveSimilarity(Tensor<T> image, string text)
     {
         return ComputeSimilarity(EncodeText(text), GetImageEmbedding(image));
     }
 
+    /// <inheritdoc/>
     public Vector<T> GroundText(Tensor<T> image, string description)
     {
         return AttentionToBoundingBox(GetCrossAttentionWeights(image, description));
     }
 
+    /// <inheritdoc/>
     public string GenerateWithInstruction(Tensor<T> image, string instruction, int maxLength = 100)
     {
         return GenerateCaption(image, instruction, maxLength, numBeams: 5, temperature: 0.7);
     }
 
+    /// <inheritdoc/>
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, IEnumerable<string> classLabels, bool useItm = false)
     {
         if (useItm)
@@ -409,6 +536,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         }
     }
 
+    /// <inheritdoc/>
     public IEnumerable<(int Index, T Score)> RetrieveImages(string query, IEnumerable<Tensor<T>> imageFeatures, int topK = 10, bool useItmReranking = true, int rerankTopN = 100)
     {
         var textEmbedding = EncodeText(query);
@@ -685,6 +813,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     #region Overrides
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -696,17 +825,24 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         base.Dispose(disposing);
     }
 
+    /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new Blip2NeuralNetwork<T>(Architecture, _imageSize, channels: 3, _patchSize, _vocabularySize, _maxSequenceLength, _embeddingDimension, _qformerHiddenDim, _visionHiddenDim, _lmHiddenDim, _numQformerLayers, _numQueryTokens, _numHeads, _numLmDecoderLayers, _languageModelBackbone, _tokenizer, _optimizer, _lossFunction);
     }
 
+    /// <summary>
+    /// Retrieves technical metadata about the BLIP-2 network configuration.
+    /// </summary>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T> { Name = "BLIP-2", ModelType = ModelType.NeuralNetwork, AdditionalInfo = new Dictionary<string, object> { { "Type", _languageModelBackbone.ToString() } } };
     }
 
+    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+    
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
 
     #endregion

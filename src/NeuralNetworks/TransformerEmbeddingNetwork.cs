@@ -14,34 +14,105 @@ namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
     /// A customizable Transformer-based embedding network.
+    /// This serves as the high-performance foundation for modern sentence and document encoders.
     /// </summary>
-    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    /// <remarks>
+    /// <para>
+    /// This network provides a flexible implementation of the Transformer encoder architecture, 
+    /// enabling the generation of high-quality semantic embeddings. It supports multiple 
+    /// pooling strategies (Mean, Max, ClsToken) to aggregate token-level information.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is a "universal reading brain." Transformers are the most powerful 
+    /// type of AI for understanding language because they can look at every word in a sentence 
+    /// at the same time and see how they all relate. This customizable version lets you decide 
+    /// how many layers of thinking the brain should have, and how it should summarize its 
+    /// thoughts into a final list of numbers (the embedding).
+    /// </para>
+    /// </remarks>
     public class TransformerEmbeddingNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         #region Fields
 
+        /// <summary>
+        /// The tokenizer used to translate raw text into numerical token IDs.
+        /// </summary>
         private readonly ITokenizer? _tokenizer;
+
+        /// <summary>
+        /// The size of the output embedding vector.
+        /// </summary>
         private readonly int _embeddingDimension;
+
+        /// <summary>
+        /// The maximum sequence length allowed for input text.
+        /// </summary>
         private readonly int _maxSequenceLength;
+
+        /// <summary>
+        /// The size of the model's vocabulary (number of unique tokens).
+        /// </summary>
         private readonly int _vocabSize;
+
+        /// <summary>
+        /// The strategy used to pool token-level representations into a single vector.
+        /// </summary>
         private readonly PoolingStrategy _poolingStrategy;
+
+        /// <summary>
+        /// The total number of transformer encoder layers in the stack.
+        /// </summary>
         private readonly int _numLayers;
+
+        /// <summary>
+        /// The number of attention heads used in each multi-head attention layer.
+        /// </summary>
         private readonly int _numHeads;
+
+        /// <summary>
+        /// The dimensionality of the internal feed-forward hidden layers.
+        /// </summary>
         private readonly int _feedForwardDim;
+
+        /// <summary>
+        /// The loss function used during training.
+        /// </summary>
         private readonly ILossFunction<T> _lossFunction;
+
+        /// <summary>
+        /// The optimization algorithm used to refine the network's parameters.
+        /// </summary>
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
         #region Properties
 
+        /// <inheritdoc/>
         public int EmbeddingDimension => _embeddingDimension;
+
+        /// <inheritdoc/>
         public int MaxTokens => _maxSequenceLength;
 
+        /// <summary>
+        /// Defines the available pooling strategies for creating a single sentence embedding.
+        /// </summary>
         public enum PoolingStrategy
         {
+            /// <summary>
+            /// Averages all token representations across the sequence.
+            /// </summary>
             Mean,
+
+            /// <summary>
+            /// Takes the maximum value across all sequence positions for each dimension.
+            /// </summary>
             Max,
+
+            /// <summary>
+            /// Uses the representation of the first token (typically the [CLS] token).
+            /// </summary>
             ClsToken
         }
 
@@ -49,6 +120,21 @@ namespace AiDotNet.NeuralNetworks
 
         #region Constructors
 
+        /// <summary>
+        /// Initializes a new instance of the TransformerEmbeddingNetwork.
+        /// </summary>
+        /// <param name="architecture">The architecture metadata configuration.</param>
+        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
+        /// <param name="optimizer">Optional optimizer for training.</param>
+        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
+        /// <param name="embeddingDimension">The size of the output vectors (default: 768).</param>
+        /// <param name="maxSequenceLength">The maximum input sequence length (default: 512).</param>
+        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
+        /// <param name="numHeads">The number of attention heads (default: 12).</param>
+        /// <param name="feedForwardDim">The feed-forward hidden dimension (default: 3072).</param>
+        /// <param name="poolingStrategy">The pooling method (default: Mean).</param>
+        /// <param name="lossFunction">Optional loss function.</param>
+        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public TransformerEmbeddingNetwork(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -82,8 +168,19 @@ namespace AiDotNet.NeuralNetworks
 
         #region Initialization
 
+        /// <summary>
+        /// Sets up the layer stack for the transformer network, including embedding, positional encoding, and transformer blocks.
+        /// </summary>
+        /// <remarks>
+        /// <b>For Beginners:</b> This method builds the brain's internal architecture. It sets up 
+        /// the "translator" (embedding layer) to understand IDs, the "clock" (positional encoding) 
+        /// to understand word order, and multiple "thinking centers" (transformer encoder layers) 
+        /// to process complex context.
+        /// </remarks>
         protected override void InitializeLayers()
         {
+            ClearLayers();
+
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);
@@ -91,7 +188,7 @@ namespace AiDotNet.NeuralNetworks
             }
             else
             {
-                // We use a manual stack for fine-grained control over common embedding model components
+                // Core Transformer Encoder Stack
                 Layers.AddRange(new ILayer<T>[]
                 {
                     new EmbeddingLayer<T>(_vocabSize, _embeddingDimension),
@@ -109,6 +206,17 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
+        /// <summary>
+        /// Encodes a single string into a normalized summary vector.
+        /// </summary>
+        /// <param name="text">The text to encode.</param>
+        /// <returns>A normalized embedding vector.</returns>
+        /// <remarks>
+        /// <b>For Beginners:</b> This is the main use case. You give the model a sentence, 
+        /// it reads it with all its layers, summarizes the meaning based on your chosen 
+        /// pooling strategy (like taking the average meaning), and returns one final 
+        /// list of numbers.
+        /// </remarks>
         public virtual Vector<T> Embed(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -126,6 +234,11 @@ namespace AiDotNet.NeuralNetworks
             return PoolOutput(output);
         }
 
+        /// <summary>
+        /// Encodes a collection of strings into a matrix of embeddings.
+        /// </summary>
+        /// <param name="texts">The texts to encode.</param>
+        /// <returns>A matrix where each row is an embedding for the corresponding input string.</returns>
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
@@ -143,6 +256,11 @@ namespace AiDotNet.NeuralNetworks
             return matrix;
         }
 
+        /// <summary>
+        /// Applies the configured pooling strategy to convert token-level outputs into a sentence representation.
+        /// </summary>
+        /// <param name="output">The 3D tensor of token representations [batch, seq, dim].</param>
+        /// <returns>A single pooled vector for each sentence.</returns>
         protected virtual Vector<T> PoolOutput(Tensor<T> output)
         {
             int seqLen = output.Shape[1];
@@ -182,6 +300,7 @@ namespace AiDotNet.NeuralNetworks
             return result.Normalize();
         }
 
+        /// <inheritdoc/>
         public override Tensor<T> Predict(Tensor<T> input)
         {
             if (TryForwardGpuOptimized(input, out var gpuResult))
@@ -195,6 +314,9 @@ namespace AiDotNet.NeuralNetworks
             return current;
         }
 
+        /// <summary>
+        /// Trains the transformer model on a single batch of data.
+        /// </summary>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
             var prediction = Predict(input);
@@ -204,9 +326,10 @@ namespace AiDotNet.NeuralNetworks
             var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
 
             Backpropagate(outputGradientTensor);
-            UpdateParameters(GetParameterGradients());
+            _optimizer.UpdateParameters(Layers);
         }
 
+        /// <inheritdoc/>
         public override void UpdateParameters(Vector<T> parameters)
         {
             int index = 0;
@@ -222,6 +345,7 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
+        /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new TransformerEmbeddingNetwork<T>(
@@ -239,13 +363,16 @@ namespace AiDotNet.NeuralNetworks
                 Convert.ToDouble(MaxGradNorm));
         }
 
+        /// <summary>
+        /// Returns metadata about the transformer network configuration.
+        /// </summary>
         public override ModelMetadata<T> GetModelMetadata()
         {
             return new ModelMetadata<T>
             {
                 Name = "TransformerEmbeddingNetwork",
                 ModelType = ModelType.Transformer,
-                Description = "Customizable Transformer-based embedding network",
+                Description = "Customizable Transformer-based embedding foundation",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
@@ -257,6 +384,7 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
+        /// <inheritdoc/>
         protected override void SerializeNetworkSpecificData(BinaryWriter writer)
         {
             writer.Write(_vocabSize);
@@ -268,6 +396,7 @@ namespace AiDotNet.NeuralNetworks
             writer.Write((int)_poolingStrategy);
         }
 
+        /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }
