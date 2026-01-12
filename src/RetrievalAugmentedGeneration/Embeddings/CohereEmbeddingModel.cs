@@ -1,8 +1,13 @@
-
 using System;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using Newtonsoft.Json;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -14,17 +19,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Cohere provides state-of-the-art embeddings with multiple model sizes optimized
 /// for different use cases (English, multilingual, search, classification).
 /// </remarks>
-public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
+public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>, IDisposable
 {
     private readonly string _apiKey;
     private readonly string _model;
     private readonly string _inputType;
     private readonly int _dimension;
+    private readonly HttpClient _httpClient;
+    private bool _disposed;
 
     public override int EmbeddingDimension => _dimension;
     public override int MaxTokens => 512;
 
-    public CohereEmbeddingModel(string apiKey, string model, string inputType, int dimension = 1024)
+    public CohereEmbeddingModel(string apiKey, string model, string inputType, int dimension = 1024, HttpClient? httpClient = null)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentException("API key cannot be empty", nameof(apiKey));
@@ -39,35 +46,77 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         _model = model;
         _inputType = inputType;
         _dimension = dimension;
+        _httpClient = httpClient ?? new HttpClient();
+
+        if (httpClient == null)
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        }
     }
 
     protected override Vector<T> EmbedCore(string text)
     {
-        var values = new T[_dimension];
-        var hash = GetDeterministicHash(text + _inputType);
-
-        for (int i = 0; i < _dimension; i++)
-        {
-            var val = NumOps.FromDouble(Math.Sin((double)hash * (i + 1) * 0.001));
-            values[i] = val;
-        }
-
-        return new Vector<T>(values).Normalize();
+        return Task.Run(() => EmbedAsync(text)).GetAwaiter().GetResult();
     }
 
-    private int GetDeterministicHash(string text)
+    private async Task<Vector<T>> EmbedAsync(string text)
     {
-        if (string.IsNullOrEmpty(text))
-            return 0;
-
-        unchecked
+        var requestBody = new
         {
-            int hash = 23;
-            foreach (char c in text)
+            texts = new[] { text },
+            model = _model,
+            input_type = _inputType
+        };
+
+        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Cohere API request failed with status code {response.StatusCode}: {errorContent}");
+        }
+
+        var responseJson = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<CohereEmbeddingResponse>(responseJson);
+
+        if (result?.Embeddings == null || result.Embeddings.Count == 0)
+        {
+            throw new InvalidOperationException("Cohere API returned an empty or invalid response.");
+        }
+
+        var embedding = result.Embeddings[0];
+        var values = new T[embedding.Length];
+        for (int i = 0; i < embedding.Length; i++)
+        {
+            values[i] = NumOps.FromDouble(embedding[i]);
+        }
+
+        return new Vector<T>(values);
+    }
+
+    private class CohereEmbeddingResponse
+    {
+        [JsonProperty("embeddings")]
+        public List<double[]> Embeddings { get; set; } = new();
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
             {
-                hash = (hash * 31) + c;
+                _httpClient.Dispose();
             }
-            return hash;
+            _disposed = true;
         }
     }
 }
