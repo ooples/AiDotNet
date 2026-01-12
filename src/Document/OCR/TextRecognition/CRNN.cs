@@ -51,6 +51,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
+    private string? _onnxModelPath;
     private IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _cnnChannels;
     private int _rnnHiddenSize;
@@ -122,6 +123,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _rnnLayers = rnnLayers;
         _charset = charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _onnxModelPath = onnxModelPath;
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
@@ -161,6 +163,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _rnnLayers = rnnLayers;
         _charset = charset ?? GetDefaultCharset();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _onnxModelPath = null;
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
@@ -512,6 +515,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         writer.Write(MaxSequenceLength);
         writer.Write(_charset);
         writer.Write(_useNativeMode);
+        writer.Write(_onnxModelPath ?? string.Empty);
     }
 
     /// <inheritdoc/>
@@ -524,12 +528,18 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int maxSeqLen = reader.ReadInt32();
         string charset = reader.ReadString();
         bool useNativeMode = reader.ReadBoolean();
+        string? onnxModelPath = null;
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            onnxModelPath = reader.ReadString();
+        }
 
         _cnnChannels = cnnChannels;
         _rnnHiddenSize = rnnHiddenSize;
         _rnnLayers = rnnLayers;
         _charset = charset;
         _useNativeMode = useNativeMode;
+        _onnxModelPath = string.IsNullOrWhiteSpace(onnxModelPath) ? null : onnxModelPath;
 
         ImageSize = imageSize;
         base.MaxSequenceLength = maxSeqLen;
@@ -541,7 +551,39 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new CRNN<T>(Architecture, ImageSize, MaxSequenceLength, _cnnChannels, _rnnHiddenSize, _rnnLayers, _charset);
+        if (!_useNativeMode)
+        {
+            string onnxModelPath = _onnxModelPath ?? throw new InvalidOperationException(
+                "Missing ONNX model path required to clone CRNN instance.");
+            if (string.IsNullOrWhiteSpace(onnxModelPath))
+            {
+                throw new InvalidOperationException(
+                    "Missing ONNX model path required to clone CRNN instance.");
+            }
+
+            return new CRNN<T>(
+                Architecture,
+                onnxModelPath,
+                ImageSize,
+                MaxSequenceLength,
+                _cnnChannels,
+                _rnnHiddenSize,
+                _rnnLayers,
+                _charset,
+                _optimizer,
+                LossFunction);
+        }
+
+        return new CRNN<T>(
+            Architecture,
+            ImageSize,
+            MaxSequenceLength,
+            _cnnChannels,
+            _rnnHiddenSize,
+            _rnnLayers,
+            _charset,
+            _optimizer,
+            LossFunction);
     }
 
     #endregion

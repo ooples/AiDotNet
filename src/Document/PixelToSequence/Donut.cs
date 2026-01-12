@@ -57,22 +57,24 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 {
     #region Fields
 
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     private readonly InferenceSession? _onnxEncoderSession;
     private readonly InferenceSession? _onnxDecoderSession;
+    private string? _onnxEncoderModelPath;
+    private string? _onnxDecoderModelPath;
     private readonly ITokenizer _tokenizer;
     private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly int _embedDim;
-    private readonly int _decoderHiddenDim;
-    private readonly int[] _depths;
-    private readonly int[] _numHeads;
-    private readonly int _windowSize;
-    private readonly int _patchSize;
-    private readonly int _mlpRatio;
-    private readonly int _vocabSize;
-    private readonly int _maxGenerationLength;
-    private readonly int _decoderHeads;
-    private readonly int _numDecoderLayers;
+    private int _embedDim;
+    private int _decoderHiddenDim;
+    private int[] _depths;
+    private int[] _numHeads;
+    private int _windowSize;
+    private int _patchSize;
+    private int _mlpRatio;
+    private int _vocabSize;
+    private int _maxGenerationLength;
+    private int _decoderHeads;
+    private int _numDecoderLayers;
 
     // Native mode layers - Encoder (Swin Transformer style)
     private readonly List<ILayer<T>> _patchEmbeddingLayers = [];
@@ -88,6 +90,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private int ImageWidth { get; set; }
 
     // Learnable tokens
+    private Tensor<T>? _tokenEmbeddings;
     private Tensor<T>? _decoderPositionEmbeddings;
 
     // Gradient storage
@@ -176,6 +179,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
         _useNativeMode = false;
+        _onnxEncoderModelPath = encoderPath;
+        _onnxDecoderModelPath = decoderPath;
 
         // Swin-B defaults from Donut paper
         _depths = depths ?? [2, 2, 14, 2];
@@ -200,6 +205,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         _onnxDecoderSession = new InferenceSession(decoderPath);
 
         InitializeLayers();
+        InitializeEmbeddings();
     }
 
     /// <summary>
@@ -251,6 +257,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
         _useNativeMode = true;
+        _onnxEncoderModelPath = null;
+        _onnxDecoderModelPath = null;
 
         // Swin-B defaults from Donut paper (ECCV 2022)
         _depths = depths ?? [2, 2, 14, 2];
@@ -328,6 +336,9 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
+        _tokenEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _decoderHiddenDim], NumOps.Zero);
+        InitializeWithSmallRandomValues(_tokenEmbeddings, random, 0.02);
+
         _decoderPositionEmbeddings = Tensor<T>.CreateDefault([_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
         InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
 
@@ -375,9 +386,97 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     /// <inheritdoc/>
     public OCRResult<T> RecognizeTextInRegion(Tensor<T> documentImage, Vector<T> region)
     {
-        // For Donut, we crop the image to the region and process it
-        // In a full implementation, this would physically crop the tensor
-        return RecognizeText(documentImage);
+        ValidateImageShape(documentImage);
+        if (region is null)
+            throw new ArgumentNullException(nameof(region));
+
+        var cropped = CropImageToRegion(documentImage, region);
+        return RecognizeText(cropped);
+    }
+
+    private Tensor<T> CropImageToRegion(Tensor<T> image, Vector<T> region)
+    {
+        if (region.Length < 4)
+            throw new ArgumentException("Region must be [x1, y1, x2, y2].", nameof(region));
+
+        double x1Norm = NumOps.ToDouble(region[0]);
+        double y1Norm = NumOps.ToDouble(region[1]);
+        double x2Norm = NumOps.ToDouble(region[2]);
+        double y2Norm = NumOps.ToDouble(region[3]);
+
+        if (double.IsNaN(x1Norm) || double.IsNaN(y1Norm) || double.IsNaN(x2Norm) || double.IsNaN(y2Norm)
+            || double.IsInfinity(x1Norm) || double.IsInfinity(y1Norm)
+            || double.IsInfinity(x2Norm) || double.IsInfinity(y2Norm))
+        {
+            throw new ArgumentOutOfRangeException(nameof(region), "Region values must be finite.");
+        }
+
+        if (x1Norm < 0 || x1Norm > 1 || x2Norm < 0 || x2Norm > 1 || y1Norm < 0 || y1Norm > 1 || y2Norm < 0 || y2Norm > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(region), "Region values must be normalized to [0,1].");
+        }
+
+        if (x2Norm <= x1Norm || y2Norm <= y1Norm)
+        {
+            throw new ArgumentException("Region coordinates must define a positive area.", nameof(region));
+        }
+
+        int height = image.Shape[^2];
+        int width = image.Shape[^1];
+
+        int startX = Math.Max(0, (int)Math.Floor(x1Norm * width));
+        int startY = Math.Max(0, (int)Math.Floor(y1Norm * height));
+        int endX = Math.Min(width, (int)Math.Ceiling(x2Norm * width));
+        int endY = Math.Min(height, (int)Math.Ceiling(y2Norm * height));
+
+        int cropWidth = endX - startX;
+        int cropHeight = endY - startY;
+        if (cropWidth <= 0 || cropHeight <= 0)
+            throw new ArgumentException("Region crop resulted in empty area.", nameof(region));
+
+        if (image.Rank == 3)
+        {
+            int channels = image.Shape[0];
+            var cropped = new Tensor<T>([channels, cropHeight, cropWidth]);
+            for (int c = 0; c < channels; c++)
+            {
+                for (int y = 0; y < cropHeight; y++)
+                {
+                    int srcY = startY + y;
+                    for (int x = 0; x < cropWidth; x++)
+                    {
+                        int srcX = startX + x;
+                        cropped[c, y, x] = image[c, srcY, srcX];
+                    }
+                }
+            }
+            return cropped;
+        }
+
+        if (image.Rank == 4)
+        {
+            int batch = image.Shape[0];
+            int channels = image.Shape[1];
+            var cropped = new Tensor<T>([batch, channels, cropHeight, cropWidth]);
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int y = 0; y < cropHeight; y++)
+                    {
+                        int srcY = startY + y;
+                        for (int x = 0; x < cropWidth; x++)
+                        {
+                            int srcX = startX + x;
+                            cropped[b, c, y, x] = image[b, c, srcY, srcX];
+                        }
+                    }
+                }
+            }
+            return cropped;
+        }
+
+        throw new ArgumentException($"Expected 3D or 4D tensor, got {image.Rank}D.", nameof(image));
     }
 
     private OCRResult<T> RecognizeTextNative(Tensor<T> image)
@@ -670,16 +769,23 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
     private Tensor<T> CreateDecoderInput(List<int> tokens)
     {
+        if (_tokenEmbeddings is null)
+            throw new InvalidOperationException("Token embeddings are not initialized.");
+        if (_tokenEmbeddings.Shape.Length < 2 || _tokenEmbeddings.Shape[1] != _decoderHiddenDim)
+            throw new InvalidOperationException("Token embeddings shape does not match decoder hidden dimension.");
+
+        int vocabSize = _tokenEmbeddings.Shape[0];
         var input = new Tensor<T>([1, tokens.Count, _decoderHiddenDim]);
 
-        // This is simplified - full version would use embedding layer
         for (int i = 0; i < tokens.Count; i++)
         {
-            // Placeholder embedding lookup
-            for (int d = 0; d < _decoderHiddenDim; d++)
-            {
-                input.Data[i * _decoderHiddenDim + d] = NumOps.FromDouble(0.1);
-            }
+            int tokenId = tokens[i];
+            if (tokenId < 0 || tokenId >= vocabSize)
+                throw new ArgumentOutOfRangeException(nameof(tokens), $"Token id {tokenId} is out of range for vocab size {vocabSize}.");
+
+            int sourceOffset = tokenId * _decoderHiddenDim;
+            int destinationOffset = i * _decoderHiddenDim;
+            Array.Copy(_tokenEmbeddings.Data, sourceOffset, input.Data, destinationOffset, _decoderHiddenDim);
         }
 
         return input;
@@ -714,13 +820,30 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private int GetNextToken(Tensor<T> logits)
     {
         // Get the last position's logits and find argmax
-        int seqLen = logits.Shape.Length > 2 ? logits.Shape[1] : 1;
+        if (logits.Shape.Length < 3)
+        {
+            throw new InvalidOperationException(
+                $"Expected logits.Shape to be [batch, seq, vocab], got rank {logits.Shape.Length}.");
+        }
+
+        int seqLen = logits.Shape[1];
+        if (seqLen <= 0 || _vocabSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Invalid logits.Shape or vocab size: logits.Shape[1]={seqLen}, _vocabSize={_vocabSize}.");
+        }
+
         int vocabStart = (seqLen - 1) * _vocabSize;
+        if (vocabStart < 0 || vocabStart >= logits.Data.Length || vocabStart + _vocabSize > logits.Data.Length)
+        {
+            throw new InvalidOperationException(
+                $"Invalid vocabStart={vocabStart} for logits.Data length {logits.Data.Length} and _vocabSize={_vocabSize}.");
+        }
 
         double maxVal = double.MinValue;
         int maxIdx = 0;
 
-        for (int i = 0; i < Math.Min(_vocabSize, logits.Data.Length - vocabStart); i++)
+        for (int i = 0; i < _vocabSize; i++)
         {
             double val = NumOps.ToDouble(logits.Data[vocabStart + i]);
             if (val > maxVal)
@@ -857,6 +980,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         writer.Write(ImageHeight);
         writer.Write(ImageWidth);
         writer.Write(_useNativeMode);
+        writer.Write(_onnxEncoderModelPath ?? string.Empty);
+        writer.Write(_onnxDecoderModelPath ?? string.Empty);
     }
 
     /// <inheritdoc/>
@@ -883,16 +1008,88 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int imageHeight = reader.ReadInt32();
         int imageWidth = reader.ReadInt32();
         bool useNativeMode = reader.ReadBoolean();
+        string? encoderPath = null;
+        string? decoderPath = null;
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            encoderPath = reader.ReadString();
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                decoderPath = reader.ReadString();
+            }
+        }
+
+        _embedDim = embedDim;
+        _decoderHiddenDim = decoderHiddenDim;
+        _depths = depths;
+        _numHeads = heads;
+        _windowSize = windowSize;
+        _patchSize = patchSize;
+        _mlpRatio = mlpRatio;
+        _numDecoderLayers = numDecoderLayers;
+        _decoderHeads = decoderHeads;
+        _vocabSize = vocabSize;
+        _maxGenerationLength = maxGenLength;
+        _useNativeMode = useNativeMode;
+        _onnxEncoderModelPath = string.IsNullOrWhiteSpace(encoderPath) ? null : encoderPath;
+        _onnxDecoderModelPath = string.IsNullOrWhiteSpace(decoderPath) ? null : decoderPath;
 
         ImageHeight = imageHeight;
         ImageWidth = imageWidth;
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxGenLength;
+
+        Layers.Clear();
+        _patchEmbeddingLayers.Clear();
+        _encoderLayers.Clear();
+        _decoderEmbeddingLayers.Clear();
+        _decoderLayers.Clear();
+        _outputLayers.Clear();
+
+        if (_useNativeMode)
+        {
+            InitializeLayers();
+        }
+
+        InitializeEmbeddings();
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode)
+        {
+            string encoderPath = _onnxEncoderModelPath ?? throw new InvalidOperationException(
+                "Missing ONNX model paths required to clone Donut instance.");
+            string decoderPath = _onnxDecoderModelPath ?? throw new InvalidOperationException(
+                "Missing ONNX model paths required to clone Donut instance.");
+            if (string.IsNullOrWhiteSpace(encoderPath) || string.IsNullOrWhiteSpace(decoderPath))
+            {
+                throw new InvalidOperationException(
+                    "Missing ONNX model paths required to clone Donut instance.");
+            }
+
+            return new Donut<T>(
+                Architecture,
+                encoderPath,
+                decoderPath,
+                _tokenizer,
+                ImageHeight,
+                ImageWidth,
+                _maxGenerationLength,
+                _embedDim,
+                _depths,
+                _numHeads,
+                _windowSize,
+                _patchSize,
+                _decoderHiddenDim,
+                _numDecoderLayers,
+                _decoderHeads,
+                _vocabSize,
+                _optimizer,
+                LossFunction);
+        }
+
         return new Donut<T>(
             Architecture,
             _tokenizer,
@@ -908,7 +1105,9 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             _decoderHiddenDim,
             _numDecoderLayers,
             _decoderHeads,
-            _vocabSize);
+            _vocabSize,
+            _optimizer,
+            LossFunction);
     }
 
     #endregion
@@ -1005,10 +1204,16 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                 nameof(gradients));
         }
 
-        // Get current parameters and apply gradient descent update
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
+        if (_optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
+            return;
+        }
 
+        var options = _optimizer?.GetOptions();
+        T learningRate = NumOps.FromDouble(options?.InitialLearningRate ?? 0.001);
         for (int i = 0; i < currentParams.Length; i++)
         {
             currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));

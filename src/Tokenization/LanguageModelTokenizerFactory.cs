@@ -13,6 +13,7 @@ namespace AiDotNet.Tokenization;
 /// Different language models use different tokenization schemes:
 /// <list type="bullet">
 /// <item><description>OPT, Chinchilla: GPT-style BPE tokenization</description></item>
+/// <item><description>RoBERTa: byte-level BPE tokenization</description></item>
 /// <item><description>Flan-T5: T5-style SentencePiece tokenization</description></item>
 /// <item><description>LLaMA, Vicuna, Mistral: LLaMA-style SentencePiece tokenization</description></item>
 /// <item><description>Phi, Qwen: GPT-style BPE with custom vocabulary</description></item>
@@ -61,6 +62,9 @@ public static class LanguageModelTokenizerFactory
             LanguageModelBackbone.Phi or
             LanguageModelBackbone.Qwen => CreateGptStyleTokenizer(corpus, vocabSize),
 
+            // RoBERTa-style models (byte-level BPE)
+            LanguageModelBackbone.RoBERTa => CreateRobertaStyleTokenizer(corpus, vocabSize),
+
             // T5-style models (Flan-T5)
             LanguageModelBackbone.FlanT5 => CreateT5StyleTokenizer(corpus, vocabSize),
 
@@ -103,6 +107,7 @@ public static class LanguageModelTokenizerFactory
             LanguageModelBackbone.Chinchilla => "EleutherAI/gpt-neox-20b",
             LanguageModelBackbone.Phi => "microsoft/phi-2",
             LanguageModelBackbone.Qwen => "Qwen/Qwen-7B",
+            LanguageModelBackbone.RoBERTa => "roberta-base",
             _ => throw new NotSupportedException($"No HuggingFace model known for backbone: {backbone}")
         };
     }
@@ -120,6 +125,8 @@ public static class LanguageModelTokenizerFactory
             LanguageModelBackbone.Chinchilla or
             LanguageModelBackbone.Phi or
             LanguageModelBackbone.Qwen => SpecialTokens.Gpt(),
+
+            LanguageModelBackbone.RoBERTa => SpecialTokens.Roberta(),
 
             LanguageModelBackbone.FlanT5 => SpecialTokens.T5(),
 
@@ -151,6 +158,15 @@ public static class LanguageModelTokenizerFactory
             corpus,
             vocabSize,
             SpecialTokens.Gpt(),
+            @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+");
+    }
+
+    private static BpeTokenizer CreateRobertaStyleTokenizer(IEnumerable<string> corpus, int vocabSize)
+    {
+        return BpeTokenizer.Train(
+            corpus,
+            vocabSize,
+            SpecialTokens.Roberta(),
             @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+");
     }
 

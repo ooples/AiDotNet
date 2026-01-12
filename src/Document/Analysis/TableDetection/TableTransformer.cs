@@ -510,18 +510,30 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         var (imageHeight, imageWidth) = GetImageDimensions(originalImage);
 
         // DETR output: [num_queries, 4 + num_classes] (bbox + class logits)
-        int numDetections = output.Shape[0];
-        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 6; // 4 bbox + 2 classes
+        bool is1D = output.Shape.Length == 1;
+        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 4 + _numTableClasses; // 4 bbox + classes
+        int numDetections = is1D ? output.Length / outputDim : output.Shape[0];
 
         for (int i = 0; i < numDetections; i++)
         {
+            int baseIndex = is1D ? i * outputDim : 0;
+            if (is1D && baseIndex + outputDim > output.Length)
+                break;
+
             // Get class probabilities
             double tableProb = 0;
             if (outputDim >= 6)
             {
                 // Softmax over class logits
-                double bg = NumOps.ToDouble(output[i, 4]);
-                double table = NumOps.ToDouble(output[i, 5]);
+                if (is1D && baseIndex + 5 >= output.Length)
+                    continue;
+
+                double bg = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 4])
+                    : NumOps.ToDouble(output[i, 4]);
+                double table = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 5])
+                    : NumOps.ToDouble(output[i, 5]);
                 double maxLogit = Math.Max(bg, table);
                 double sumExp = Math.Exp(bg - maxLogit) + Math.Exp(table - maxLogit);
                 tableProb = Math.Exp(table - maxLogit) / sumExp;
@@ -529,11 +541,22 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
 
             if (tableProb >= threshold)
             {
+                if (is1D && baseIndex + 3 >= output.Length)
+                    continue;
+
                 // Get bounding box (DETR uses center_x, center_y, width, height format normalized to [0,1])
-                double cx = NumOps.ToDouble(output[i, 0]);
-                double cy = NumOps.ToDouble(output[i, 1]);
-                double w = NumOps.ToDouble(output[i, 2]);
-                double h = NumOps.ToDouble(output[i, 3]);
+                double cx = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 0])
+                    : NumOps.ToDouble(output[i, 0]);
+                double cy = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 1])
+                    : NumOps.ToDouble(output[i, 1]);
+                double w = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 2])
+                    : NumOps.ToDouble(output[i, 2]);
+                double h = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 3])
+                    : NumOps.ToDouble(output[i, 3]);
 
                 // Convert to [x1, y1, x2, y2] format
                 double x1 = (cx - w / 2) * imageWidth;
@@ -576,30 +599,61 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         var columns = new HashSet<int>();
         var (imageHeight, imageWidth) = GetImageDimensions(tableImage);
 
-        int numDetections = output.Shape[0];
-        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 11; // 4 bbox + 7 classes
+        bool is1D = output.Shape.Length == 1;
+        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 4 + _numStructureClasses; // 4 bbox + classes
+        int numDetections = is1D ? output.Length / outputDim : output.Shape[0];
 
         for (int i = 0; i < numDetections; i++)
         {
+            int baseIndex = is1D ? i * outputDim : 0;
+            if (is1D && baseIndex + outputDim > output.Length)
+                break;
+
             // Find the class with highest probability
             double maxProb = 0;
             int maxClass = 0;
             for (int c = 0; c < _numStructureClasses && (4 + c) < outputDim; c++)
             {
-                double prob = NumOps.ToDouble(output[i, 4 + c]);
-                if (prob > maxProb)
+                if (is1D)
                 {
-                    maxProb = prob;
-                    maxClass = c;
+                    int flatIndex = baseIndex + 4 + c;
+                    if (flatIndex < 0 || flatIndex >= output.Length)
+                        break;
+                    double prob = NumOps.ToDouble(output[flatIndex]);
+                    if (prob > maxProb)
+                    {
+                        maxProb = prob;
+                        maxClass = c;
+                    }
+                }
+                else
+                {
+                    double prob = NumOps.ToDouble(output[i, 4 + c]);
+                    if (prob > maxProb)
+                    {
+                        maxProb = prob;
+                        maxClass = c;
+                    }
                 }
             }
 
             if (maxProb >= threshold && maxClass > 0) // Skip background class
             {
-                double cx = NumOps.ToDouble(output[i, 0]);
-                double cy = NumOps.ToDouble(output[i, 1]);
-                double w = NumOps.ToDouble(output[i, 2]);
-                double h = NumOps.ToDouble(output[i, 3]);
+                if (is1D && baseIndex + 3 >= output.Length)
+                    continue;
+
+                double cx = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 0])
+                    : NumOps.ToDouble(output[i, 0]);
+                double cy = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 1])
+                    : NumOps.ToDouble(output[i, 1]);
+                double w = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 2])
+                    : NumOps.ToDouble(output[i, 2]);
+                double h = is1D
+                    ? NumOps.ToDouble(output[baseIndex + 3])
+                    : NumOps.ToDouble(output[i, 3]);
 
                 // Convert to pixel coordinates
                 double x1 = (cx - w / 2) * imageWidth;
@@ -786,18 +840,25 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             // Header row
             if (table.Count > 0)
             {
-                sb.AppendLine("| " + string.Join(" | ", table[0]) + " |");
-                sb.AppendLine("| " + string.Join(" | ", table[0].Select(_ => "---")) + " |");
+                var header = table[0].Select(EscapeMarkdownCell).ToList();
+                sb.AppendLine("| " + string.Join(" | ", header) + " |");
+                sb.AppendLine("| " + string.Join(" | ", header.Select(_ => "---")) + " |");
             }
 
             // Data rows
             for (int r = 1; r < table.Count; r++)
             {
-                sb.AppendLine("| " + string.Join(" | ", table[r]) + " |");
+                var row = table[r].Select(EscapeMarkdownCell);
+                sb.AppendLine("| " + string.Join(" | ", row) + " |");
             }
             sb.AppendLine();
         }
         return sb.ToString();
+    }
+
+    private static string EscapeMarkdownCell(string value)
+    {
+        return value?.Replace("|", "\\|") ?? string.Empty;
     }
 
     #endregion

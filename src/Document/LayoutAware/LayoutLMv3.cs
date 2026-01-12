@@ -227,7 +227,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
-        _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+        _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.RoBERTa);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -252,6 +252,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            PopulateLayerGroups();
             return;
         }
 
@@ -265,6 +266,46 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             imageSize: ImageSize,
             patchSize: _patchSize,
             numClasses: _numClasses));
+        PopulateLayerGroups();
+    }
+
+    private void PopulateLayerGroups()
+    {
+        _textEmbeddingLayers.Clear();
+        _imageEmbeddingLayers.Clear();
+        _transformerLayers.Clear();
+
+        bool reachedHead = false;
+        foreach (var layer in Layers)
+        {
+            if (IsClassificationHeadLayer(layer))
+            {
+                reachedHead = true;
+            }
+
+            if (reachedHead)
+            {
+                continue;
+            }
+
+            if (layer is EmbeddingLayer<T>)
+            {
+                _textEmbeddingLayers.Add(layer);
+            }
+            else if (layer is PatchEmbeddingLayer<T>)
+            {
+                _imageEmbeddingLayers.Add(layer);
+            }
+            else
+            {
+                _transformerLayers.Add(layer);
+            }
+        }
+    }
+
+    private static bool IsClassificationHeadLayer(ILayer<T> layer)
+    {
+        return layer is DenseLayer<T>;
     }
 
     private void InitializeEmbeddings()
@@ -358,8 +399,16 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
         int numDetections = output.Shape[0];
         int numValues = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-        int numClasses = Math.Min(numValues - 4, _numClasses); // Reserve 4 for bbox
-        bool hasBbox = numValues > _numClasses;
+        int numClasses = Math.Max(0, Math.Min(numValues - 4, _numClasses));
+        bool hasBbox = numValues >= 4;
+
+        if (numClasses == 0)
+        {
+            return new DocumentLayoutResult<T>
+            {
+                Regions = regions
+            };
+        }
 
         for (int i = 0; i < numDetections; i++)
         {
@@ -732,6 +781,21 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         {
             // Run through embedding and transformer layers only (not classification head)
             var output = input;
+            if (_textEmbeddingLayers.Count == 0
+                && _imageEmbeddingLayers.Count == 0
+                && _transformerLayers.Count == 0)
+            {
+                foreach (var layer in Layers)
+                {
+                    if (IsClassificationHeadLayer(layer))
+                    {
+                        break;
+                    }
+                    output = layer.Forward(output);
+                }
+                return output;
+            }
+
             foreach (var layer in _textEmbeddingLayers) output = layer.Forward(output);
             foreach (var layer in _imageEmbeddingLayers) output = layer.Forward(output);
             foreach (var layer in _transformerLayers) output = layer.Forward(output);

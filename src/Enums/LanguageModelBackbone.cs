@@ -166,5 +166,21 @@ public enum LanguageModelBackbone
     /// - Used in Qwen-VL for vision-language tasks
     /// </para>
     /// </remarks>
-    Qwen
+    Qwen,
+
+    /// <summary>
+    /// RoBERTa - robustly optimized BERT approach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RoBERTa is a strong encoder-only language model
+    /// based on BERT with improved training settings.
+    ///
+    /// Key characteristics:
+    /// - Encoder-only architecture
+    /// - Byte-level BPE tokenizer
+    /// - Common backbone for document understanding models like LayoutLMv3
+    /// </para>
+    /// </remarks>
+    RoBERTa
 }
