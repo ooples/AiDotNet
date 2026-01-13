@@ -49,7 +49,7 @@ public static class LanguageModelTokenizerFactory
     public static ITokenizer CreateForBackbone(
         LanguageModelBackbone backbone,
         IEnumerable<string>? corpus = null,
-        int vocabSize = 1000)
+        int vocabSize = 30000)
     {
         corpus ??= GetDefaultCorpus();
 

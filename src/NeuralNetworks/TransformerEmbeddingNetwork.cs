@@ -43,47 +43,52 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// The size of the output embedding vector.
         /// </summary>
-        private readonly int _embeddingDimension;
+        private int _embeddingDimension;
 
         /// <summary>
         /// The maximum sequence length allowed for input text.
         /// </summary>
-        private readonly int _maxSequenceLength;
+        private int _maxSequenceLength;
 
         /// <summary>
         /// The size of the model's vocabulary (number of unique tokens).
         /// </summary>
-        private readonly int _vocabSize;
+        private int _vocabSize;
 
         /// <summary>
         /// The strategy used to pool token-level representations into a single vector.
         /// </summary>
-        private readonly PoolingStrategy _poolingStrategy;
+        private PoolingStrategy _poolingStrategy;
 
         /// <summary>
         /// The total number of transformer encoder layers in the stack.
         /// </summary>
-        private readonly int _numLayers;
+        private int _numLayers;
 
         /// <summary>
         /// The number of attention heads used in each multi-head attention layer.
         /// </summary>
-        private readonly int _numHeads;
+        private int _numHeads;
 
         /// <summary>
         /// The dimensionality of the internal feed-forward hidden layers.
         /// </summary>
-        private readonly int _feedForwardDim;
+        private int _feedForwardDim;
 
         /// <summary>
         /// The loss function used during training.
         /// </summary>
-        private readonly ILossFunction<T> _lossFunction;
+        private ILossFunction<T> _lossFunction;
 
         /// <summary>
         /// The optimization algorithm used to refine the network's parameters.
         /// </summary>
-        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+        /// <summary>
+        /// Cached fallback tokenizer to avoid per-call creation.
+        /// </summary>
+        private ITokenizer? _fallbackTokenizer;
 
         #endregion
 
@@ -222,16 +227,31 @@ namespace AiDotNet.NeuralNetworks
             if (string.IsNullOrWhiteSpace(text))
                 return new Vector<T>(_embeddingDimension);
 
-            var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            var tokenizer = _tokenizer ?? (_fallbackTokenizer ??= Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT));
             var tokenResult = tokenizer.Encode(text);
             var tokens = tokenResult.TokenIds.Take(_maxSequenceLength).ToList();
             
             if (tokens.Count == 0) tokens.Add(0);
 
+            // OOV protection: ensure token IDs are within vocabulary bounds
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                if (tokens[i] < 0 || tokens[i] >= _vocabSize)
+                {
+                    tokens[i] = 0; // Fallback to unknown token ID
+                }
+            }
+
             var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
 
             var output = Predict(inputTensor);
             return PoolOutput(output);
+        }
+
+        /// <inheritdoc/>
+        public virtual Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
         }
 
         /// <summary>
@@ -256,6 +276,12 @@ namespace AiDotNet.NeuralNetworks
             return matrix;
         }
 
+        /// <inheritdoc/>
+        public virtual Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
+        }
+
         /// <summary>
         /// Applies the configured pooling strategy to convert token-level outputs into a sentence representation.
         /// </summary>
@@ -263,13 +289,19 @@ namespace AiDotNet.NeuralNetworks
         /// <returns>A single pooled vector for each sentence.</returns>
         protected virtual Vector<T> PoolOutput(Tensor<T> output)
         {
-            int seqLen = output.Shape[1];
-            int dim = output.Shape[2];
+            if (output.Shape.Length != 2 && output.Shape.Length != 3)
+                throw new ArgumentException($"PoolOutput expects Rank 2 [Seq, Dim] or Rank 3 [Batch, Seq, Dim] tensor, but got Rank {output.Shape.Length}.");
+
+            int seqLen = output.Shape.Length == 3 ? output.Shape[1] : output.Shape[0];
+            int dim = output.Shape.Length == 3 ? output.Shape[2] : output.Shape[1];
             var result = new Vector<T>(dim);
+
+            // Helper to get value regardless of rank (assuming batch index 0 for rank 3)
+            T GetVal(int s, int d) => output.Shape.Length == 3 ? output[0, s, d] : output[s, d];
 
             if (_poolingStrategy == PoolingStrategy.ClsToken)
             {
-                for (int i = 0; i < dim; i++) result[i] = output[0, 0, i];
+                for (int i = 0; i < dim; i++) result[i] = GetVal(0, i);
             }
             else if (_poolingStrategy == PoolingStrategy.Mean)
             {
@@ -278,7 +310,7 @@ namespace AiDotNet.NeuralNetworks
                     T sum = NumOps.Zero;
                     for (int s = 0; s < seqLen; s++)
                     {
-                        sum = NumOps.Add(sum, output[0, s, d]);
+                        sum = NumOps.Add(sum, GetVal(s, d));
                     }
                     result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
                 }
@@ -287,17 +319,17 @@ namespace AiDotNet.NeuralNetworks
             {
                 for (int d = 0; d < dim; d++)
                 {
-                    T max = output[0, 0, d];
+                    T max = GetVal(0, d);
                     for (int s = 1; s < seqLen; s++)
                     {
-                        T val = output[0, s, d];
+                        T val = GetVal(s, d);
                         if (NumOps.GreaterThan(val, max)) max = val;
                     }
                     result[d] = max;
                 }
             }
 
-            return result.Normalize();
+            return result.SafeNormalize();
         }
 
         /// <inheritdoc/>
@@ -399,8 +431,16 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            _vocabSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _maxSequenceLength = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+            _poolingStrategy = (PoolingStrategy)reader.ReadInt32();
         }
 
         #endregion
+
     }
 }

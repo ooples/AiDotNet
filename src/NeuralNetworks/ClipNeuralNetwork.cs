@@ -87,9 +87,26 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         _maxSequenceLength = maxSequenceLength;
         _imageSize = imageSize;
 
-        var sessionOptions = new SessionOptions();
-        _imageSession = new InferenceSession(imageEncoderPath, sessionOptions);
-        _textSession = new InferenceSession(textEncoderPath, sessionOptions);
+        using (var sessionOptions = new SessionOptions())
+        {
+            try
+            {
+                _imageSession = new InferenceSession(imageEncoderPath, sessionOptions);
+                try
+                {
+                    _textSession = new InferenceSession(textEncoderPath, sessionOptions);
+                }
+                catch
+                {
+                    _imageSession.Dispose();
+                    throw;
+                }
+            }
+            catch
+            {
+                throw;
+            }
+        }
 
         InitializeLayers();
     }
@@ -101,11 +118,11 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
 
     public override AiDotNet.Tensors.LinearAlgebra.Tensor<T> Predict(AiDotNet.Tensors.LinearAlgebra.Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         if (input == null)
             throw new ArgumentNullException(nameof(input));
+
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
 
         var imageData = new double[input.Length];
         for (int i = 0; i < input.Length; i++)
@@ -164,7 +181,16 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        throw new NotSupportedException("CLIP neural network deserialization is not supported.");
+        _imageEncoderPath = reader.ReadString();
+        _textEncoderPath = reader.ReadString();
+        _embeddingDimension = reader.ReadInt32();
+        _maxSequenceLength = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+
+        // Re-initialize sessions with loaded paths
+        var sessionOptions = new SessionOptions();
+        _imageSession = new InferenceSession(_imageEncoderPath, sessionOptions);
+        _textSession = new InferenceSession(_textEncoderPath, sessionOptions);
     }
 
     protected override IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> CreateNewInstance()
@@ -180,40 +206,42 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             _imageSize);
     }
 
+    /// <inheritdoc/>
     public Vector<T> EncodeText(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or empty", nameof(text));
-
-        var tokenResult = _tokenizer.Encode(text);
-        var paddedTokens = PadOrTruncateTokens(tokenResult.TokenIds.ToArray(), _maxSequenceLength);
-        
+        var tokens = _tokenizer.Encode(text).TokenIds.ToArray();
         var attentionMask = new long[_maxSequenceLength];
-        for (int i = 0; i < _maxSequenceLength; i++)
-        {
-            attentionMask[i] = i < tokenResult.TokenIds.Count ? 1 : 0;
-        }
+        for (int i = 0; i < Math.Min(tokens.Length, _maxSequenceLength); i++)
+            attentionMask[i] = 1;
 
-        var embedding = GenerateTextEmbedding(paddedTokens, attentionMask);
-        return embedding.Normalize();
+        return GenerateTextEmbedding(PadOrTruncateTokens(tokens, _maxSequenceLength), attentionMask);
     }
 
+    /// <inheritdoc/>
+    public Task<Vector<T>> EmbedAsync(string text)
+    {
+        return Task.FromResult(EncodeText(text));
+    }
+
+    /// <inheritdoc/>
     public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
-        if (texts == null) throw new ArgumentNullException(nameof(texts));
         var textList = texts.ToList();
-        if (textList.Count == 0) return new Matrix<T>(0, _embeddingDimension);
-
-        var embeddings = new T[textList.Count, _embeddingDimension];
+        var result = new Matrix<T>(textList.Count, _embeddingDimension);
         for (int i = 0; i < textList.Count; i++)
         {
-            var embedding = EncodeText(textList[i]);
-            for (int j = 0; j < _embeddingDimension; j++)
-                embeddings[i, j] = embedding[j];
+            var emb = EncodeText(textList[i]);
+            for (int j = 0; j < _embeddingDimension; j++) result[i, j] = emb[j];
         }
-
-        return new Matrix<T>(embeddings);
+        return result;
     }
+
+    /// <inheritdoc/>
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        return Task.FromResult(EncodeTextBatch(texts));
+    }
+
 
     public Vector<T> EncodeImage(double[] imageData)
     {
@@ -225,7 +253,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             throw new ArgumentException($"Image data has {imageData.Length} elements but expected {expectedSize}", nameof(imageData));
 
         var embedding = GenerateImageEmbedding(imageData);
-        return embedding.Normalize();
+        return embedding.SafeNormalize();
     }
 
     public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
@@ -306,12 +334,22 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (output.Dimensions.Length == 3)
         {
             int dim = output.Dimensions[2];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
             for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
                 embedding[i] = NumOps.FromDouble(output[0, 0, i]);
         }
         else
         {
             int dim = output.Dimensions[1];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
             for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
                 embedding[i] = NumOps.FromDouble(output[0, i]);
         }
@@ -339,12 +377,22 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (output.Dimensions.Length == 3)
         {
             int dim = output.Dimensions[2];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
             for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
                 embedding[i] = NumOps.FromDouble(output[0, 0, i]);
         }
         else
         {
             int dim = output.Dimensions[1];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
             for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
                 embedding[i] = NumOps.FromDouble(output[0, i]);
         }
@@ -368,32 +416,21 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         return expScores.Select(e => e / sumExp).ToArray();
     }
 
-        protected override void Dispose(bool disposing)
-
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-
-            if (!_disposed)
-
+            if (disposing)
             {
-
-                if (disposing)
-
-                {
-
-                    _imageSession?.Dispose();
-
-                    _textSession?.Dispose();
-
-                }
-
-                _disposed = true;
-
+                _imageSession?.Dispose();
+                _textSession?.Dispose();
             }
 
-            base.Dispose(disposing);
-
+            _disposed = true;
         }
 
+        base.Dispose(disposing);
     }
+}
 
     

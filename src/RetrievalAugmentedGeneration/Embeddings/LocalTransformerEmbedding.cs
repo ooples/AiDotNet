@@ -25,12 +25,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return _onnxTransformer.Embed(text);
         }
 
+        private bool _disposed;
+
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
+            if (!_disposed)
             {
-                _onnxTransformer.Dispose();
+                if (disposing)
+                {
+                    _onnxTransformer.Dispose();
+                }
+
+                _disposed = true;
             }
+
             base.Dispose(disposing);
         }
     }

@@ -8001,11 +8001,16 @@ public static class LayerHelper<T>
                 int embeddingDimension = 768,
                 int maxSequenceLength = 512)
             {
-                ValidateLayerParameters(1, embeddingDimension, architecture.OutputSize);
+                if (vocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+                if (embeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+                if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
+                const int numHeads = 12;
+                if (embeddingDimension % numHeads != 0)
+                    throw new ArgumentException($"embeddingDimension must be divisible by {numHeads}.", nameof(embeddingDimension));
 
                 yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
                 yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
-                yield return new TransformerEncoderLayer<T>(embeddingDimension, 12, 3072);
+                yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, 3072);
             }
 
             /// <summary>
@@ -8021,14 +8026,19 @@ public static class LayerHelper<T>
             /// such that words with similar meanings are close to each other.
             /// </para>
             /// </remarks>
-            public static IEnumerable<ILayer<T>> CreateDefaultWord2VecLayers(
-                NeuralNetworkArchitecture<T> architecture,
-                int vocabSize,
-                int embeddingDimension)
-            {
-                ValidateLayerParameters(1, embeddingDimension, architecture.OutputSize);
-        
-                // 1. Target word embeddings (U matrix)
+                public static IEnumerable<ILayer<T>> CreateDefaultWord2VecLayers(
+                    NeuralNetworkArchitecture<T> architecture,
+                    int vocabSize,
+                    int embeddingDimension)
+                {
+                    if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+                    if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+                    if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+                    if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
+                        throw new ArgumentException("architecture.OutputSize must match vocabSize for Word2Vec softmax output.", nameof(architecture));
+            
+                    // 1. Target word embeddings (U matrix)
+            
                 yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
         
                 // 2. Context word projection (V matrix)
@@ -8051,14 +8061,21 @@ public static class LayerHelper<T>
             /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence 
             /// statistics of words. It uses two sets of embeddings and two sets of biases.
             /// </para>
+            /// <para>
+            /// <b>Note:</b> The layers returned by this method are <b>not</b> intended to be used as a sequential 
+            /// feed-forward stack. They represent the four components (W, W_tilde, b, b_tilde) required for 
+            /// the GloVe model's custom forward pass.
+            /// </para>
             /// </remarks>
             public static IEnumerable<ILayer<T>> CreateDefaultGloVeLayers(
                 NeuralNetworkArchitecture<T> architecture,
                 int vocabSize,
                 int embeddingDimension)
             {
-                ValidateLayerParameters(1, embeddingDimension, architecture.OutputSize);
-        
+                if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+                if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+                if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+
                 // GloVe training is typically dot(W_i, W_tilde_j) + b_i + b_tilde_j = log(X_ij)
                 // To represent this sequentially for standard backprop:
                 // Input is a pair of indices (i, j). 
@@ -8085,15 +8102,21 @@ public static class LayerHelper<T>
             /// (character n-grams). It represents words as the sum of their n-gram embeddings.
             /// </para>
             /// </remarks>
-            public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
-                NeuralNetworkArchitecture<T> architecture,
-                int vocabSize,
-                int bucketSize,
-                int embeddingDimension)
-            {
-                ValidateLayerParameters(1, embeddingDimension, architecture.OutputSize);
-        
-                // FastText architecture:
+                public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
+                    NeuralNetworkArchitecture<T> architecture,
+                    int vocabSize,
+                    int bucketSize,
+                    int embeddingDimension)
+                {
+                    if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+                    if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+                    if (bucketSize < 1) throw new ArgumentOutOfRangeException(nameof(bucketSize));
+                    if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+                    if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
+                        throw new ArgumentException("architecture.OutputSize must match vocabSize for FastText softmax output.", nameof(architecture));
+            
+                    // FastText architecture:
+            
                 // 1. Word Embeddings
                 yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
         
@@ -8127,12 +8150,17 @@ public static class LayerHelper<T>
         yield return new PatchEmbeddingLayer<T>(
             imageSize, imageSize, channels, patchSize, visionHiddenDim);
 
-        // 2. Q-Former layers
+        // 2. Q-Former layers (self-attention, cross-attention, feed-forward)
         int feedForwardDim = qformerHiddenDim * 4;
         for (int i = 0; i < numQformerLayers; i++)
         {
+            // Self-attention for queries
             yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            
+            // Cross-attention from queries to vision features
             yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            
+            // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, qformerHiddenDim, (IActivationFunction<T>?)null);
         }
 

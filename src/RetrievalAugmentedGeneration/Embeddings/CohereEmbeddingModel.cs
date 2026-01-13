@@ -26,6 +26,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly string _inputType;
     private readonly int _dimension;
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
     private bool _disposed;
 
     public override int EmbeddingDimension => _dimension;
@@ -46,9 +47,10 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         _model = model;
         _inputType = inputType;
         _dimension = dimension;
+        _ownsHttpClient = httpClient == null;
         _httpClient = httpClient ?? new HttpClient();
 
-        if (httpClient == null)
+        if (!string.IsNullOrEmpty(_apiKey) && _httpClient.DefaultRequestHeaders.Authorization == null)
         {
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -57,17 +59,64 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
 
     protected override Vector<T> EmbedCore(string text)
     {
-        return Task.Run(() => EmbedAsync(text)).GetAwaiter().GetResult();
+        return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 
-    private async Task<Vector<T>> EmbedAsync(string text)
+    /// <summary>
+    /// Asynchronously generates embeddings for a batch of texts using Cohere API.
+    /// </summary>
+    /// <param name="texts">The collection of texts to encode.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        var textList = texts.ToList();
+        if (textList.Count == 0)
+            return new Matrix<T>(0, _dimension);
+
+        foreach (var text in textList)
+            ValidateText(text);
+
+        return await EmbedBatchCoreAsync(textList);
+    }
+
+    protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
     {
         var requestBody = new
         {
-            texts = new[] { text },
+            texts = texts,
             model = _model,
             input_type = _inputType
         };
+
+        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Cohere API request failed with status code {response.StatusCode}: {errorContent}");
+        }
+
+        var responseJson = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<CohereEmbeddingResponse>(responseJson);
+
+        if (result?.Embeddings == null || result.Embeddings.Count != texts.Count)
+        {
+            throw new InvalidOperationException("Cohere API returned an empty or mismatched response.");
+        }
+
+        var matrix = new Matrix<T>(texts.Count, _dimension);
+        for (int i = 0; i < result.Embeddings.Count; i++)
+        {
+            var embedding = result.Embeddings[i];
+            for (int j = 0; j < embedding.Length; j++)
+            {
+                matrix[i, j] = NumOps.FromDouble(embedding[j]);
+            }
+        }
+
+        return matrix;
+    }
 
         var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
@@ -106,7 +155,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         if (!_disposed)
         {
-            if (disposing)
+            if (disposing && _ownsHttpClient)
             {
                 _httpClient.Dispose();
             }

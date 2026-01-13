@@ -70,6 +70,13 @@ public interface IEmbeddingModel<T>
     Vector<T> Embed(string text);
 
     /// <summary>
+    /// Asynchronously embeds a single text string into a vector representation.
+    /// </summary>
+    /// <param name="text">The text to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting vector.</returns>
+    Task<Vector<T>> EmbedAsync(string text);
+
+    /// <summary>
     /// Embeds multiple text strings into vector representations in a single batch operation.
     /// </summary>
     /// <param name="texts">The collection of texts to embed.</param>
@@ -91,6 +98,13 @@ public interface IEmbeddingModel<T>
     /// </para>
     /// </remarks>
     Matrix<T> EmbedBatch(IEnumerable<string> texts);
+
+    /// <summary>
+    /// Asynchronously embeds multiple text strings into vector representations in a single batch operation.
+    /// </summary>
+    /// <param name="texts">The collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts);
 
     /// <summary>
     /// Gets the maximum length of text (in tokens) that this model can process.

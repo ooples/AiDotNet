@@ -34,14 +34,12 @@ namespace AiDotNet.NeuralNetworks
     {
         #region Fields
 
-        /// <summary>
-        /// The default instruction string prepended to inputs if no specific instruction is provided.
-        /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is the "default lens" the model uses to read your text if 
-        /// you don't give it any special instructions.
-        /// </remarks>
         private string _defaultInstruction = "Represent this text for retrieval: ";
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
+        private PoolingStrategy _poolingStrategy;
 
         #endregion
 
@@ -50,18 +48,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the InstructorEmbedding model.
         /// </summary>
-        /// <param name="architecture">The configuration defining the model's metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
-        /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
-        /// <param name="embeddingDimension">The dimension of the embeddings (default: 768).</param>
-        /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
-        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
-        /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
-        /// <param name="poolingStrategy">The strategy used to aggregate token outputs (default: Mean).</param>
-        /// <param name="lossFunction">Optional loss function.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public InstructorEmbedding(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -77,6 +63,12 @@ namespace AiDotNet.NeuralNetworks
             double maxGradNorm = 1.0)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
+            _poolingStrategy = poolingStrategy;
+
             InitializeLayers();
         }
 
@@ -87,11 +79,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Configures the transformer encoder layers for the Instructor architecture.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method builds the model's "listening center." It sets up a 
-        /// deep brain that can understand both your specific instructions and the actual text 
-        /// you want to analyze.
-        /// </remarks>
         protected override void InitializeLayers()
         {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -103,12 +90,12 @@ namespace AiDotNet.NeuralNetworks
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultInstructorLayers(
                     Architecture,
-                    30522,
+                    _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
@@ -119,33 +106,25 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Sets the default instruction used for general embedding generation.
         /// </summary>
-        /// <param name="instruction">The task instruction (e.g., "Represent the product for recommendation: ").</param>
         public void SetDefaultInstruction(string instruction)
         {
+            if (string.IsNullOrWhiteSpace(instruction))
+                throw new ArgumentException("Instruction must be non-empty.", nameof(instruction));
+
             _defaultInstruction = instruction;
         }
 
         /// <summary>
         /// Encodes text into a normalized embedding vector using a task-specific instruction.
         /// </summary>
-        /// <param name="text">The text to encode.</param>
-        /// <param name="instruction">The specific instruction for this text (overrides default).</param>
-        /// <returns>A normalized embedding vector.</returns>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is how you "ask" the model to read something. You give it 
-        /// the text and a goal. The model combines them to find the best set of numbers to 
-        /// describe the text for THAT specific goal.
-        /// </remarks>
         public Vector<T> EmbedWithInstruction(string text, string? instruction = null)
         {
+            if (text is null) throw new ArgumentNullException(nameof(text));
             string fullText = (instruction ?? _defaultInstruction) + text;
             return base.Embed(fullText);
         }
 
         /// <inheritdoc/>
-        /// <remarks>
-        /// <b>For Beginners:</b> This uses the default instruction to create a general-purpose embedding.
-        /// </remarks>
         public override Vector<T> Embed(string text)
         {
             return EmbedWithInstruction(text);
@@ -154,30 +133,36 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
-            return new InstructorEmbedding<T>(
+            var instance = new InstructorEmbedding<T>(
                 Architecture,
                 null,
                 null,
-                30522,
+                _vocabSize,
                 EmbeddingDimension,
                 MaxTokens,
-                12,
-                12,
-                3072,
-                PoolingStrategy.Mean,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
+                _poolingStrategy,
                 LossFunction,
                 Convert.ToDouble(MaxGradNorm));
+
+            instance.SetDefaultInstruction(_defaultInstruction);
+            return instance;
         }
 
         /// <summary>
         /// Retrieves metadata about the Instructor model, including its default instruction.
         /// </summary>
-        /// <returns>Metadata object containing configuration and instruction info.</returns>
         public override ModelMetadata<T> GetModelMetadata()
         {
             var metadata = base.GetModelMetadata();
             metadata.Name = "InstructorEmbedding";
             metadata.Description = "Instruction-Tuned high-flexibility embedding model";
+            
+            if (metadata.AdditionalInfo == null)
+                metadata.AdditionalInfo = new Dictionary<string, object>();
+
             metadata.AdditionalInfo["DefaultInstruction"] = _defaultInstruction;
             return metadata;
         }
@@ -187,11 +172,35 @@ namespace AiDotNet.NeuralNetworks
         {
             base.SerializeNetworkSpecificData(writer);
             writer.Write(_defaultInstruction);
+            writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
+            writer.Write((int)_poolingStrategy);
         }
 
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            base.DeserializeNetworkSpecificData(reader);
+            _defaultInstruction = reader.ReadString();
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+            _poolingStrategy = (PoolingStrategy)reader.ReadInt32();
+        }
+
+        /// <inheritdoc/>
+        public override Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
+        }
+
+        /// <inheritdoc/>
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
         }
 
         #endregion

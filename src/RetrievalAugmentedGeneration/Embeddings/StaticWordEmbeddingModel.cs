@@ -101,16 +101,25 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
                 }
 
                 var values = new T[dimension];
+                bool validLine = true;
                 for (int i = 0; i < dimension; i++)
                 {
                     if (double.TryParse(parts[i + 1], out double val))
                     {
                         values[i] = numOps.FromDouble(val);
                     }
+                    else
+                    {
+                        validLine = false;
+                        break;
+                    }
                 }
 
-                wordVectors[word] = new Vector<T>(values);
-                count++;
+                if (validLine)
+                {
+                    wordVectors[word] = new Vector<T>(values);
+                    count++;
+                }
             }
         }
 
@@ -140,7 +149,7 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
             else if (!_ignoreUnknown)
             {
                 sumVector = sumVector.Add(_unknownVector);
-                validWords++;
+                // Don't increment validWords - unknown tokens don't contribute semantically
             }
         }
 

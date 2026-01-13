@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is the size of the "dictionary" the model knows. If the vocabulary size 
         /// is 10,000, the model has learned unique addresses for 10,000 different words.
         /// </remarks>
-        private readonly int _vocabSize;
+        private int _vocabSize;
 
         /// <summary>
         /// The length of the embedding vector for each word.
@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks
         /// mental map. More coordinates (e.g., 300 instead of 100) allow for more detail but require more 
         /// memory and processing power.
         /// </remarks>
-        private readonly int _embeddingDimension;
+        private int _embeddingDimension;
 
         /// <summary>
         /// The size of the context window used during training.
@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This defines how many words to the left and right of a target word the model 
         /// should pay attention to. A window of 5 means the model looks at 5 neighbors on each side.
         /// </remarks>
-        private readonly int _windowSize;
+        private int _windowSize;
 
         /// <summary>
         /// The specific Word2Vec architecture type (Skip-Gram or CBOW).
@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This determines the model's "learning strategy"—whether it tries to 
         /// predict context from a word (Skip-Gram) or a word from its context (CBOW).
         /// </remarks>
-        private readonly Word2VecType _type;
+        private Word2VecType _type;
 
         /// <summary>
         /// The tokenizer used to convert text into numerical IDs.
@@ -94,17 +94,17 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is a safety limit to prevent the model from getting overwhelmed by 
         /// extremely long documents. It will only look at the first few hundred words of any text you give it.
         /// </remarks>
-        private readonly int _maxTokens;
+        private int _maxTokens;
 
         /// <summary>
         /// The loss function used to measure how well the model is learning.
         /// </summary>
-        private readonly ILossFunction<T> _lossFunction;
+        private ILossFunction<T> _lossFunction;
 
         /// <summary>
         /// The optimization algorithm used to update the model's parameters.
         /// </summary>
-        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
@@ -329,13 +329,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Encodes a single string into a normalized embedding vector by averaging its word vectors.
         /// </summary>
-        /// <param name="text">The text to encode.</param>
-        /// <returns>A single normalized vector representing the meaning of the entire text.</returns>
-        /// <remarks>
-        /// <b>For Beginners:</b> If you give this method a whole sentence like "The cat sat," it finds 
-        /// the coordinates for each word, averages them all together, and finds the "center point" 
-        /// of that sentence's meaning.
-        /// </remarks>
         public Vector<T> Embed(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -348,18 +341,21 @@ namespace AiDotNet.NeuralNetworks
             if (tokenIds.Count == 0)
                 return new Vector<T>(_embeddingDimension);
 
-            var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
-            var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
-            
             // Extract embeddings from the first layer (The learned word vector table)
-            var embeddings = Layers[0].Forward(inputTensor); // [seqLen, dim]
+            if (Layers[0] is not ITokenEmbedding<T> embeddingLayer)
+            {
+                throw new InvalidOperationException("First layer must implement ITokenEmbedding<T> for word lookup.");
+            }
+
+            var embeddings = embeddingLayer.GetTokenEmbeddings(tokenIds);
             
             var sumVector = new Vector<T>(_embeddingDimension);
             for (int s = 0; s < tokenIds.Count; s++)
             {
+                var tokenEmb = embeddings.GetRow(s);
                 for (int d = 0; d < _embeddingDimension; d++)
                 {
-                    sumVector[d] = NumOps.Add(sumVector[d], embeddings[s, d]);
+                    sumVector[d] = NumOps.Add(sumVector[d], tokenEmb[d]);
                 }
             }
 
@@ -370,7 +366,13 @@ namespace AiDotNet.NeuralNetworks
             }
 
             // Normalization ensures that "length" doesn't distort similarity comparisons
-            return meanVector.Normalize();
+            return meanVector.SafeNormalize();
+        }
+
+        /// <inheritdoc/>
+        public Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
         }
 
         /// <summary>
@@ -385,18 +387,24 @@ namespace AiDotNet.NeuralNetworks
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
-            var result = new Matrix<T>(textList.Count, _embeddingDimension);
+            var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
 
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
                 for (int j = 0; j < _embeddingDimension; j++)
                 {
-                    result[i, j] = embedding[j];
+                    matrix[i, j] = embedding[j];
                 }
             }
 
-            return result;
+            return matrix;
+        }
+
+        /// <inheritdoc/>
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
         }
 
         /// <inheritdoc/>
@@ -405,7 +413,7 @@ namespace AiDotNet.NeuralNetworks
             return new Word2Vec<T>(
                 Architecture,
                 _tokenizer,
-                _optimizer,
+                null, // Fresh optimizer for new instance
                 _vocabSize,
                 _embeddingDimension,
                 _windowSize,
@@ -454,13 +462,11 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
-            // Fields are initialized in the factory that calls this, but we consume the data 
-            // from the stream to advance the reader correctly.
-            _ = reader.ReadInt32(); // vocab
-            _ = reader.ReadInt32(); // dim
-            _ = reader.ReadInt32(); // window
-            _ = reader.ReadInt32(); // maxTokens
-            _ = reader.ReadInt32(); // type
+            _vocabSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _windowSize = reader.ReadInt32();
+            _maxTokens = reader.ReadInt32();
+            _type = (Word2VecType)reader.ReadInt32();
         }
 
         #endregion

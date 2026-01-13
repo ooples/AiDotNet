@@ -37,22 +37,17 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// The size of the full-word vocabulary.
         /// </summary>
-        private readonly int _vocabSize;
+        private int _vocabSize;
 
         /// <summary>
         /// The number of "buckets" used to store subword (n-gram) information.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> Since there are millions of possible word fragments, we use a "hashing trick" 
-        /// to group them into a fixed number of buckets. A larger bucket size allows for more precise 
-        /// subword meanings but requires more memory.
-        /// </remarks>
-        private readonly int _bucketSize;
+        private int _bucketSize;
 
         /// <summary>
         /// The dimensionality of the embedding vectors.
         /// </summary>
-        private readonly int _embeddingDimension;
+        private int _embeddingDimension;
 
         /// <summary>
         /// The tokenizer used to process text input.
@@ -62,17 +57,17 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// The maximum number of tokens to process per input string.
         /// </summary>
-        private readonly int _maxTokens;
+        private int _maxTokens;
 
         /// <summary>
         /// The loss function used during training.
         /// </summary>
-        private readonly ILossFunction<T> _lossFunction;
+        private ILossFunction<T> _lossFunction;
 
         /// <summary>
         /// The optimizer used to update the model's parameters.
         /// </summary>
-        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
@@ -263,6 +258,7 @@ namespace AiDotNet.NeuralNetworks
             var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
             var tokenResult = tokenizer.Encode(text);
             var tokenIds = tokenResult.TokenIds.Take(_maxTokens).ToList();
+            var tokens = tokenResult.Tokens.Take(_maxTokens).ToList();
 
             if (tokenIds.Count == 0)
                 return new Vector<T>(_embeddingDimension);
@@ -273,30 +269,74 @@ namespace AiDotNet.NeuralNetworks
             // FastText uses word embeddings (layer 0) and n-gram embeddings (layer 1)
             var wordEmbeds = Layers[0].Forward(inputTensor);
             
-            // Note: In a complete implementation, character n-grams would be hashed and 
-            // looked up in Layer 1. This is a structural representation.
-            
             var sumVector = new Vector<T>(_embeddingDimension);
+            int totalComponents = 0;
+
             for (int s = 0; s < tokenIds.Count; s++)
             {
+                // Add word embedding
                 for (int d = 0; d < _embeddingDimension; d++)
                 {
                     sumVector[d] = NumOps.Add(sumVector[d], wordEmbeds[s, d]);
+                }
+                totalComponents++;
+
+                // Add n-gram embeddings
+                var ngrams = GetCharacterNGrams(tokens[s], 3, 6);
+                if (ngrams.Count > 0)
+                {
+                    var ngramIndices = ngrams.Select(ng => (double)(Math.Abs(ng.GetHashCode()) % _bucketSize)).ToArray();
+                    var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramIndices), [ngrams.Count]);
+                    var ngramEmbeds = Layers[1].Forward(ngramInputTensor);
+
+                    for (int n = 0; n < ngrams.Count; n++)
+                    {
+                        for (int d = 0; d < _embeddingDimension; d++)
+                        {
+                            sumVector[d] = NumOps.Add(sumVector[d], ngramEmbeds[n, d]);
+                        }
+                        totalComponents++;
+                    }
                 }
             }
 
             var meanVector = new Vector<T>(_embeddingDimension);
             for (int d = 0; d < _embeddingDimension; d++)
             {
-                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(tokenIds.Count));
+                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(totalComponents));
             }
 
-            return meanVector.Normalize();
+            // Normalization ensures that "length" doesn't distort similarity comparisons
+            return meanVector.SafeNormalize();
+        }
+
+        /// <inheritdoc/>
+        public Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
+        }
+
+        private List<string> GetCharacterNGrams(string word, int minN, int maxN)
+        {
+            var ngrams = new List<string>();
+            string decoratedWord = "<" + word + ">";
+            
+            for (int n = minN; n <= maxN; n++)
+            {
+                for (int i = 0; i <= decoratedWord.Length - n; i++)
+                {
+                    ngrams.Add(decoratedWord.Substring(i, n));
+                }
+            }
+
+            return ngrams;
         }
 
         /// <summary>
         /// Encodes a batch of texts for high-throughput processing.
         /// </summary>
+        /// <param name="texts">The texts to encode.</param>
+        /// <returns>A matrix where each row is the embedding for one input text.</returns>
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
@@ -315,12 +355,18 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
+        }
+
+        /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
             return new FastText<T>(
                 Architecture,
                 _tokenizer,
-                _optimizer,
+                null,
                 _vocabSize,
                 _bucketSize,
                 _embeddingDimension,
@@ -362,10 +408,10 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
-            _ = reader.ReadInt32();
-            _ = reader.ReadInt32();
-            _ = reader.ReadInt32();
-            _ = reader.ReadInt32();
+            _vocabSize = reader.ReadInt32();
+            _bucketSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _maxTokens = reader.ReadInt32();
         }
 
         #endregion

@@ -35,25 +35,12 @@ namespace AiDotNet.NeuralNetworks
     {
         #region Fields
 
-        /// <summary>
-        /// The training strategy used (Unsupervised or Supervised).
-        /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> 
-        /// - <b>Unsupervised:</b> Learns entirely from raw text without any human help.
-        /// - <b>Supervised:</b> Learns from human-labeled pairs (like "this sentence means the same as that one").
-        /// </remarks>
-        private readonly SimCSEType _simCseType;
-
-        /// <summary>
-        /// The percentage of internal connections to randomly ignore during training.
-        /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is the "noise" we add to the model. By randomly ignoring some 
-        /// information (e.g., 10%), we force the model to be more robust and find the most 
-        /// important parts of every sentence.
-        /// </remarks>
-        private readonly double _dropoutRate;
+        private SimCSEType _simCseType;
+        private double _dropoutRate;
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
 
         #endregion
 
@@ -62,20 +49,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the SimCSE model.
         /// </summary>
-        /// <param name="architecture">The configuration defining the model's structural metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
-        /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="type">The SimCSE learning mode (default: Unsupervised).</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
-        /// <param name="embeddingDimension">The dimension of the sentence vectors (default: 768).</param>
-        /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
-        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
-        /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
-        /// <param name="dropoutRate">The dropout probability (default: 0.1).</param>
-        /// <param name="poolingStrategy">The strategy for creating a single vector (default: ClsToken).</param>
-        /// <param name="lossFunction">Optional loss function.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public SimCSE(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -95,6 +68,10 @@ namespace AiDotNet.NeuralNetworks
         {
             _simCseType = type;
             _dropoutRate = dropoutRate;
+            _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
 
             InitializeLayers();
         }
@@ -106,11 +83,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Configures the transformer encoder layers for SimCSE based on standard research patterns from LayerHelper.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method builds the model's "thinking engine." It sets up a deep 
-        /// stack of layers that allow the model to look at every word in context and understand 
-        /// complex grammar and meaning.
-        /// </remarks>
         protected override void InitializeLayers()
         {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -122,43 +94,18 @@ namespace AiDotNet.NeuralNetworks
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSimCSELayers(
                     Architecture,
-                    30522,
+                    _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
         #endregion
 
         #region Methods
-
-        /// <summary>
-        /// Custom training implementation for the SimCSE contrastive objective.
-        /// </summary>
-        /// <param name="input">The input tokens.</param>
-        /// <param name="expectedOutput">The target representations.</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is where the "compare the same sentence twice" logic happens. 
-        /// Even if the model gets the exact same words twice, the internal "dropout noise" makes 
-        /// the numbers slightly different. The model's job during training is to learn how to 
-        /// ignore that noise and find the identical meaning.
-        /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            if (_simCseType == SimCSEType.Unsupervised)
-            {
-                // Unsupervised training typically involves processing the same input batch twice 
-                // within the same contrastive loss calculation.
-                base.Train(input, expectedOutput);
-            }
-            else
-            {
-                base.Train(input, expectedOutput);
-            }
-        }
 
         /// <inheritdoc/>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -168,12 +115,12 @@ namespace AiDotNet.NeuralNetworks
                 null,
                 null,
                 _simCseType,
-                30522,
+                _vocabSize,
                 EmbeddingDimension,
                 MaxTokens,
-                12,
-                12,
-                3072,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
                 _dropoutRate,
                 PoolingStrategy.ClsToken,
                 LossFunction,
@@ -200,13 +147,44 @@ namespace AiDotNet.NeuralNetworks
             base.SerializeNetworkSpecificData(writer);
             writer.Write((int)_simCseType);
             writer.Write(_dropoutRate);
+            writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
         }
 
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            base.DeserializeNetworkSpecificData(reader);
+            _simCseType = (SimCSEType)reader.ReadInt32();
+            _dropoutRate = reader.ReadDouble();
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+        }
+
+        /// <inheritdoc/>
+        public override Vector<T> Embed(string text)
+        {
+            return base.Embed(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Vector<T>> EmbedAsync(string text)
+        {
+            return base.EmbedAsync(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return base.EmbedBatchAsync(texts);
         }
 
         #endregion
     }
 }
+
+        

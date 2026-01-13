@@ -38,14 +38,11 @@ namespace AiDotNet.NeuralNetworks
     {
         #region Fields
 
-        /// <summary>
-        /// The size of the dictionary (vocabulary) used for expansion and sparse representation.
-        /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is the number of possible words the model can choose to 
-        /// "highlight" in its internal dictionary when trying to capture a sentence's meaning.
-        /// </remarks>
-        private readonly int _vocabSize;
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
+        private readonly ITokenizer _tokenizer;
 
         #endregion
 
@@ -54,17 +51,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the SPLADE model.
         /// </summary>
-        /// <param name="architecture">The configuration defining the model structural metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
-        /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
-        /// <param name="embeddingDimension">The internal transformer dimension (default: 768).</param>
-        /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
-        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
-        /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
-        /// <param name="lossFunction">Optional loss function.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public SPLADE(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -80,6 +66,10 @@ namespace AiDotNet.NeuralNetworks
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, PoolingStrategy.Max, lossFunction, maxGradNorm)
         {
             _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
             InitializeLayers();
         }
@@ -91,11 +81,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Configures the transformer backbone and the ReLU-based expansion head for SPLADE.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method builds the model's "expansion brain." It sets up 
-        /// a transformer brain to understand context, followed by a special gate (ReLU) that 
-        /// turns off unimportant dictionary words so that the final result is nice and sparse.
-        /// </remarks>
         protected override void InitializeLayers()
         {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -110,9 +95,9 @@ namespace AiDotNet.NeuralNetworks
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
@@ -123,27 +108,12 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Encodes text into a high-dimensional sparse lexical representation.
         /// </summary>
-        /// <param name="text">The text to encode.</param>
-        /// <returns>A sparse vector of size vocab_size representing semantic keyword weights.</returns>
-        /// <remarks>
-        /// <para>
-        /// The embedding is calculated by taking the maximum activation across all token positions 
-        /// for each vocabulary item, followed by a log-saturation effect: log(1 + ReLU(expansion)).
-        /// </para>
-        /// <para>
-        /// <b>For Beginners:</b> This is the final step where your sentence is turned into a 
-        /// "keyword map." It scans the sentence, thinks of related words, picks the strongest signals 
-        /// from its dictionary, and creates a format that is incredibly good for finding exact 
-        /// matches and related concepts simultaneously.
-        /// </para>
-        /// </remarks>
         public override Vector<T> Embed(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new Vector<T>(_vocabSize);
 
-            var tokenizer = Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
-            var tokenResult = tokenizer.Encode(text);
+            var tokenResult = _tokenizer.Encode(text);
             var tokens = tokenResult.TokenIds.Take(MaxTokens).ToList();
             if (tokens.Count == 0) tokens.Add(0);
 
@@ -182,9 +152,9 @@ namespace AiDotNet.NeuralNetworks
                 _vocabSize,
                 EmbeddingDimension,
                 MaxTokens,
-                12,
-                12,
-                3072,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
                 LossFunction,
                 Convert.ToDouble(MaxGradNorm));
         }
@@ -192,7 +162,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Retrieves detailed metadata about the SPLADE configuration.
         /// </summary>
-        /// <returns>Metadata object with model type and naming info.</returns>
         public override ModelMetadata<T> GetModelMetadata()
         {
             var metadata = base.GetModelMetadata();
@@ -207,11 +176,31 @@ namespace AiDotNet.NeuralNetworks
         {
             base.SerializeNetworkSpecificData(writer);
             writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
         }
 
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            base.DeserializeNetworkSpecificData(reader);
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+        }
+
+        /// <inheritdoc/>
+        public override Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
+        }
+
+        /// <inheritdoc/>
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
         }
 
         #endregion

@@ -42,27 +42,27 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// The dimensionality of the shared embedding space.
         /// </summary>
-        private readonly int _embeddingDimension;
+        private int _embeddingDimension;
 
         /// <summary>
         /// The maximum length of input sequences the model will process.
         /// </summary>
-        private readonly int _maxSequenceLength;
+        private int _maxSequenceLength;
 
         /// <summary>
         /// The number of unique tokens the shared encoder can recognize.
         /// </summary>
-        private readonly int _vocabSize;
+        private int _vocabSize;
 
         /// <summary>
         /// The loss function used to evaluate similarity (defaults to ContrastiveLoss).
         /// </summary>
-        private readonly ILossFunction<T> _lossFunction;
+        private ILossFunction<T> _lossFunction;
 
         /// <summary>
         /// The optimization algorithm used to update the shared parameters of the dual encoders.
         /// </summary>
-        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
@@ -161,18 +161,22 @@ namespace AiDotNet.NeuralNetworks
             var output = Predict(inputTensor);
 
             // Standard mean pooling to get a single vector from token representations
-            var result = new Vector<T>(_embeddingDimension);
-            for (int d = 0; d < _embeddingDimension; d++)
+            int seqLen = output.Shape[1];
+            int dim = output.Shape[2];
+            var result = new Vector<T>(dim);
+            if (seqLen == 0) return result.SafeNormalize();
+
+            for (int d = 0; d < dim; d++)
             {
                 T sum = NumOps.Zero;
-                for (int s = 0; s < output.Shape[1]; s++)
+                for (int s = 0; s < seqLen; s++)
                 {
                     sum = NumOps.Add(sum, output[0, s, d]);
                 }
-                result[d] = NumOps.Divide(sum, NumOps.FromDouble(output.Shape[1]));
+                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
             }
 
-            return result.Normalize();
+            return result.SafeNormalize();
         }
 
         /// <summary>
@@ -251,16 +255,69 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Trains the model on pairs of inputs using a similarity learning objective.
         /// </summary>
+        /// <param name="input">The input tensor containing a pair of sequences [2, seq_len].</param>
+        /// <param name="expectedOutput">The target similarity label (1 for same, 0 for different) as a tensor of [1].</param>
+        /// <remarks>
+        /// <b>For Beginners:</b> This is where the twins learn. You show one twin the first input 
+        /// and the other twin the second input. You then tell them if the inputs are the same 
+        /// or different (the label). They adjust their shared brain to make similar inputs 
+        /// have nearly identical coordinate summaries.
+        /// </remarks>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            var prediction = Predict(input);
-            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+            if (input.Shape[0] < 2)
+                throw new ArgumentException("Siamese training requires a pair of inputs in the first dimension.", nameof(input));
 
-            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            // Split input into two separate sequences
+            var input1 = input.Slice(0, 0, 1);
+            var input2 = input.Slice(0, 1, 1);
 
-            Backpropagate(outputGradientTensor);
+            // Forward pass for both inputs through the shared encoder
+            var prediction1 = Predict(input1);
+            var prediction2 = Predict(input2);
+
+            // Pool outputs to get embeddings
+            var emb1 = PoolOutput(prediction1);
+            var emb2 = PoolOutput(prediction2);
+
+            T label = expectedOutput[0];
+
+            if (_lossFunction is ContrastiveLoss<T> contrastiveLoss)
+            {
+                LastLoss = contrastiveLoss.CalculateLoss(emb1, emb2, label);
+                var (grad1, grad2) = contrastiveLoss.CalculateDerivative(emb1, emb2, label);
+
+                // Backpropagate through both branches (shared parameters)
+                Backpropagate(new Tensor<T>(prediction1.Shape, grad1));
+                Backpropagate(new Tensor<T>(prediction2.Shape, grad2));
+            }
+            else
+            {
+                // Fallback for other loss functions
+                base.Train(input, expectedOutput);
+            }
+
             _optimizer.UpdateParameters(Layers);
+        }
+
+        private Vector<T> PoolOutput(Tensor<T> output)
+        {
+            int seqLen = output.Shape[1];
+            int dim = output.Shape[2];
+            var result = new Vector<T>(dim);
+            if (seqLen == 0) return result.SafeNormalize();
+
+            for (int d = 0; d < dim; d++)
+            {
+                T sum = NumOps.Zero;
+                for (int s = 0; s < seqLen; s++)
+                {
+                    sum = NumOps.Add(sum, output[0, s, d]);
+                }
+                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+            }
+
+            return result.SafeNormalize();
         }
 
         /// <inheritdoc/>
@@ -269,7 +326,7 @@ namespace AiDotNet.NeuralNetworks
             return new SiameseNeuralNetwork<T>(
                 Architecture,
                 _tokenizer,
-                _optimizer,
+                null, // Fresh optimizer for new instance
                 _vocabSize,
                 _embeddingDimension,
                 _maxSequenceLength,
@@ -291,7 +348,8 @@ namespace AiDotNet.NeuralNetworks
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },
-                    { "VocabSize", _vocabSize }
+                    { "VocabSize", _vocabSize },
+                    { "MaxSequenceLength", _maxSequenceLength }
                 }
             };
         }
@@ -307,6 +365,9 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            _vocabSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _maxSequenceLength = reader.ReadInt32();
         }
 
         #endregion

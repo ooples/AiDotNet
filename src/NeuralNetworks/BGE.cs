@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -32,6 +33,15 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class BGE<T> : TransformerEmbeddingNetwork<T>
     {
+        #region Fields
+
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
+
+        #endregion
+
         #region Constructors
 
         /// <summary>
@@ -64,6 +74,11 @@ namespace AiDotNet.NeuralNetworks
             double maxGradNorm = 1.0)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
+
             InitializeLayers();
         }
 
@@ -90,12 +105,12 @@ namespace AiDotNet.NeuralNetworks
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultBGELayers(
                     Architecture,
-                    30522,
+                    _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
@@ -110,12 +125,12 @@ namespace AiDotNet.NeuralNetworks
                 Architecture,
                 null,
                 null,
-                30522,
+                _vocabSize,
                 EmbeddingDimension,
                 MaxTokens,
-                12,
-                12,
-                3072,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
                 PoolingStrategy.ClsToken,
                 LossFunction,
                 Convert.ToDouble(MaxGradNorm));
@@ -131,6 +146,44 @@ namespace AiDotNet.NeuralNetworks
             metadata.Name = "BGE";
             metadata.Description = "BGE (BAAI General Embedding) state-of-the-art retrieval model";
             return metadata;
+        }
+
+        /// <inheritdoc/>
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            base.SerializeNetworkSpecificData(writer);
+            writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
+        }
+
+        /// <inheritdoc/>
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            base.DeserializeNetworkSpecificData(reader);
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+        }
+
+        /// <inheritdoc/>
+        public override Vector<T> Embed(string text)
+        {
+            return base.Embed(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Vector<T>> EmbedAsync(string text)
+        {
+            return base.EmbedAsync(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return base.EmbedBatchAsync(texts);
         }
 
         #endregion

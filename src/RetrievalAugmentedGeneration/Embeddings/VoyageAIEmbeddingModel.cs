@@ -31,7 +31,9 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
         string inputType,
         int dimension)
     {
+#pragma warning disable CS0414 // Field is assigned but its value is never used
         _apiKey = apiKey; // Kept for API compatibility but unused
+#pragma warning restore CS0414
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
         _dimension = dimension;

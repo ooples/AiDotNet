@@ -20,11 +20,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly int _dimension;
         private readonly int _maxTokens;
         private readonly HttpClient _httpClient;
+        private readonly bool _ownsHttpClient;
         private bool _disposed;
 
         public override int EmbeddingDimension => _dimension;
         public override int MaxTokens => _maxTokens;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OpenAIEmbeddingModel{T}"/> class.
+        /// </summary>
+        /// <param name="apiKey">The OpenAI API key.</param>
+        /// <param name="modelName">The model name (default: "text-embedding-ada-002").</param>
+        /// <param name="dimension">The embedding dimension (default: 1536).</param>
+        /// <param name="maxTokens">The maximum tokens (default: 8191).</param>
+        /// <param name="httpClient">Optional external HttpClient. If provided, the caller is responsible for configuring authentication and managing its lifecycle.</param>
         public OpenAIEmbeddingModel(string apiKey, string modelName = "text-embedding-ada-002", int dimension = 1536, int maxTokens = 8191, HttpClient? httpClient = null)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -40,9 +49,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             _modelName = modelName;
             _dimension = dimension;
             _maxTokens = maxTokens;
+            _ownsHttpClient = httpClient == null;
             _httpClient = httpClient ?? new HttpClient();
             
-            if (httpClient == null)
+            if (_ownsHttpClient)
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             }
@@ -50,16 +60,63 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         protected override Vector<T> EmbedCore(string text)
         {
-            return Task.Run(() => EmbedAsync(text)).GetAwaiter().GetResult();
+            return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        private async Task<Vector<T>> EmbedAsync(string text)
+        /// <summary>
+        /// Asynchronously encodes a batch of texts into vector representations via the OpenAI API.
+        /// </summary>
+        /// <param name="texts">The collection of texts to encode.</param>
+        /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+        public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            var textList = texts.ToList();
+            if (textList.Count == 0)
+                return new Matrix<T>(0, _dimension);
+
+            foreach (var text in textList)
+                ValidateText(text);
+
+            return await EmbedBatchCoreAsync(textList);
+        }
+
+        protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
         {
             var requestBody = new
             {
-                input = text,
+                input = texts,
                 model = _modelName
             };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException($"OpenAI API request failed with status code {response.StatusCode}: {errorContent}");
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(responseJson);
+
+            if (result?.Data == null || result.Data.Count != texts.Count)
+            {
+                throw new InvalidOperationException("OpenAI API returned an empty or mismatched response.");
+            }
+
+            var matrix = new Matrix<T>(texts.Count, _dimension);
+            for (int i = 0; i < result.Data.Count; i++)
+            {
+                var embedding = result.Data[i].Embedding;
+                for (int j = 0; j < embedding.Length; j++)
+                {
+                    matrix[i, j] = NumOps.FromDouble(embedding[j]);
+                }
+            }
+
+            return matrix;
+        }
 
             var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
@@ -104,7 +161,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         {
             if (!_disposed)
             {
-                if (disposing)
+                if (disposing && _ownsHttpClient)
                 {
                     _httpClient.Dispose();
                 }

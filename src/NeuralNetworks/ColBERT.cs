@@ -43,7 +43,13 @@ namespace AiDotNet.NeuralNetworks
         /// every single word. Because we keep many fingerprints per sentence, we make them 
         /// smaller (like 128 instead of 768) to save space while still being very precise.
         /// </remarks>
-        private readonly int _outputDim;
+        private int _outputDim;
+
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
+        private readonly ITokenizer _tokenizer;
 
         #endregion
 
@@ -52,17 +58,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the ColBERT model.
         /// </summary>
-        /// <param name="architecture">The configuration defining the model metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
-        /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
-        /// <param name="outputDimension">The late interaction vector size (default: 128).</param>
-        /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
-        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
-        /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
-        /// <param name="lossFunction">Optional loss function.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public ColBERT(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -78,6 +73,11 @@ namespace AiDotNet.NeuralNetworks
             : base(architecture, tokenizer, optimizer, vocabSize, 768, maxSequenceLength, numLayers, numHeads, feedForwardDim, PoolingStrategy.Mean, lossFunction, maxGradNorm)
         {
             _outputDim = outputDimension;
+            _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
             InitializeLayers();
         }
@@ -89,11 +89,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Sets up the transformer layers and the token-level projection head for ColBERT.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method builds the model's "reading brain." It sets up a 
-        /// deep transformer to understand word context and a final "compressor" that makes 
-        /// the word-level data small enough to search efficiently.
-        /// </remarks>
         protected override void InitializeLayers()
         {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -105,12 +100,12 @@ namespace AiDotNet.NeuralNetworks
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultColBERTLayers(
                     Architecture,
-                    30522,
+                    _vocabSize,
                     _outputDim,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
@@ -121,20 +116,12 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Encodes text into a multi-vector matrix where each row is a contextualized token embedding.
         /// </summary>
-        /// <param name="text">The text to encode.</param>
-        /// <returns>A matrix containing normalized token-level vectors.</returns>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is how the model "takes notes" on your text. Instead of 
-        /// giving you one list of numbers for a sentence, it gives you a whole table—one row 
-        /// for every single word. This table is what allows the model to be so accurate.
-        /// </remarks>
         public Matrix<T> EmbedLateInteraction(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new Matrix<T>(0, _outputDim);
 
-            var tokenizer = Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
-            var tokenResult = tokenizer.Encode(text);
+            var tokenResult = _tokenizer.Encode(text);
             var tokens = tokenResult.TokenIds.Take(MaxTokens).ToList();
             if (tokens.Count == 0) tokens.Add(0);
 
@@ -155,7 +142,7 @@ namespace AiDotNet.NeuralNetworks
             for (int s = 0; s < seqLen; s++)
             {
                 var row = result.GetRow(s);
-                result.SetRow(s, row.Normalize());
+                result.SetRow(s, row.SafeNormalize());
             }
 
             return result;
@@ -187,7 +174,7 @@ namespace AiDotNet.NeuralNetworks
                 result[d] = NumOps.Divide(sum, NumOps.FromDouble(matrix.Rows));
             }
 
-            return result.Normalize();
+            return result.SafeNormalize();
         }
 
         /// <summary>
@@ -266,6 +253,8 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            base.DeserializeNetworkSpecificData(reader);
+            _outputDim = reader.ReadInt32();
         }
 
         #endregion

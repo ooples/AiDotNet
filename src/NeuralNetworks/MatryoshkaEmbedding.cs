@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -35,15 +36,11 @@ namespace AiDotNet.NeuralNetworks
     {
         #region Fields
 
-        /// <summary>
-        /// The set of dimensions optimized during the Matryoshka training process.
-        /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is the list of "doll sizes" the model knows. For example, 
-        /// [64, 128, 256]. The model has been trained so that each of these lengths is a valid 
-        /// standalone summary of the text.
-        /// </remarks>
-        private readonly int[] _nestedDimensions;
+        private int[] _nestedDimensions;
+        private int _vocabSize;
+        private int _numLayers;
+        private int _numHeads;
+        private int _feedForwardDim;
 
         #endregion
 
@@ -52,19 +49,6 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the MatryoshkaEmbedding model.
         /// </summary>
-        /// <param name="architecture">The configuration defining the model metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
-        /// <param name="optimizer">Optional optimizer for training.</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
-        /// <param name="maxEmbeddingDimension">The maximum (full) embedding size (default: 1536).</param>
-        /// <param name="nestedDimensions">The set of optimized nesting levels.</param>
-        /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
-        /// <param name="numLayers">The number of transformer layers (default: 12).</param>
-        /// <param name="numHeads">The number of attention heads (default: 12).</param>
-        /// <param name="feedForwardDim">The hidden dimension of feed-forward networks (default: 3072).</param>
-        /// <param name="poolingStrategy">The aggregation strategy (default: ClsToken).</param>
-        /// <param name="lossFunction">Optional loss function.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         public MatryoshkaEmbedding(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -81,6 +65,10 @@ namespace AiDotNet.NeuralNetworks
             double maxGradNorm = 1.0)
             : base(architecture, tokenizer, optimizer, vocabSize, maxEmbeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _vocabSize = vocabSize;
+            _numLayers = numLayers;
+            _numHeads = numHeads;
+            _feedForwardDim = feedForwardDim;
             _nestedDimensions = nestedDimensions ?? new[] { 64, 128, 256, 512, 768, 1024, 1536 };
 
             InitializeLayers();
@@ -109,12 +97,12 @@ namespace AiDotNet.NeuralNetworks
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultMRLLayers(
                     Architecture,
-                    30522,
+                    _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,
-                    12,
-                    12,
-                    3072));
+                    _numLayers,
+                    _numHeads,
+                    _feedForwardDim));
             }
         }
 
@@ -145,7 +133,7 @@ namespace AiDotNet.NeuralNetworks
                 resizedValues[i] = fullEmbedding[i];
             }
 
-            return new Vector<T>(resizedValues).Normalize();
+            return new Vector<T>(resizedValues).SafeNormalize();
         }
 
         /// <inheritdoc/>
@@ -155,13 +143,13 @@ namespace AiDotNet.NeuralNetworks
                 Architecture,
                 null,
                 null,
-                30522,
+                _vocabSize,
                 EmbeddingDimension,
                 _nestedDimensions,
                 MaxTokens,
-                12,
-                12,
-                3072,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
                 PoolingStrategy.ClsToken,
                 LossFunction,
                 Convert.ToDouble(MaxGradNorm));
@@ -184,6 +172,10 @@ namespace AiDotNet.NeuralNetworks
         protected override void SerializeNetworkSpecificData(BinaryWriter writer)
         {
             base.SerializeNetworkSpecificData(writer);
+            writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
             writer.Write(_nestedDimensions.Length);
             foreach (var dim in _nestedDimensions)
             {
@@ -194,6 +186,35 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
+            base.DeserializeNetworkSpecificData(reader);
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
+            int count = reader.ReadInt32();
+            _nestedDimensions = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                _nestedDimensions[i] = reader.ReadInt32();
+            }
+        }
+
+        /// <inheritdoc/>
+        public override Vector<T> Embed(string text)
+        {
+            return base.Embed(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Vector<T>> EmbedAsync(string text)
+        {
+            return base.EmbedAsync(text);
+        }
+
+        /// <inheritdoc/>
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return base.EmbedBatchAsync(texts);
         }
 
         #endregion

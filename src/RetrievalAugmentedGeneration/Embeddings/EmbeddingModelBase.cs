@@ -51,6 +51,17 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     }
 
     /// <summary>
+    /// Asynchronously embeds a single text string into a vector representation.
+    /// </summary>
+    /// <param name="text">The text to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting vector.</returns>
+    public virtual Task<Vector<T>> EmbedAsync(string text)
+    {
+        ValidateText(text);
+        return Task.FromResult(EmbedCore(text));
+    }
+
+    /// <summary>
     /// Embeds multiple text strings into vector representations in a single batch operation.
     /// </summary>
     /// <param name="texts">The collection of texts to embed.</param>
@@ -70,6 +81,28 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
         }
 
         return EmbedBatchCore(textList);
+    }
+
+    /// <summary>
+    /// Asynchronously embeds multiple text strings into vector representations in a single batch operation.
+    /// </summary>
+    /// <param name="texts">The collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    public virtual async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
+
+        var textList = texts.ToList();
+        if (textList.Count == 0)
+            throw new ArgumentException("Text collection cannot be empty", nameof(texts));
+
+        foreach (var text in textList)
+        {
+            ValidateText(text);
+        }
+
+        return await EmbedBatchCoreAsync(textList);
     }
 
     /// <summary>
@@ -121,6 +154,54 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
         foreach (var text in texts)
         {
             embeddings.Add(EmbedCore(text));
+        }
+
+        return CreateMatrixFromVectors(embeddings);
+    }
+
+    /// <summary>
+    /// Asynchronous core batch embedding logic to be implemented by derived classes.
+    /// </summary>
+    /// <param name="texts">The validated collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    {
+        var embeddings = new List<Vector<T>>();
+        foreach (var text in texts)
+        {
+            embeddings.Add(await EmbedAsync(text));
+        }
+
+        return CreateMatrixFromVectors(embeddings);
+    }
+
+    /// <summary>
+    /// Asynchronous core batch embedding logic to be implemented by derived classes.
+    /// </summary>
+    /// <param name="texts">The validated collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    {
+        var embeddings = new List<Vector<T>>();
+        foreach (var text in texts)
+        {
+            embeddings.Add(await EmbedAsync(text));
+        }
+
+        return CreateMatrixFromVectors(embeddings);
+    }
+
+    /// <summary>
+    /// Asynchronous core batch embedding logic to be implemented by derived classes.
+    /// </summary>
+    /// <param name="texts">The validated collection of texts to embed.</param>
+    /// <returns>A matrix where each row represents the embedding of the corresponding input text.</returns>
+    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    {
+        var embeddings = new List<Vector<T>>();
+        foreach (var text in texts)
+        {
+            embeddings.Add(await EmbedAsync(text));
         }
 
         return CreateMatrixFromVectors(embeddings);

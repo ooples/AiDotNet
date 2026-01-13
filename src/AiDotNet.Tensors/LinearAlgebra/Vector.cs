@@ -875,6 +875,21 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Normalizes the vector, or returns a zero vector if the norm is zero.
+    /// </summary>
+    /// <returns>A normalized vector or a zero vector.</returns>
+    public Vector<T> SafeNormalize()
+    {
+        T norm = this.Norm();
+        if (_numOps.Equals(norm, _numOps.Zero))
+        {
+            return new Vector<T>(Length);
+        }
+
+        return this.Divide(norm);
+    }
+
+    /// <summary>
     /// Returns the indices of all non-zero elements in the vector.
     /// </summary>
     /// <returns>An enumerable collection of indices where the vector has non-zero values.</returns>

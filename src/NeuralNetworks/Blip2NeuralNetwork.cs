@@ -53,10 +53,35 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     private ILayer<T>? _languageModelProjection;
     private readonly List<TransformerDecoderLayer<T>> _lmDecoderLayers = [];
     private ILayer<T>? _lmHead;
-    private Tensor<T>? _queryTokens;
+    /// <summary>
+    /// Vision CLS token.
+    /// </summary>
     private Tensor<T>? _visionClsToken;
+
+    /// <summary>
+    /// Vision positional embeddings.
+    /// </summary>
     private Tensor<T>? _visionPositionalEmbeddings;
+
+    /// <summary>
+    /// Query positional embeddings.
+    /// </summary>
     private Tensor<T>? _queryPositionalEmbeddings;
+
+    /// <summary>
+    /// Gradient storage for query tokens.
+    /// </summary>
+    private Tensor<T>? _queryTokensGradients;
+
+    /// <summary>
+    /// Gradient storage for positional embeddings.
+    /// </summary>
+    private Tensor<T>? _queryPositionalEmbeddingsGradients;
+
+    /// <summary>
+    /// Learnable query tokens for Q-Former.
+    /// </summary>
+    private Tensor<T>? _queryTokens;
     private ILayer<T>? _textTokenEmbedding;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _itmHead;
@@ -80,67 +105,67 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <summary>
     /// The dimension of the shared multimodal embedding space.
     /// </summary>
-    private readonly int _embeddingDimension;
+    private int _embeddingDimension;
 
     /// <summary>
     /// The maximum length of text sequences allowed for processing.
     /// </summary>
-    private readonly int _maxSequenceLength;
+    private int _maxSequenceLength;
 
     /// <summary>
     /// The input resolution (width and height) for processed images.
     /// </summary>
-    private readonly int _imageSize;
+    private int _imageSize;
 
     /// <summary>
     /// The hidden dimension of the Q-Former transformer layers.
     /// </summary>
-    private readonly int _qformerHiddenDim;
+    private int _qformerHiddenDim;
 
     /// <summary>
     /// The number of transformer layers within the Q-Former.
     /// </summary>
-    private readonly int _numQformerLayers;
+    private int _numQformerLayers;
 
     /// <summary>
     /// The number of attention heads per Q-Former layer.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// The number of learnable "query tokens" used to probe visual features.
     /// </summary>
-    private readonly int _numQueryTokens;
+    private int _numQueryTokens;
 
     /// <summary>
     /// The size of image patches processed by the vision encoder.
     /// </summary>
-    private readonly int _patchSize;
+    private int _patchSize;
 
     /// <summary>
     /// The vocabulary size of the text encoder.
     /// </summary>
-    private readonly int _vocabularySize;
+    private int _vocabularySize;
 
     /// <summary>
     /// The hidden dimensionality of the frozen vision encoder.
     /// </summary>
-    private readonly int _visionHiddenDim;
+    private int _visionHiddenDim;
 
     /// <summary>
     /// The hidden dimensionality of the frozen language model.
     /// </summary>
-    private readonly int _lmHiddenDim;
+    private int _lmHiddenDim;
 
     /// <summary>
     /// The number of transformer decoder layers in the language model head.
     /// </summary>
-    private readonly int _numLmDecoderLayers;
+    private int _numLmDecoderLayers;
 
     /// <summary>
     /// The specific LLM architecture used as the language backbone.
     /// </summary>
-    private readonly LanguageModelBackbone _languageModelBackbone;
+    private LanguageModelBackbone _languageModelBackbone;
 
     #endregion
 
@@ -365,6 +390,18 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
+    public Task<Vector<T>> EmbedAsync(string text)
+    {
+        return Task.FromResult(EncodeText(text));
+    }
+
+    /// <inheritdoc/>
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        return Task.FromResult(EncodeTextBatch(texts));
+    }
+
+    /// <inheritdoc/>
     public Vector<T> EncodeImage(double[] imageData)
     {
         var imageTensor = Tensor<T>.FromVector(new Vector<T>(imageData.Select(d => NumOps.FromDouble(d)).ToArray()), [3, _imageSize, _imageSize]);
@@ -450,7 +487,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             embedding[i] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
 
-        return embedding.Normalize();
+        return embedding.SafeNormalize();
     }
 
     /// <inheritdoc/>
@@ -553,7 +590,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             for (int q = 0; q < Math.Min(_numQueryTokens, features.Shape[0]); q++) sum = NumOps.Add(sum, features[q, i]);
             embedding[i] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
-        return embedding.Normalize();
+        return embedding.SafeNormalize();
     }
 
     #endregion
@@ -573,7 +610,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         var projected = _itcProjection!.Forward(projInput);
         var result = new Vector<T>(_embeddingDimension);
         for (int i = 0; i < _embeddingDimension; i++) result[i] = projected[i];
-        return result.Normalize();
+        return result.SafeNormalize();
     }
 
     private Tensor<T> ExtractQFormerFeaturesNative(Tensor<T> image)
@@ -624,7 +661,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     private Tensor<T> ApplyCrossAttention(ILayer<T> layer, Tensor<T> queries, Tensor<T> keyValues)
     {
-        return layer.Forward(queries); 
+        return layer.Forward(queries, keyValues); 
     }
 
     private T ComputeItmNative(Tensor<T> image, string text)
@@ -666,7 +703,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             for (int q = 0; q < output.Dimensions[1]; q++) sum += output[0, q, i];
             embedding[i] = NumOps.FromDouble(sum / output.Dimensions[1]);
         }
-        return embedding.Normalize();
+        return embedding.SafeNormalize();
     }
 
     private Tensor<T> ExtractQFormerFeaturesOnnx(Tensor<T> image)
@@ -722,38 +759,81 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         return _useNativeMode ? GenerateNative(projectedFeatures, prompt, maxLength, temperature) : GenerateOnnx(projectedFeatures, prompt, maxLength);
     }
 
-    private string GenerateNative(Tensor<T> features, string? prompt, int maxLength, double temperature)
-    {
-        var tokens = prompt != null ? _tokenizer.Encode(prompt).TokenIds : new List<int> { 1 };
-        for (int step = 0; step < maxLength && tokens.Count < _maxSequenceLength; step++)
+        private string GenerateNative(Tensor<T> features, string? prompt, int maxLength, double temperature) 
         {
-            var input = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()));
-            var embeds = _textTokenEmbedding!.Forward(input);
-            var decoderInput = Tensor<T>.CreateDefault([tokens.Count, _lmHiddenDim], NumOps.Zero);
-            for (int i = 0; i < tokens.Count; i++)
-                for (int j = 0; j < _lmHiddenDim; j++) decoderInput[i, j] = i < embeds.Shape[0] ? embeds[i, j] : NumOps.Zero;
-
-            var output = decoderInput;
-            foreach (var layer in _lmDecoderLayers) output = layer.Forward(output, features);
-            var logits = _lmHead!.Forward(Tensor<T>.FromVector(new Vector<T>(Enumerable.Range(0, _lmHiddenDim).Select(j => output[tokens.Count - 1, j]).ToArray())));
-            int nextToken = SampleToken(logits, temperature);
-            if (nextToken == 2) break;
-            tokens.Add(nextToken);
+            var tokens = prompt != null ? _tokenizer.Encode(prompt).TokenIds : new List<int> { 1 };
+            for (int step = 0; step < maxLength && tokens.Count < _maxSequenceLength; step++)
+            {
+                // Create input tensor for current sequence (token indices)
+                var input = Tensor<T>.CreateDefault([tokens.Count], NumOps.Zero);
+                for (int i = 0; i < tokens.Count; i++)
+                {
+                    input[i] = NumOps.FromDouble(tokens[i]);
+                }
+    
+                var embeds = _textTokenEmbedding!.Forward(input);
+                
+                // Reshape/project embeddings to LM hidden dimension if needed
+                var decoderInput = Tensor<T>.CreateDefault([tokens.Count, _lmHiddenDim], NumOps.Zero);
+                int embDim = embeds.Shape.Length > 1 ? embeds.Shape[1] : _qformerHiddenDim;
+                for (int i = 0; i < tokens.Count; i++)
+                {
+                    for (int j = 0; j < _lmHiddenDim; j++)
+                    {
+                        if (j < embDim)
+                        {
+                            decoderInput[i, j] = embeds.Shape.Length > 1 ? embeds[i, j] : embeds[i];
+                        }
+                    }
+                }
+    
+                var output = decoderInput;
+                foreach (var layer in _lmDecoderLayers) output = layer.Forward(output, features);
+                
+                var lastPositionHidden = Tensor<T>.CreateDefault([_lmHiddenDim], NumOps.Zero);
+                for (int j = 0; j < _lmHiddenDim; j++) lastPositionHidden[j] = output[tokens.Count - 1, j];
+                
+                var logits = _lmHead!.Forward(lastPositionHidden);
+                int nextToken = SampleToken(logits, temperature);
+                if (nextToken == 2) break; // EOS
+                tokens.Add(nextToken);
+            }
+            return _tokenizer.Decode(tokens);
         }
-        return _tokenizer.Decode(tokens);
-    }
-
-    private int SampleToken(Tensor<T> logits, double temperature)
+        private int SampleToken(Tensor<T> logits, double temperature)
     {
         var logitVec = logits.ToVector();
-        var scores = new Dictionary<string, T>();
+        
+        // Apply temperature scaling
+        double[] scaledLogits = new double[logitVec.Length];
+        double maxLogit = double.MinValue;
         for (int i = 0; i < logitVec.Length; i++)
         {
-            scores[i.ToString()] = logitVec[i];
+            double val = NumOps.ToDouble(logitVec[i]) / temperature;
+            if (val > maxLogit) maxLogit = val;
+            scaledLogits[i] = val;
         }
 
-        var probs = SoftmaxScores(scores);
-        return int.Parse(probs.Keys.First() ?? "0"); 
+        // Compute softmax probabilities
+        double sumExp = 0;
+        double[] probs = new double[scaledLogits.Length];
+        for (int i = 0; i < scaledLogits.Length; i++)
+        {
+            probs[i] = Math.Exp(scaledLogits[i] - maxLogit);
+            sumExp += probs[i];
+        }
+
+        // Sample from the distribution
+        var random = RandomHelper.ThreadSafeRandom;
+        double randVal = random.NextDouble() * sumExp;
+        double cumSum = 0;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            cumSum += probs[i];
+            if (randVal <= cumSum) return i;
+        }
+
+        return probs.Length - 1;
     }
 
     private string GenerateOnnx(Tensor<T> features, string? prompt, int maxLength)
@@ -782,7 +862,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             for (int q = 0; q < _numQueryTokens; q++) sum = NumOps.Add(sum, qformerFeatures[q, d]);
             queryMean[d] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
-        return ComputeSimilarity(textEmb, queryMean.Normalize());
+        return ComputeSimilarity(textEmb, queryMean.SafeNormalize());
     }
 
     private Tensor<T> GetCrossAttentionWeights(Tensor<T> image, string description)
@@ -840,10 +920,52 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_embeddingDimension);
+        writer.Write(_maxSequenceLength);
+        writer.Write(_imageSize);
+        writer.Write(_qformerHiddenDim);
+        writer.Write(_numQformerLayers);
+        writer.Write(_numHeads);
+        writer.Write(_numQueryTokens);
+        writer.Write(_patchSize);
+        writer.Write(_vocabularySize);
+        writer.Write(_visionHiddenDim);
+        writer.Write(_lmHiddenDim);
+        writer.Write(_numLmDecoderLayers);
+        writer.Write((int)_languageModelBackbone);
+        writer.Write(_useNativeMode);
+
+        SerializationHelper<T>.SerializeTensor(writer, _visionClsToken);
+        SerializationHelper<T>.SerializeTensor(writer, _visionPositionalEmbeddings);
+        SerializationHelper<T>.SerializeTensor(writer, _queryTokens);
+        SerializationHelper<T>.SerializeTensor(writer, _queryPositionalEmbeddings);
+    }
     
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _embeddingDimension = reader.ReadInt32();
+        _maxSequenceLength = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+        _qformerHiddenDim = reader.ReadInt32();
+        _numQformerLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _numQueryTokens = reader.ReadInt32();
+        _patchSize = reader.ReadInt32();
+        _vocabularySize = reader.ReadInt32();
+        _visionHiddenDim = reader.ReadInt32();
+        _lmHiddenDim = reader.ReadInt32();
+        _numLmDecoderLayers = reader.ReadInt32();
+        _languageModelBackbone = (LanguageModelBackbone)reader.ReadInt32();
+        _useNativeMode = reader.ReadBoolean();
+
+        _visionClsToken = SerializationHelper<T>.DeserializeTensor(reader);
+        _visionPositionalEmbeddings = SerializationHelper<T>.DeserializeTensor(reader);
+        _queryTokens = SerializationHelper<T>.DeserializeTensor(reader);
+        _queryPositionalEmbeddings = SerializationHelper<T>.DeserializeTensor(reader);
+    }
 
     #endregion
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -20,6 +22,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly int _dimension;
         private readonly int _maxTokens;
         private readonly HttpClient _httpClient;
+        private readonly bool _ownsHttpClient;
         private bool _disposed;
 
         public override int EmbeddingDimension => _dimension;
@@ -38,9 +41,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             _apiKey = apiKey ?? string.Empty;
             _dimension = dimension;
             _maxTokens = maxTokens;
+            _ownsHttpClient = httpClient == null;
             _httpClient = httpClient ?? new HttpClient();
 
-            if (httpClient == null && !string.IsNullOrEmpty(_apiKey))
+            if (!string.IsNullOrEmpty(_apiKey) && _httpClient.DefaultRequestHeaders.Authorization == null)
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             }
@@ -48,11 +52,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         protected override Vector<T> EmbedCore(string text)
         {
-            return Task.Run(() => EmbedAsync(text)).GetAwaiter().GetResult();
+            return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        private async Task<Vector<T>> EmbedAsync(string text)
+        /// <summary>
+        /// Asynchronously generates an embedding for the specified text using HuggingFace Inference API.
+        /// </summary>
+        /// <param name="text">The text to encode.</param>
+        /// <returns>A task representing the async operation, with the resulting vector.</returns>
+        public override async Task<Vector<T>> EmbedAsync(string text)
         {
+            ValidateText(text);
             var endpoint = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{_modelName}";
             var requestBody = new { inputs = new[] { text } };
 
@@ -66,7 +76,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
 
             var responseJson = await response.Content.ReadAsStringAsync();
-            // HF Inference API usually returns double[][] for feature-extraction with batch input
             var result = JsonConvert.DeserializeObject<double[][]>(responseJson);
 
             if (result == null || result.Length == 0)
@@ -84,11 +93,63 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return new Vector<T>(values);
         }
 
+        /// <summary>
+        /// Asynchronously generates embeddings for the specified texts using HuggingFace Inference API.
+        /// </summary>
+        /// <param name="texts">The collection of texts to encode.</param>
+        /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+        public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            var textList = texts.ToList();
+            if (textList.Count == 0)
+                return new Matrix<T>(0, _dimension);
+
+            foreach (var text in textList)
+                ValidateText(text);
+
+            return await EmbedBatchCoreAsync(textList);
+        }
+
+        protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+        {
+            var endpoint = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{_modelName}";
+            var requestBody = new { inputs = texts };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync(endpoint, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException($"HuggingFace API request failed with status code {response.StatusCode}: {errorContent}");
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<double[][]>(responseJson);
+
+            if (result == null || result.Length != texts.Count)
+            {
+                throw new InvalidOperationException("HuggingFace API returned an empty or mismatched response.");
+            }
+
+            var matrix = new Matrix<T>(texts.Count, _dimension);
+            for (int i = 0; i < result.Length; i++)
+            {
+                var embedding = result[i];
+                for (int j = 0; j < embedding.Length; j++)
+                {
+                    matrix[i, j] = NumOps.FromDouble(embedding[j]);
+                }
+            }
+
+            return matrix;
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                if (disposing)
+                if (disposing && _ownsHttpClient)
                 {
                     _httpClient.Dispose();
                 }

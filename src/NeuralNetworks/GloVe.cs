@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is the size of the model's vocabulary. If this is 10,000, 
         /// the model has learned a unique coordinate for 10,000 different words.
         /// </remarks>
-        private readonly int _vocabSize;
+        private int _vocabSize;
 
         /// <summary>
         /// The number of dimensions in the learned word vector space.
@@ -55,16 +55,17 @@ namespace AiDotNet.NeuralNetworks
         /// More dimensions (like 300) allow the model to capture more subtle nuances in meaning 
         /// but make the model larger and slower.
         /// </remarks>
-        private readonly int _embeddingDimension;
+        private int _embeddingDimension;
 
         /// <summary>
         /// The tokenizer used to map text strings to numerical IDs.
         /// </summary>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is the translator that turns sentences into numbers the 
-        /// model can understand.
-        /// </remarks>
         private readonly ITokenizer? _tokenizer;
+
+        /// <summary>
+        /// Cached fallback tokenizer to avoid per-call creation.
+        /// </summary>
+        private ITokenizer? _fallbackTokenizer;
 
         /// <summary>
         /// The maximum number of tokens to process per input.
@@ -73,7 +74,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is the sentence length limit. It keeps the model efficient 
         /// by only looking at the first part of very long texts.
         /// </remarks>
-        private readonly int _maxTokens;
+        private int _maxTokens;
 
         /// <summary>
         /// The loss function used to evaluate training progress.
@@ -82,7 +83,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is the scorekeeper. It tells the model how close its guessed 
         /// word distances are to the actual counts from the library.
         /// </remarks>
-        private readonly ILossFunction<T> _lossFunction;
+        private ILossFunction<T> _lossFunction;
 
         /// <summary>
         /// The optimization algorithm used to refine the word vectors.
@@ -91,7 +92,7 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is the coach that tells the model exactly how to move its 
         /// word coordinates to improve its score.
         /// </remarks>
-        private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         #endregion
 
@@ -317,7 +318,7 @@ namespace AiDotNet.NeuralNetworks
             if (string.IsNullOrWhiteSpace(text))
                 return new Vector<T>(_embeddingDimension);
 
-            var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            var tokenizer = _tokenizer ?? (_fallbackTokenizer ??= Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT));
             var tokenResult = tokenizer.Encode(text);
             var tokenIds = tokenResult.TokenIds.Take(_maxTokens).ToList();
 
@@ -347,7 +348,13 @@ namespace AiDotNet.NeuralNetworks
                 meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(tokenIds.Count));
             }
 
-            return meanVector.Normalize();
+            return meanVector.SafeNormalize();
+        }
+
+        /// <inheritdoc/>
+        public Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
         }
 
         /// <summary>
@@ -361,18 +368,24 @@ namespace AiDotNet.NeuralNetworks
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
-            var result = new Matrix<T>(textList.Count, _embeddingDimension);
+            var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
 
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
                 for (int j = 0; j < _embeddingDimension; j++)
                 {
-                    result[i, j] = embedding[j];
+                    matrix[i, j] = embedding[j];
                 }
             }
 
-            return result;
+            return matrix;
+        }
+
+        /// <inheritdoc/>
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
         }
 
         /// <inheritdoc/>
@@ -381,7 +394,7 @@ namespace AiDotNet.NeuralNetworks
             return new GloVe<T>(
                 Architecture,
                 _tokenizer,
-                _optimizer,
+                null, // Fresh optimizer for new instance
                 _vocabSize,
                 _embeddingDimension,
                 _maxTokens,
@@ -421,9 +434,9 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
-            _ = reader.ReadInt32();
-            _ = reader.ReadInt32();
-            _ = reader.ReadInt32();
+            _vocabSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _maxTokens = reader.ReadInt32();
         }
 
         #endregion

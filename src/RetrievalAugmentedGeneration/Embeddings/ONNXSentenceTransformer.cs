@@ -138,32 +138,26 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return new Vector<T>(values);
         }
 
-                protected override void Dispose(bool disposing)
-
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
                 {
-
-                    if (!_disposed)
-
+                    _session?.Dispose();
+                    if (_tokenizer is IDisposable disposableTokenizer)
                     {
-
-                        if (disposing)
-
-                        {
-
-                            _session.Dispose();
-
-                        }
-
-                        _disposed = true;
-
+                        disposableTokenizer.Dispose();
                     }
-
-                    base.Dispose(disposing);
-
                 }
 
+                _disposed = true;
             }
 
+            base.Dispose(disposing);
         }
+    }
+}
+
 
         
