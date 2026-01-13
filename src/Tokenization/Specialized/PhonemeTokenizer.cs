@@ -13,7 +13,6 @@ namespace AiDotNet.Tokenization.Specialized
     /// </summary>
     public class PhonemeTokenizer : TokenizerBase
     {
-        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
         private readonly Dictionary<string, string> _g2pRules;
         private readonly PhonemeSet _phonemeSet;
 
@@ -47,7 +46,7 @@ namespace AiDotNet.Tokenization.Specialized
             var phonemes = new List<string>();
             // Regex matches word characters (\w+) or non-whitespace punctuation ([^\w\s])
             // Whitespace is never matched, so no IsNullOrWhiteSpace check needed
-            var words = Regex.Matches(text, @"(\w+|[^\w\s])", RegexOptions.None, RegexTimeout).Cast<Match>().Select(m => m.Value);
+            var words = RegexHelper.Matches(text, @"(\w+|[^\w\s])", RegexOptions.None).Cast<Match>().Select(m => m.Value);
 
             foreach (var word in words)
             {
@@ -153,3 +152,6 @@ namespace AiDotNet.Tokenization.Specialized
         }
     }
 }
+
+
+

@@ -63,7 +63,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </remarks>
 public class MultiStepReasoningRetriever<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly int _maxSteps;
@@ -342,7 +341,6 @@ Provide a brief 1-2 sentence summary of the key findings from these documents:";
 /// </remarks>
 public class ToolAugmentedReasoningRetriever<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly Dictionary<string, Func<string, string>> _tools;
@@ -554,12 +552,10 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
     private string ExtractSection(string text, string sectionName)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(
+        var match = RegexHelper.Match(
             text,
             $@"{sectionName}\s*(.+?)(?=\n[A-Z_]+:|$)",
-            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-            RegexTimeout
-        );
+            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
     }
@@ -616,3 +612,6 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
         }
     }
 }
+
+
+

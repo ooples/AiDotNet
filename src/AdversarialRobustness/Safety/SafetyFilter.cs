@@ -31,7 +31,6 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
 
     private SafetyFilterOptions<T> options;
     private readonly List<string> jailbreakPatterns;
@@ -288,7 +287,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         {
             try
             {
-                if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
+                if (RegexHelper.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexHelper.FastTimeout))
                 {
                     matchedPatterns++;
                     result.Indicators.Add(new JailbreakIndicator
@@ -353,7 +352,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             {
                 try
                 {
-                    if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
+                    if (RegexHelper.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexHelper.FastTimeout))
                     {
                         matchCount++;
                         result.Findings.Add(new HarmfulContentFinding
@@ -591,3 +590,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         return clone;
     }
 }
+
+
+
+

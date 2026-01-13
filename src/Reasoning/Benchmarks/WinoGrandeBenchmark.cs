@@ -93,7 +93,6 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class WinoGrandeBenchmark<T> : IBenchmark<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -351,7 +350,7 @@ Answer with A or B.",
 
         foreach (var pattern in patterns)
         {
-            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase, RegexTimeout);
+            var match = RegexHelper.Match(text, pattern, RegexOptions.IgnoreCase);
             if (match.Success)
             {
                 return match.Groups[1].Value.ToUpperInvariant();
@@ -359,7 +358,7 @@ Answer with A or B.",
         }
 
         // Any A or B in text
-        var anyMatch = Regex.Match(text, @"\b([AB])\b", RegexOptions.IgnoreCase, RegexTimeout);
+        var anyMatch = RegexHelper.Match(text, @"\b([AB])\b", RegexOptions.IgnoreCase);
         if (anyMatch.Success)
         {
             return anyMatch.Groups[1].Value.ToUpperInvariant();
@@ -368,3 +367,6 @@ Answer with A or B.",
         return null;
     }
 }
+
+
+

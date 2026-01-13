@@ -32,7 +32,6 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     #region Execution Mode
 
@@ -826,9 +825,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             // Create patterns that match category followed by YES/FLAGGED within the same line
             // This prevents false positives from unrelated YES/FLAGGED responses
             var categoryUpper = category.ToUpperInvariant().Replace("_", "[\\s_-]*");
-            var pattern = new Regex(
+            var pattern = RegexHelper.Create(
                 $@"{categoryUpper}[:\s\-]*\b(YES|FLAGGED)\b",
-                RegexOptions.IgnoreCase, RegexTimeout);
+                RegexOptions.IgnoreCase);
 
             bool flagged = pattern.IsMatch(response);
 
@@ -837,9 +836,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             if (flagged)
             {
                 // Look for confidence level after category
-                var confPattern = new Regex(
+                var confPattern = RegexHelper.Create(
                     $@"{categoryUpper}[^.]*\b(HIGH|MEDIUM|LOW)\b",
-                    RegexOptions.IgnoreCase, RegexTimeout);
+                    RegexOptions.IgnoreCase);
                 var confMatch = confPattern.Match(response);
                 if (confMatch.Success)
                 {
@@ -1911,3 +1910,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     #endregion
 
 }
+
+
+

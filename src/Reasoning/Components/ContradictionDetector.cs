@@ -44,7 +44,6 @@ namespace AiDotNet.Reasoning.Components;
 /// </remarks>
 internal class ContradictionDetector<T> : IContradictionDetector<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T> _chatModel;
 
     /// <summary>
@@ -181,8 +180,8 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
         // Check for contradictions: same subject with different values
         // Pattern 1: "X is Y" vs "X is Z" (where Y != Z)
         var isPattern = @"(\w+)\s+is\s+(\w+)";
-        var match1 = Regex.Match(lower1, isPattern, RegexOptions.None, RegexTimeout);
-        var match2 = Regex.Match(lower2, isPattern, RegexOptions.None, RegexTimeout);
+        var match1 = RegexHelper.Match(lower1, isPattern, RegexOptions.None);
+        var match2 = RegexHelper.Match(lower2, isPattern, RegexOptions.None);
         if (match1.Success && match2.Success &&
             match1.Groups[1].Value == match2.Groups[1].Value &&
             match1.Groups[2].Value != match2.Groups[2].Value)
@@ -192,8 +191,8 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
 
         // Pattern 2: "X is not Y" vs "X is Y" (explicit negation)
         var isNotPattern = @"(\w+)\s+is\s+not\s+(\w+)";
-        match1 = Regex.Match(lower1, isNotPattern, RegexOptions.None, RegexTimeout);
-        match2 = Regex.Match(lower2, isPattern, RegexOptions.None, RegexTimeout);
+        match1 = RegexHelper.Match(lower1, isNotPattern, RegexOptions.None);
+        match2 = RegexHelper.Match(lower2, isPattern, RegexOptions.None);
         if (match1.Success && match2.Success &&
             match1.Groups[1].Value == match2.Groups[1].Value &&
             match1.Groups[2].Value == match2.Groups[2].Value)
@@ -203,8 +202,8 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
 
         // Pattern 3: "X equals N" vs "X equals M" (where N != M)
         var equalsPattern = @"(\w+)\s+equals?\s+([0-9\.]+)";
-        match1 = Regex.Match(lower1, equalsPattern, RegexOptions.None, RegexTimeout);
-        match2 = Regex.Match(lower2, equalsPattern, RegexOptions.None, RegexTimeout);
+        match1 = RegexHelper.Match(lower1, equalsPattern, RegexOptions.None);
+        match2 = RegexHelper.Match(lower2, equalsPattern, RegexOptions.None);
         if (match1.Success && match2.Success &&
             match1.Groups[1].Value == match2.Groups[1].Value &&
             match1.Groups[2].Value != match2.Groups[2].Value)
@@ -214,8 +213,8 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
 
         // Pattern 4: "answer is N" vs "answer is M" (where N != M)
         var answerPattern = @"answer\s+is\s+([0-9\.]+)";
-        match1 = Regex.Match(lower1, answerPattern, RegexOptions.None, RegexTimeout);
-        match2 = Regex.Match(lower2, answerPattern, RegexOptions.None, RegexTimeout);
+        match1 = RegexHelper.Match(lower1, answerPattern, RegexOptions.None);
+        match2 = RegexHelper.Match(lower2, answerPattern, RegexOptions.None);
         if (match1.Success && match2.Success &&
             match1.Groups[1].Value != match2.Groups[1].Value)
         {
@@ -355,13 +354,13 @@ Analyze:";
     /// </summary>
     private string ExtractJsonFromResponse(string response)
     {
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
+        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -370,3 +369,6 @@ Analyze:";
         return response;
     }
 }
+
+
+

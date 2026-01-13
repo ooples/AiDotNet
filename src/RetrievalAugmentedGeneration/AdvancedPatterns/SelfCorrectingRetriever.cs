@@ -84,7 +84,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 public class SelfCorrectingRetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly int _maxIterations;
@@ -264,11 +263,10 @@ Provide a brief critique.";
 
         foreach (var pattern in patterns)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(
+            var match = RegexHelper.Match(
                 critique,
                 pattern,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                RegexTimeout);
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             if (match.Success)
             {
@@ -279,3 +277,6 @@ Provide a brief critique.";
         return string.Empty;
     }
 }
+
+
+

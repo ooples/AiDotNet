@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using System.Text.RegularExpressions;
 
 namespace AiDotNet.ModelLoading;
 
@@ -181,10 +182,9 @@ public class PretrainedModelLoader<T>
 
             foreach (var pattern in requiredTensorPatterns)
             {
-                var regex = new System.Text.RegularExpressions.Regex(
+                var regex = RegexHelper.Create(
                     pattern,
-                    System.Text.RegularExpressions.RegexOptions.None,
-                    TimeSpan.FromSeconds(1));
+                    RegexOptions.None);
                 var matches = tensorNames.Where(name => regex.IsMatch(name)).ToList();
 
                 if (matches.Count > 0)
@@ -333,3 +333,4 @@ public class ValidationResult
             : $"Invalid: Missing patterns: {string.Join(", ", MissingPatterns)}";
     }
 }
+

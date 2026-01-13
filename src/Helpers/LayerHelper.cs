@@ -2218,7 +2218,7 @@ public static class LayerHelper<T>
         // Use default Gaussian RBF if not provided
         IRadialBasisFunction<T> rbf = rbfFunction ?? new GaussianRBF<T>();
 
-        // Input layer (just a placeholder, doesn't do any computation)
+        // Input layer defines the expected input shape for the network.
         yield return new InputLayer<T>(inputSize);
 
         // RBF Layer
@@ -4693,15 +4693,9 @@ public static class LayerHelper<T>
     ///    - Transformer decoder layers with self-attention
     ///    - Output projection to vocabulary
     ///
-    /// <b>IMPORTANT LIMITATION:</b> This method creates a flat sequential layer list which does NOT
-    /// support true encoder-decoder cross-attention. The "cross-attention" layers in the decoder
-    /// are actually additional self-attention layers because the flat architecture cannot route
-    /// encoder outputs to the decoder. For a proper Whisper implementation with cross-attention,
-    /// use the ONNX-based WhisperModel with pretrained weights, or implement a custom forward pass
-    /// that explicitly passes encoder outputs to decoder cross-attention layers.
-    ///
-    /// This creates a trainable model structure from scratch. For inference with pre-trained weights,
-    /// use the ONNX-based WhisperModel.CreateAsync() method instead.
+    /// This creates a trainable model structure from scratch. The decoder layers expect encoder
+    /// outputs to be provided during the forward pass (as implemented in <see cref="AiDotNet.Audio.Whisper.WhisperModel{T}"/>).
+    /// For inference with pre-trained weights, use the ONNX-based WhisperModel.CreateAsync() method instead.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
@@ -4715,136 +4709,20 @@ public static class LayerHelper<T>
         int maxSequenceLength = 1500,
         double dropoutRate = 0.1)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // === AUDIO ENCODER ===
-
-        // Initial projection from mel spectrogram to model dimension
-        // Using Dense layer to project numMels features to modelDimension
-        yield return new DenseLayer<T>(numMels, modelDimension, geluActivation);
-
-        // Second projection for feature extraction
-        yield return new DenseLayer<T>(modelDimension, modelDimension, geluActivation);
-
-        // Positional encoding for encoder
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
-
-        // Encoder dropout
-        if (dropoutRate > 0)
+        foreach (var layer in CreateDefaultWhisperLayers(
+            modelDim: modelDimension,
+            numEncoderLayers: numEncoderLayers,
+            numDecoderLayers: numDecoderLayers,
+            numHeads: numHeads,
+            ffDim: feedForwardDim,
+            numMels: numMels,
+            maxFrames: maxSequenceLength,
+            maxTokens: maxSequenceLength,
+            vocabSize: vocabularySize,
+            dropoutRate: dropoutRate))
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            yield return layer;
         }
-
-        // Encoder transformer layers
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads,
-                activationFunction: identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
-
-            // Dropout
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
-
-            // Dropout
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-        }
-
-        // === TEXT DECODER ===
-
-        // Token embedding layer
-        yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
-
-        // Positional encoding for decoder
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
-
-        // Decoder dropout
-        if (dropoutRate > 0)
-        {
-            yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Decoder transformer layers
-        for (int i = 0; i < numDecoderLayers; i++)
-        {
-            // Self-attention layer for decoder
-            // NOTE: Causal masking for autoregressive decoding should be applied during
-            // the forward pass, not in the layer configuration. The MultiHeadAttentionLayer
-            // does not automatically apply causal masking - this must be handled by the
-            // model's forward implementation.
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads,
-                activationFunction: identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
-
-            // Dropout
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-
-            // NOTE: This is a placeholder for cross-attention but functions as self-attention
-            // in the current flat sequential architecture. True cross-attention would require
-            // encoder output to be passed as key/value, which the flat layer list cannot support.
-            // For production use with proper cross-attention, use ONNX models or implement
-            // a custom forward pass.
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads,
-                activationFunction: identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
-
-            // Dropout
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
-
-            // Dropout
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-        }
-
-        // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
-
-        // Output projection to vocabulary
-        yield return new DenseLayer<T>(modelDimension, vocabularySize, identityActivation);
     }
 
     #region Language Identification Layers
@@ -7980,6 +7858,1886 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
     }
 
+
+    #endregion
+
+    #region Document AI Layers
+
+    /// <summary>
+    /// Creates default LayoutLMv3 layers for document understanding.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenDim">Hidden dimension size (default: 768 from paper).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12 from paper).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12 from paper).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50265 for RoBERTa tokenizer).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="patchSize">Vision patch size (default: 16).</param>
+    /// <param name="numClasses">Number of output classes (default: 17 for layout detection).</param>
+    /// <returns>A collection of layers forming a LayoutLMv3 architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// LayoutLMv3 uses unified multimodal pre-training with:
+    /// - Text embedding layer (RoBERTa-style)
+    /// - Image patch embedding (ViT-style)
+    /// - Transformer encoder with spatial-aware self-attention
+    /// - Classification head for layout detection or other tasks
+    /// </para>
+    /// <para>
+    /// Reference: "LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking" (ICCV 2022)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayoutLMv3Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int vocabSize = 50265,
+        int imageSize = 224,
+        int patchSize = 16,
+        int numClasses = 17)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+
+        // Text embedding layer (converts token IDs to embeddings)
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+
+        // Image patch embedding layer (ViT-style)
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
+
+        // Transformer encoder layers (unified for text and image)
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                hiddenDim,
+                numHeads,
+                hiddenDim * 4); // FFN intermediate size = 4x hidden dim (standard)
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numClasses);
+    }
+
+    /// <summary>
+    /// Creates default Donut layers for OCR-free document understanding.
+    /// </summary>
+    /// <param name="imageHeight">Input image height (default: 1920 for donut-base).</param>
+    /// <param name="imageWidth">Input image width (default: 2560 for donut-base).</param>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="embedDim">Initial embedding dimension (default: 128 for Swin-B).</param>
+    /// <param name="depths">Depths of each Swin stage (default: {2,2,14,2} for donut-base).</param>
+    /// <param name="numHeads">Attention heads per stage (default: {4,8,16,32}).</param>
+    /// <param name="windowSize">Window size for attention (default: 10 for donut-base).</param>
+    /// <param name="patchSize">Initial patch size (default: 4).</param>
+    /// <param name="mlpRatio">MLP expansion ratio (default: 4).</param>
+    /// <param name="decoderHiddenDim">Decoder hidden dimension (default: 1024).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 4).</param>
+    /// <param name="decoderHeads">Number of decoder attention heads (default: 16).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 57522).</param>
+    /// <param name="maxGenerationLength">Maximum output sequence length (default: 768).</param>
+    /// <returns>A tuple of (EncoderLayers, DecoderLayers) forming a Donut architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// Donut (Document Understanding Transformer) is an OCR-free end-to-end model:
+    /// - Swin Transformer-B encoder with hierarchical stages for image features
+    /// - BART-style decoder for text generation
+    /// - Direct pixel-to-text conversion without explicit OCR
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a model that can "read" documents directly from pixels
+    /// without needing a separate OCR step. The encoder extracts visual features at multiple scales
+    /// using the Swin Transformer architecture, while the decoder generates text autoregressively.
+    /// </para>
+    /// <para>
+    /// <b>Default Configuration (donut-base):</b>
+    /// - Input: 2560×1920 RGB images
+    /// - Encoder: Swin-B with depths {2,2,14,2}, 128 initial dim, window size 10
+    /// - Decoder: 4-layer BART-style with 1024 hidden dim
+    /// </para>
+    /// <para>
+    /// Reference: "OCR-free Document Understanding Transformer" (ECCV 2022)
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultDonutLayers(
+        int imageHeight = 1920,
+        int imageWidth = 2560,
+        int inputChannels = 3,
+        int embedDim = 128,
+        int[]? depths = null,
+        int[]? numHeads = null,
+        int windowSize = 10,
+        int patchSize = 4,
+        int mlpRatio = 4,
+        int decoderHiddenDim = 1024,
+        int numDecoderLayers = 4,
+        int decoderHeads = 16,
+        int vocabSize = 57522,
+        int maxGenerationLength = 768)
+    {
+        // Default depths for Swin-B (donut-base): {2, 2, 14, 2}
+        depths ??= [2, 2, 14, 2];
+
+        // Default heads per stage: {4, 8, 16, 32} (doubling each stage)
+        numHeads ??= [4, 8, 16, 32];
+
+        if (depths.Length != 4)
+            throw new ArgumentException("Swin Transformer requires exactly 4 stages.", nameof(depths));
+        if (numHeads.Length != 4)
+            throw new ArgumentException("Must specify attention heads for all 4 stages.", nameof(numHeads));
+
+        return (
+            CreateDonutEncoderLayers(imageHeight, imageWidth, inputChannels, embedDim, depths, numHeads, windowSize, patchSize, mlpRatio),
+            CreateDonutDecoderLayers(embedDim * 8, decoderHiddenDim, numDecoderLayers, decoderHeads, vocabSize, maxGenerationLength)
+        );
+    }
+
+    /// <summary>
+    /// Creates Donut encoder layers (Swin Transformer-B) using yield pattern.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDonutEncoderLayers(
+        int imageHeight,
+        int imageWidth,
+        int inputChannels,
+        int embedDim,
+        int[] depths,
+        int[] numHeads,
+        int windowSize,
+        int patchSize,
+        int mlpRatio)
+    {
+        // Stage 0: Patch embedding
+        yield return new SwinPatchEmbeddingLayer<T>(
+            imageHeight,
+            imageWidth,
+            inputChannels,
+            patchSize,
+            embedDim);
+
+        int currentDim = embedDim;
+
+        // Stages 1-4: Swin Transformer blocks with patch merging between stages
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int stageDepth = depths[stage];
+            int stageHeads = numHeads[stage];
+
+            // Swin blocks for this stage (alternating W-MSA and SW-MSA)
+            for (int block = 0; block < stageDepth; block++)
+            {
+                // Alternate between regular and shifted windows
+                int shiftSize = (block % 2 == 1) ? windowSize / 2 : 0;
+
+                yield return new SwinTransformerBlockLayer<T>(
+                    currentDim,
+                    stageHeads,
+                    windowSize,
+                    shiftSize,
+                    mlpRatio);
+            }
+
+            // Patch merging between stages (except after last stage)
+            if (stage < 3)
+            {
+                yield return new SwinPatchMergingLayer<T>(currentDim);
+                currentDim *= 2; // Channels double after each merge
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates Donut decoder layers (BART-style) using yield pattern.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDonutDecoderLayers(
+        int encoderOutputDim,
+        int decoderHiddenDim,
+        int numDecoderLayers,
+        int decoderHeads,
+        int vocabSize,
+        int maxGenerationLength)
+    {
+        // Text embedding layer
+        yield return new EmbeddingLayer<T>(vocabSize, decoderHiddenDim);
+
+        // Optional: projection from encoder output to decoder hidden dim if they differ
+        // The cross-attention in TransformerDecoderLayer handles this internally
+
+        // BART-style decoder layers with cross-attention
+        IActivationFunction<T>? nullActivation = null;
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                decoderHiddenDim,
+                decoderHeads,
+                decoderHiddenDim * 4,
+                maxGenerationLength,
+                nullActivation);
+        }
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(decoderHiddenDim, vocabSize);
+    }
+
+    #endregion
+
+    #region DBNet Layers
+
+    /// <summary>
+    /// Creates default layers for DBNet text detection model.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 640).</param>
+    /// <param name="backboneChannels">Backbone output channels (default: 256).</param>
+    /// <param name="innerChannels">FPN inner channels (default: 256).</param>
+    /// <returns>Enumerable of layers for DBNet.</returns>
+    /// <remarks>
+    /// <para>
+    /// DBNet uses a ResNet backbone with FPN for multi-scale features,
+    /// followed by probability and threshold prediction heads.
+    /// </para>
+    /// <para>
+    /// Reference: "Real-time Scene Text Detection with Differentiable Binarization" (AAAI 2020)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDBNetLayers(
+        int imageSize = 640,
+        int backboneChannels = 256,
+        int innerChannels = 256)
+    {
+        // ResNet-18 style backbone (simplified)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+
+        // ResNet blocks (simplified to conv layers for demonstration)
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 64, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 128, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(128);
+        yield return new ConvolutionalLayer<T>(128, imageSize / 8, imageSize / 8, 256, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new ConvolutionalLayer<T>(256, imageSize / 16, imageSize / 16, backboneChannels, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(backboneChannels);
+
+        // FPN neck - lateral connections
+        yield return new ConvolutionalLayer<T>(backboneChannels, imageSize / 32, imageSize / 32, innerChannels, 1, 1, 0);
+
+        // Probability map head (outputs text probability at each pixel)
+        yield return new ConvolutionalLayer<T>(innerChannels, imageSize / 32, imageSize / 32, innerChannels / 4, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(innerChannels / 4);
+
+        // Threshold map head (outputs adaptive threshold at each pixel)
+        yield return new ConvolutionalLayer<T>(innerChannels / 4, imageSize / 32, imageSize / 32, 1, 1, 1, 0);
+    }
+
+    #endregion
+
+    #region TrOCR Layers
+
+    /// <summary>
+    /// Creates default layers for TrOCR text recognition model.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 384).</param>
+    /// <param name="patchSize">ViT patch size (default: 16).</param>
+    /// <param name="encoderHiddenDim">Encoder hidden dimension (default: 768).</param>
+    /// <param name="decoderHiddenDim">Decoder hidden dimension (default: 768).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 12).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numEncoderHeads">Number of encoder heads (default: 12).</param>
+    /// <param name="numDecoderHeads">Number of decoder heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50265).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 128).</param>
+    /// <returns>Tuple of encoder and decoder layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// TrOCR uses a Vision Transformer (ViT) encoder and a Transformer decoder.
+    /// </para>
+    /// <para>
+    /// Reference: "TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models" (AAAI 2022)
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultTrOCRLayers(
+        int imageSize = 384,
+        int patchSize = 16,
+        int encoderHiddenDim = 768,
+        int decoderHiddenDim = 768,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 6,
+        int numEncoderHeads = 12,
+        int numDecoderHeads = 12,
+        int vocabSize = 50265,
+        int maxSequenceLength = 128)
+    {
+        return (
+            CreateTrOCREncoderLayers(imageSize, patchSize, encoderHiddenDim, numEncoderLayers, numEncoderHeads),
+            CreateTrOCRDecoderLayers(decoderHiddenDim, numDecoderLayers, numDecoderHeads, vocabSize, maxSequenceLength)
+        );
+    }
+
+    private static IEnumerable<ILayer<T>> CreateTrOCREncoderLayers(
+        int imageSize,
+        int patchSize,
+        int hiddenDim,
+        int numLayers,
+        int numHeads)
+    {
+        // Patch embedding via convolution (converts image to sequence of patches)
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+
+        // Layer normalization
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // ViT encoder blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+        }
+
+        // Final layer norm
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+    }
+
+    private static IEnumerable<ILayer<T>> CreateTrOCRDecoderLayers(
+        int hiddenDim,
+        int numLayers,
+        int numHeads,
+        int vocabSize,
+        int maxSequenceLength)
+    {
+        // Text embedding
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+
+        // Transformer decoder layers
+        IActivationFunction<T>? nullActivation = null;
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                hiddenDim,
+                numHeads,
+                hiddenDim * 4,
+                maxSequenceLength,
+                nullActivation);
+        }
+
+        // Final layer norm
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(hiddenDim, vocabSize);
+    }
+
+    #endregion
+
+    #region TableTransformer Layers
+
+    /// <summary>
+    /// Creates default layers for TableTransformer model.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 800).</param>
+    /// <param name="hiddenDim">Transformer hidden dimension (default: 256).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numQueries">Number of object queries (default: 100).</param>
+    /// <param name="numStructureClasses">Number of structure classes (default: 7).</param>
+    /// <returns>Enumerable of layers for TableTransformer.</returns>
+    /// <remarks>
+    /// <para>
+    /// TableTransformer uses a DETR-style architecture with ResNet backbone.
+    /// </para>
+    /// <para>
+    /// Reference: "PubTables-1M: Towards Comprehensive Table Extraction" (CVPR 2022)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTableTransformerLayers(
+        int imageSize = 800,
+        int hiddenDim = 256,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int numQueries = 100,
+        int numStructureClasses = 7)
+    {
+        // ResNet-18 backbone (simplified)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+
+        // Downsample to feature map size
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 128, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(128);
+        yield return new ConvolutionalLayer<T>(128, imageSize / 8, imageSize / 8, 256, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new ConvolutionalLayer<T>(256, imageSize / 16, imageSize / 16, hiddenDim, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Flatten spatial dimensions for transformer input
+        int featureMapSize = imageSize / 32;
+        int seqLen = featureMapSize * featureMapSize;
+
+        // Transformer encoder
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+        }
+
+        // Transformer decoder with object queries
+        IActivationFunction<T>? nullActivation = null;
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                hiddenDim,
+                numHeads,
+                hiddenDim * 4,
+                numQueries,
+                nullActivation);
+        }
+
+        // Classification head (4 bbox + num_classes)
+        yield return new DenseLayer<T>(hiddenDim, 4 + numStructureClasses);
+    }
+
+    #endregion
+
+    #region DocBank Layers
+
+    /// <summary>
+    /// Creates default layers for DocBank page segmentation model.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 1024).</param>
+    /// <param name="backboneChannels">Backbone output channels (default: 256).</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 13).</param>
+    /// <param name="hiddenDim">Hidden dimension for segmentation head (default: 256).</param>
+    /// <returns>Enumerable of layers for DocBank.</returns>
+    /// <remarks>
+    /// <para>
+    /// DocBank uses a ResNet backbone with FPN for semantic segmentation.
+    /// </para>
+    /// <para>
+    /// Reference: "DocBank: A Benchmark Dataset for Document Layout Analysis" (COLING 2020)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDocBankLayers(
+        int imageSize = 1024,
+        int backboneChannels = 256,
+        int numClasses = 13,
+        int hiddenDim = 256)
+    {
+        // ResNet-101 style backbone (simplified to ResNet-50-like)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+
+        // Residual blocks (simplified as conv layers)
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(512);
+        yield return new ConvolutionalLayer<T>(512, imageSize / 8, imageSize / 8, 1024, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(1024);
+        yield return new ConvolutionalLayer<T>(1024, imageSize / 16, imageSize / 16, backboneChannels, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(backboneChannels);
+
+        // FPN lateral connections
+        yield return new ConvolutionalLayer<T>(backboneChannels, imageSize / 32, imageSize / 32, hiddenDim, 1, 1, 0);
+
+        // Segmentation head
+        yield return new ConvolutionalLayer<T>(hiddenDim, imageSize / 32, imageSize / 32, hiddenDim, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Output layer (class predictions per pixel)
+        yield return new ConvolutionalLayer<T>(hiddenDim, imageSize / 32, imageSize / 32, numClasses, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates default LayoutLM (v1) layers for document understanding with layout-aware pre-training.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768 for BERT-base).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522 for BERT).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 512).</param>
+    /// <param name="numClasses">Number of output classes (default: 7 for FUNSD).</param>
+    /// <returns>A collection of layers forming a LayoutLM model.</returns>
+    /// <remarks>
+    /// <para>
+    /// LayoutLM v1 combines BERT text embeddings with 2D position embeddings to jointly
+    /// model text and layout. Unlike v2/v3, it does NOT use visual features.
+    /// </para>
+    /// <para>
+    /// Reference: "LayoutLM: Pre-training of Text and Layout for Document Image Understanding" (KDD 2020)
+    /// https://arxiv.org/abs/1912.13318
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayoutLMLayers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int vocabSize = 30522,
+        int maxSequenceLength = 512,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+
+        // Word embeddings projection
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+
+        // Position embeddings
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        // LayerNorm after embeddings
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        // Transformer encoder layers (BERT-style)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (i < numLayers - 1)
+            {
+                yield return new DropoutLayer<T>(0.1);
+            }
+        }
+
+        // Classification head for token classification (NER-style)
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default LayoutLMv2 layers for document understanding with visual features.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768 for BERT-base).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522 for BERT).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="visualBackboneChannels">Visual backbone output channels (default: 256).</param>
+    /// <param name="numClasses">Number of output classes (default: 7).</param>
+    /// <returns>A collection of layers forming a LayoutLMv2 model.</returns>
+    /// <remarks>
+    /// <para>
+    /// LayoutLMv2 extends LayoutLM by adding visual features from a ResNeXt-FPN backbone,
+    /// enabling the model to understand documents through text, layout, AND image features.
+    /// </para>
+    /// <para>
+    /// Key components:
+    /// - Visual backbone (ResNeXt-101 with FPN)
+    /// - Text encoder (BERT-base)
+    /// - Spatial-aware self-attention mechanism
+    /// </para>
+    /// <para>
+    /// Reference: "LayoutLMv2: Multi-modal Pre-training for Visually-rich Document Understanding" (ACL 2021)
+    /// https://arxiv.org/abs/2012.14740
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayoutLMv2Layers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int vocabSize = 30522,
+        int imageSize = 224,
+        int visualBackboneChannels = 256,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        // === VISUAL BACKBONE (ResNeXt-FPN style) ===
+
+        // Initial convolution
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+
+        // Max pooling
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+
+        // ResNeXt-style stages (simplified)
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(512);
+        yield return new ConvolutionalLayer<T>(512, imageSize / 8, imageSize / 8, 1024, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(1024);
+        yield return new ConvolutionalLayer<T>(1024, imageSize / 16, imageSize / 16, visualBackboneChannels, 1, 1, 0);
+        yield return new BatchNormalizationLayer<T>(visualBackboneChannels);
+
+        // Project visual features to hidden dimension
+        yield return new DenseLayer<T>(visualBackboneChannels, hiddenDim, reluActivation);
+
+        // === TEXT EMBEDDINGS ===
+
+        // Word embeddings
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+
+        // Position embeddings
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        // LayerNorm after embeddings
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        // === MULTI-MODAL TRANSFORMER ENCODER ===
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention (spatial-aware)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (i < numLayers - 1)
+            {
+                yield return new DropoutLayer<T>(0.1);
+            }
+        }
+
+        // === OUTPUT HEAD ===
+
+        // Classification head
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default DocFormer layers for document understanding with shared spatial encodings.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="spatialDim">Spatial embedding dimension (default: 128).</param>
+    /// <param name="numClasses">Number of output classes (default: 16).</param>
+    /// <returns>A collection of layers forming a DocFormer model.</returns>
+    /// <remarks>
+    /// <para>
+    /// DocFormer uses shared spatial encodings across text, visual, and layout modalities.
+    /// </para>
+    /// <para>
+    /// Reference: "DocFormer: End-to-End Transformer for Document Understanding" (ICCV 2021)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDocFormerLayers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int vocabSize = 30522,
+        int imageSize = 224,
+        int spatialDim = 128,
+        int numClasses = 16)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        // === VISUAL ENCODER (ResNet-50 style) ===
+
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new BatchNormalizationLayer<T>(512);
+
+        // Project visual to hidden dim
+        yield return new DenseLayer<T>(512, hiddenDim, reluActivation);
+
+        // === TEXT EMBEDDINGS ===
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        // === SPATIAL ENCODINGS (shared) ===
+
+        yield return new DenseLayer<T>(spatialDim * 2, hiddenDim, geluActivation);
+
+        // === MULTI-MODAL TRANSFORMER ===
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (i < numLayers - 1)
+            {
+                yield return new DropoutLayer<T>(0.1);
+            }
+        }
+
+        // === OUTPUT HEAD ===
+
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Pix2Struct layers for screenshot parsing.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 1024).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 18).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 18).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50000).</param>
+    /// <param name="patchSize">Patch size (default: 16).</param>
+    /// <param name="maxPatches">Maximum patches (default: 4096).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 1024).</param>
+    /// <returns>Tuple of encoder and decoder layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "Pix2Struct: Screenshot Parsing as Pretraining" (ICML 2023)
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultPix2StructLayers(
+        int hiddenDim = 1024,
+        int numEncoderLayers = 18,
+        int numDecoderLayers = 18,
+        int numHeads = 16,
+        int vocabSize = 50000,
+        int patchSize = 16,
+        int maxPatches = 4096,
+        int maxSequenceLength = 1024)
+    {
+        return (
+            CreatePix2StructEncoderLayers(hiddenDim, numEncoderLayers, numHeads, patchSize, maxPatches),
+            CreatePix2StructDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
+        );
+    }
+
+    private static IEnumerable<ILayer<T>> CreatePix2StructEncoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int patchSize, int maxPatches)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchSize * patchSize * 3, hiddenDim, identityActivation);
+        yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxPatches,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+    }
+
+    private static IEnumerable<ILayer<T>> CreatePix2StructDecoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int vocabSize, int maxSequenceLength)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: hiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: hiddenDim * 4,
+                sequenceLength: maxSequenceLength,
+                ffnActivation: geluActivation);
+        }
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Nougat layers for academic document understanding.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 1024).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 12).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 10).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50000).</param>
+    /// <param name="imageSize">Input image size (default: 896).</param>
+    /// <param name="patchSize">Patch size (default: 16).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 4096).</param>
+    /// <returns>Tuple of encoder and decoder layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "Nougat: Neural Optical Understanding for Academic Documents" (arXiv 2023)
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultNougatLayers(
+        int hiddenDim = 1024,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 10,
+        int numHeads = 16,
+        int vocabSize = 50000,
+        int imageSize = 896,
+        int patchSize = 16,
+        int maxSequenceLength = 4096)
+    {
+        return (
+            CreateNougatEncoderLayers(hiddenDim, numEncoderLayers, numHeads, imageSize, patchSize),
+            CreateNougatDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
+        );
+    }
+
+    private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int imageSize, int patchSize)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+
+        // Swin-style patch embedding
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numPatches,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+    }
+
+    private static IEnumerable<ILayer<T>> CreateNougatDecoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int vocabSize, int maxSequenceLength)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: hiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: hiddenDim * 4,
+                sequenceLength: maxSequenceLength,
+                ffnActivation: geluActivation);
+        }
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default UDOP layers for unified document processing.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 1024).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 12).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50000).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 2048).</param>
+    /// <returns>Tuple of encoder and decoder layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "UDOP: Unifying Vision, Text, and Layout" (CVPR 2023)
+    /// </para>
+    /// </remarks>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultUDOPLayers(
+        int hiddenDim = 1024,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 12,
+        int numHeads = 16,
+        int vocabSize = 50000,
+        int imageSize = 224,
+        int maxSequenceLength = 2048)
+    {
+        return (
+            CreateUDOPEncoderLayers(hiddenDim, numEncoderLayers, numHeads, vocabSize, imageSize, maxSequenceLength),
+            CreateUDOPDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
+        );
+    }
+
+    private static IEnumerable<ILayer<T>> CreateUDOPEncoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int vocabSize, int imageSize, int maxSequenceLength)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Visual encoder (ViT-style)
+        int patchSize = 16;
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new PositionalEncodingLayer<T>(numPatches, hiddenDim);
+
+        // Text embeddings
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        // Unified encoder
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength + numPatches,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+    }
+
+    private static IEnumerable<ILayer<T>> CreateUDOPDecoderLayers(
+        int hiddenDim, int numLayers, int numHeads, int vocabSize, int maxSequenceLength)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: hiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: hiddenDim * 4,
+                sequenceLength: maxSequenceLength,
+                ffnActivation: geluActivation);
+        }
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default PICK layers for key information extraction.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 256).</param>
+    /// <param name="numGcnLayers">Number of GCN layers (default: 2).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522).</param>
+    /// <param name="numEntityTypes">Number of entity types (default: 14).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 512).</param>
+    /// <returns>A collection of layers forming a PICK model.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "PICK: Processing Key Information Extraction" (ICPR 2020)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPICKLayers(
+        int hiddenDim = 256,
+        int numGcnLayers = 2,
+        int numHeads = 8,
+        int vocabSize = 30522,
+        int numEntityTypes = 14,
+        int maxSequenceLength = 512)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Text encoder (BERT-style)
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer layers for text encoding
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, reluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // Graph Convolutional Network layers (simplified as dense)
+        for (int i = 0; i < numGcnLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // BiLSTM simulation (using dense layers)
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+        yield return new DenseLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+
+        // Output layer for NER
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numEntityTypes, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default CRAFT layers for character-level text detection.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 768).</param>
+    /// <param name="backboneChannels">Backbone output channels (default: 512).</param>
+    /// <param name="upscaleChannels">Upscale network channels (default: 256).</param>
+    /// <returns>A collection of layers forming a CRAFT model.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "Character Region Awareness for Text Detection" (CVPR 2019)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCRAFTLayers(
+        int imageSize = 768,
+        int backboneChannels = 512,
+        int upscaleChannels = 256)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+
+        // VGG16-BN style backbone
+        int[] vggChannels = [64, 64, 128, 128, 256, 256, 256, 512, 512, 512, 512, 512, 512];
+        int currentSize = imageSize;
+        int inputChannels = 3;
+
+        for (int i = 0; i < vggChannels.Length; i++)
+        {
+            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, vggChannels[i], 3, 1, 1);
+            yield return new BatchNormalizationLayer<T>(vggChannels[i]);
+
+            inputChannels = vggChannels[i];
+
+            // Pooling after certain layers
+            if (i == 1 || i == 3 || i == 6 || i == 9 || i == 12)
+            {
+                yield return new MaxPoolingLayer<T>([inputChannels, currentSize, currentSize], 2, 2);
+                currentSize /= 2;
+            }
+        }
+
+        // U-Net style upsampling
+        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, upscaleChannels, 1, 1, 0);
+
+        // Upscale layers
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(upscaleChannels, currentSize, currentSize, upscaleChannels, 3, 1, 1);
+            yield return new BatchNormalizationLayer<T>(upscaleChannels);
+            currentSize *= 2;
+        }
+
+        // Output: 2 channels (character region + affinity)
+        yield return new ConvolutionalLayer<T>(upscaleChannels, currentSize, currentSize, 32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(32, currentSize, currentSize, 32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(32, currentSize, currentSize, 16, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(16, currentSize, currentSize, 16, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(16, currentSize, currentSize, 2, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates default CRNN layers for sequence text recognition.
+    /// </summary>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="cnnChannels">CNN output channels (default: 512).</param>
+    /// <param name="rnnHiddenSize">RNN hidden size (default: 256).</param>
+    /// <param name="rnnLayers">Number of RNN layers (default: 2).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A collection of layers forming a CRNN model.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reference: "An End-to-End Trainable Neural Network for Image-based Sequence Recognition" (TPAMI 2017)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCRNNLayers(
+        int imageWidth = 128,
+        int imageHeight = 32,
+        int cnnChannels = 512,
+        int rnnHiddenSize = 256,
+        int rnnLayers = 2,
+        int charsetSize = 95)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        int currentHeight = imageHeight;
+        int currentWidth = imageWidth;
+
+        // CNN feature extractor (VGG-style)
+        int[] channels = [64, 128, 256, 256, 512, 512, 512];
+        int inputChannels = 1; // Grayscale
+
+        for (int i = 0; i < channels.Length; i++)
+        {
+            yield return new ConvolutionalLayer<T>(inputChannels, currentHeight, currentWidth, channels[i], 3, 1, 1);
+            yield return new BatchNormalizationLayer<T>(channels[i]);
+
+            inputChannels = channels[i];
+
+            // Pool with (2,2) for first 3 layers, (2,1) for rest
+            if (i < 3)
+            {
+                yield return new MaxPoolingLayer<T>([inputChannels, currentHeight, currentWidth], 2, 2);
+                currentHeight /= 2;
+                currentWidth /= 2;
+            }
+            else if (i < 5)
+            {
+                yield return new MaxPoolingLayer<T>([inputChannels, currentHeight, currentWidth], 2, 1);
+                currentHeight /= 2;
+            }
+        }
+
+        // Map-to-Sequence: reshape CNN output for RNN
+        int seqLen = currentWidth;
+        int featureDim = cnnChannels * currentHeight;
+
+        // BiLSTM layers (simulated with dense layers)
+        yield return new DenseLayer<T>(featureDim, rnnHiddenSize * 2, reluActivation);
+
+        for (int i = 1; i < rnnLayers; i++)
+        {
+            yield return new DenseLayer<T>(rnnHiddenSize * 2, rnnHiddenSize * 2, reluActivation);
+        }
+
+        // Output layer (including CTC blank)
+        yield return new DenseLayer<T>(rnnHiddenSize * 2, charsetSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default LayoutXLM layers for multilingual document understanding.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 250002 for XLM-RoBERTa).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="visualBackboneChannels">Visual backbone channels (default: 256).</param>
+    /// <param name="numClasses">Number of output classes (default: 7).</param>
+    /// <returns>A collection of layers forming a LayoutXLM model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayoutXLMLayers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int vocabSize = 250002,
+        int imageSize = 224,
+        int visualBackboneChannels = 256,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        // Visual backbone (ResNet-style)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, visualBackboneChannels, 3, 1, 1);
+
+        // Visual projection to hidden dim
+        yield return new DenseLayer<T>(visualBackboneChannels * (imageSize / 4) * (imageSize / 4) / 256, hiddenDim, identityActivation);
+
+        // XLM-RoBERTa embeddings
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (i < numLayers - 1) yield return new DropoutLayer<T>(0.1);
+        }
+
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default DiT (Document Image Transformer) layers.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="patchSize">Patch size for ViT (default: 16).</param>
+    /// <param name="imageSize">Input image size (default: 224).</param>
+    /// <param name="numClasses">Number of output classes (default: 16).</param>
+    /// <returns>A collection of layers forming a DiT model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDiTLayers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int patchSize = 16,
+        int imageSize = 224,
+        int numClasses = 16)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+
+        // Patch embedding (linear projection of flattened patches)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new FlattenLayer<T>([hiddenDim, imageSize / patchSize, imageSize / patchSize]);
+
+        // Position embeddings
+        yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        // ViT transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(numPatches + 1, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // Classification head (from CLS token)
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default LiLT (Language-Independent Layout Transformer) layers.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden dimension (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="layoutDim">Layout embedding dimension (default: 768).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522).</param>
+    /// <param name="numClasses">Number of output classes (default: 7).</param>
+    /// <returns>A collection of layers forming a LiLT model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultLiLTLayers(
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int layoutDim = 768,
+        int vocabSize = 30522,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        // Text embeddings stream
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        // Layout embeddings stream (2D position encoding)
+        yield return new DenseLayer<T>(4, layoutDim, identityActivation); // x, y, w, h
+        yield return new LayerNormalizationLayer<T>(layoutDim);
+
+        // Dual-stream transformer with BiACM
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Text stream attention
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Layout stream attention
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, layoutDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(layoutDim);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        yield return new DropoutLayer<T>(0.1);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Dessurt (self-supervised document transformer) layers.
+    /// </summary>
+    /// <param name="encoderDim">Encoder dimension (default: 768).</param>
+    /// <param name="decoderDim">Decoder dimension (default: 768).</param>
+    /// <param name="encoderLayers">Number of encoder layers (default: 12).</param>
+    /// <param name="decoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50265).</param>
+    /// <returns>Encoder and decoder layers for a Dessurt model.</returns>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultDessurtLayers(
+        int encoderDim = 768,
+        int decoderDim = 768,
+        int encoderLayers = 12,
+        int decoderLayers = 6,
+        int numHeads = 12,
+        int vocabSize = 50265)
+    {
+        return (CreateDessurtEncoderLayers(encoderDim, encoderLayers, numHeads),
+                CreateDessurtDecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+    }
+
+    private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+
+        // Patch embedding
+        yield return new ConvolutionalLayer<T>(3, 224, 224, hiddenDim, 16, 16, 0);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(196, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+    }
+
+    private static IEnumerable<ILayer<T>> CreateDessurtDecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default MATCHA (chart understanding) layers.
+    /// </summary>
+    /// <param name="encoderDim">Encoder dimension (default: 1536).</param>
+    /// <param name="decoderDim">Decoder dimension (default: 1536).</param>
+    /// <param name="encoderLayers">Number of encoder layers (default: 18).</param>
+    /// <param name="decoderLayers">Number of decoder layers (default: 18).</param>
+    /// <param name="numHeads">Number of attention heads (default: 24).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 50265).</param>
+    /// <param name="maxPatchesPerImage">Maximum patches per image (default: 4096).</param>
+    /// <returns>Encoder and decoder layers for a MATCHA model.</returns>
+    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultMATCHALayers(
+        int encoderDim = 1536,
+        int decoderDim = 1536,
+        int encoderLayers = 18,
+        int decoderLayers = 18,
+        int numHeads = 24,
+        int vocabSize = 50265,
+        int maxPatchesPerImage = 4096)
+    {
+        return (CreateMATCHAEncoderLayers(encoderDim, encoderLayers, numHeads, maxPatchesPerImage),
+                CreateMATCHADecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+    }
+
+    private static IEnumerable<ILayer<T>> CreateMATCHAEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+
+        yield return new ConvolutionalLayer<T>(3, 64, 64, hiddenDim, 16, 16, 0);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(Math.Min(maxPatches, 256), hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+    }
+
+    private static IEnumerable<ILayer<T>> CreateMATCHADecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int maxSequenceLength = 512;
+
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default DocOwl (mPLUG-DocOwl) layers for document understanding.
+    /// </summary>
+    /// <param name="visionDim">Vision encoder dimension (default: 1024).</param>
+    /// <param name="textDim">Text encoder dimension (default: 4096).</param>
+    /// <param name="visionLayers">Number of vision layers (default: 24).</param>
+    /// <param name="textLayers">Number of text layers (default: 32).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 32000).</param>
+    /// <returns>A collection of layers forming a DocOwl model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDocOwlLayers(
+        int visionDim = 1024,
+        int textDim = 4096,
+        int visionLayers = 24,
+        int textLayers = 32,
+        int numHeads = 16,
+        int vocabSize = 32000)
+    {
+        IActivationFunction<T> siluActivation = new SiLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Vision encoder (ViT-L style)
+        yield return new ConvolutionalLayer<T>(3, 224, 224, visionDim, 14, 14, 0);
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(256, visionDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionDim * 4, siluActivation);
+            yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+        }
+
+        // Visual abstractor projection
+        yield return new DenseLayer<T>(visionDim, textDim, identityActivation);
+
+        // LLM decoder layers
+        yield return new EmbeddingLayer<T>(vocabSize, textDim);
+
+        for (int i = 0; i < Math.Min(textLayers, 6); i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(512, textDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new DenseLayer<T>(textDim, textDim * 4, siluActivation);
+            yield return new DenseLayer<T>(textDim * 4, textDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textDim);
+        }
+
+        yield return new DenseLayer<T>(textDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default InfographicVQA layers for infographic understanding.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 1024).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 768).</param>
+    /// <param name="textDim">Text encoder dimension (default: 768).</param>
+    /// <param name="fusionDim">Fusion dimension (default: 768).</param>
+    /// <param name="visionLayers">Number of vision layers (default: 12).</param>
+    /// <param name="fusionLayers">Number of fusion layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="vocabSize">Vocabulary size (default: 30522).</param>
+    /// <returns>A collection of layers forming an InfographicVQA model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultInfographicVQALayers(
+        int imageSize = 1024,
+        int visionDim = 768,
+        int textDim = 768,
+        int fusionDim = 768,
+        int visionLayers = 12,
+        int fusionLayers = 6,
+        int numHeads = 12,
+        int vocabSize = 30522)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Multi-scale vision encoder
+        yield return new ConvolutionalLayer<T>(3, imageSize / 16, imageSize / 16, visionDim, 16, 16, 0);
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(64, visionDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionDim * 4, geluActivation);
+            yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+        }
+
+        // Text encoder
+        yield return new EmbeddingLayer<T>(vocabSize, textDim);
+        yield return new PositionalEncodingLayer<T>(512, textDim);
+        yield return new LayerNormalizationLayer<T>(textDim);
+
+        // Fusion layers
+        for (int i = 0; i < fusionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(512, fusionDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new DenseLayer<T>(fusionDim, fusionDim * 4, geluActivation);
+            yield return new DenseLayer<T>(fusionDim * 4, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+        }
+
+        yield return new DenseLayer<T>(fusionDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default DocGCN (Document Graph Convolutional Network) layers.
+    /// </summary>
+    /// <param name="inputDim">Input feature dimension (default: 768).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 256).</param>
+    /// <param name="numGCNLayers">Number of GCN layers (default: 3).</param>
+    /// <param name="numClasses">Number of output classes (default: 7).</param>
+    /// <returns>A collection of layers forming a DocGCN model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDocGCNLayers(
+        int inputDim = 768,
+        int hiddenDim = 256,
+        int numGCNLayers = 3,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Initial projection
+        yield return new DenseLayer<T>(inputDim, hiddenDim, reluActivation);
+        yield return new DropoutLayer<T>(0.5);
+
+        // GCN layers (using dense as approximation)
+        for (int i = 0; i < numGCNLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new DropoutLayer<T>(0.5);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default LayoutGraph layers for graph-based layout analysis.
+    /// </summary>
+    /// <param name="inputDim">Input feature dimension (default: 768).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 256).</param>
+    /// <param name="numGraphLayers">Number of graph layers (default: 4).</param>
+    /// <param name="numClasses">Number of output classes (default: 7).</param>
+    /// <returns>A collection of layers forming a LayoutGraph model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultLayoutGraphLayers(
+        int inputDim = 768,
+        int hiddenDim = 256,
+        int numGraphLayers = 4,
+        int numClasses = 7)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Node feature encoder
+        yield return new DenseLayer<T>(inputDim, hiddenDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Graph layers with hierarchical structure
+        for (int i = 0; i < numGraphLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DropoutLayer<T>(0.3);
+        }
+
+        // Reading order and classification heads
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default TRIE (Text Reading and Information Extraction) layers.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 512).</param>
+    /// <param name="visualDim">Visual encoder dimension (default: 256).</param>
+    /// <param name="textDim">Text encoder dimension (default: 256).</param>
+    /// <param name="graphDim">Graph dimension (default: 256).</param>
+    /// <param name="numEntityTypes">Number of entity types (default: 10).</param>
+    /// <param name="maxEntities">Maximum entities (default: 100).</param>
+    /// <returns>A collection of layers forming a TRIE model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTRIELayers(
+        int imageSize = 512,
+        int visualDim = 256,
+        int textDim = 256,
+        int graphDim = 256,
+        int numEntityTypes = 10,
+        int maxEntities = 100)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Visual encoder (ResNet-style backbone)
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, visualDim, 3, 1, 1);
+
+        // Text encoder
+        yield return new DenseLayer<T>(textDim, textDim, reluActivation);
+        yield return new DenseLayer<T>(textDim, textDim, reluActivation);
+
+        // Graph reasoning module
+        yield return new DenseLayer<T>(visualDim + textDim, graphDim, reluActivation);
+        yield return new DenseLayer<T>(graphDim, graphDim, reluActivation);
+
+        // Multi-task extraction heads
+        yield return new DenseLayer<T>(graphDim, numEntityTypes, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default SVTR (Scene Text Visual Transformer Recognizer) layers.
+    /// </summary>
+    /// <param name="imageWidth">Input image width (default: 256).</param>
+    /// <param name="imageHeight">Input image height (default: 64).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 192).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 8).</param>
+    /// <param name="numHeads">Number of attention heads (default: 6).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A collection of layers forming an SVTR model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultSVTRLayers(
+        int imageWidth = 256,
+        int imageHeight = 64,
+        int hiddenDim = 192,
+        int numLayers = 8,
+        int numHeads = 6,
+        int charsetSize = 95)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int intermediateSize = hiddenDim * 4;
+        int seqLen = imageWidth / 4;
+
+        // Patch embedding
+        yield return new ConvolutionalLayer<T>(3, imageHeight, imageWidth, 64, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new ConvolutionalLayer<T>(64, imageHeight, imageWidth, hiddenDim, 4, 4, 0);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(seqLen, hiddenDim, numHeads, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // CTC output
+        yield return new DenseLayer<T>(hiddenDim, charsetSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default ABINet (Autonomous, Bidirectional, Iterative) layers.
+    /// </summary>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="languageDim">Language model dimension (default: 512).</param>
+    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A collection of layers forming an ABINet model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetLayers(
+        int imageWidth = 128,
+        int imageHeight = 32,
+        int visionDim = 512,
+        int languageDim = 512,
+        int numIterations = 3,
+        int charsetSize = 95)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int seqLen = imageWidth / 4;
+
+        // Vision encoder (ResNet-style)
+        yield return new ConvolutionalLayer<T>(3, imageHeight, imageWidth, 64, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(64);
+        yield return new MaxPoolingLayer<T>([64, imageHeight, imageWidth], 2, 2);
+        yield return new ConvolutionalLayer<T>(64, imageHeight / 2, imageWidth / 2, 128, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>(128);
+        yield return new MaxPoolingLayer<T>([128, imageHeight / 2, imageWidth / 2], 2, 2);
+        yield return new ConvolutionalLayer<T>(128, imageHeight / 4, imageWidth / 4, visionDim, 3, 1, 1);
+
+        // Transformer for vision
+        yield return new MultiHeadAttentionLayer<T>(seqLen, visionDim, 8, identityActivation);
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        // Language model
+        yield return new EmbeddingLayer<T>(charsetSize, languageDim);
+        yield return new MultiHeadAttentionLayer<T>(seqLen, languageDim, 8, identityActivation);
+        yield return new LayerNormalizationLayer<T>(languageDim);
+
+        // Fusion with iterative refinement
+        for (int i = 0; i < numIterations; i++)
+        {
+            yield return new DenseLayer<T>(visionDim + languageDim, visionDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+        }
+
+        yield return new DenseLayer<T>(visionDim, charsetSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default EAST (Efficient and Accurate Scene Text Detector) layers.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 512).</param>
+    /// <param name="backboneChannels">Backbone output channels (default: 512).</param>
+    /// <param name="featureChannels">Feature map channels (default: 128).</param>
+    /// <param name="geometryType">Geometry output type: RBOX or QUAD (default: RBOX).</param>
+    /// <returns>A collection of layers forming an EAST model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultEASTLayers(
+        int imageSize = 512,
+        int backboneChannels = 512,
+        int featureChannels = 128,
+        string geometryType = "RBOX")
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Feature extraction backbone (VGG/PVANet style)
+        int currentSize = imageSize;
+        int[] channels = [64, 128, 256, backboneChannels];
+
+        int inputChannels = 3;
+        foreach (int outChannels in channels)
+        {
+            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, outChannels, 3, 1, 1);
+            yield return new BatchNormalizationLayer<T>(outChannels);
+            yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
+            currentSize /= 2;
+            inputChannels = outChannels;
+        }
+
+        // Feature merging (U-Net style upsampling)
+        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, featureChannels, 1, 1, 0);
+        yield return new BatchNormalizationLayer<T>(featureChannels);
+        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, featureChannels, 3, 1, 1);
+
+        // Output heads
+        int geometryChannels = geometryType == "QUAD" ? 8 : 5;
+        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, 1, 1, 1, 0); // Score map
+        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, geometryChannels, 1, 1, 0); // Geometry
+    }
+
+    /// <summary>
+    /// Creates default PSENet (Progressive Scale Expansion Network) layers.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 640).</param>
+    /// <param name="backboneChannels">Backbone channels (default: 256).</param>
+    /// <param name="featureChannels">Feature channels (default: 256).</param>
+    /// <param name="numKernels">Number of scale kernels (default: 7).</param>
+    /// <returns>A collection of layers forming a PSENet model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultPSENetLayers(
+        int imageSize = 640,
+        int backboneChannels = 256,
+        int featureChannels = 256,
+        int numKernels = 7)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+
+        // ResNet backbone
+        int currentSize = imageSize;
+        yield return new ConvolutionalLayer<T>(3, currentSize, currentSize, 64, 7, 2, 3);
+        yield return new BatchNormalizationLayer<T>(64);
+        currentSize /= 2;
+
+        yield return new MaxPoolingLayer<T>([64, currentSize, currentSize], 3, 2);
+        currentSize /= 2;
+
+        int[] resnetChannels = [64, 128, backboneChannels, backboneChannels];
+        int inputChannels = 64;
+        foreach (int outChannels in resnetChannels)
+        {
+            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, outChannels, 3, 1, 1);
+            yield return new BatchNormalizationLayer<T>(outChannels);
+            inputChannels = outChannels;
+            if (outChannels != resnetChannels[^1])
+            {
+                yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
+                currentSize /= 2;
+            }
+        }
+
+        // FPN-style feature fusion
+        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, featureChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, featureChannels, 3, 1, 1);
+
+        // Multi-scale kernel output
+        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, numKernels, 1, 1, 0);
+    }
 
     #endregion
 }

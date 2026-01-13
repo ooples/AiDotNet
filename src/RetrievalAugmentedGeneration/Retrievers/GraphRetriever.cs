@@ -53,7 +53,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </remarks>
 public class GraphRetriever<T> : RetrieverBase<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IDocumentStore<T> _documentStore;
     private readonly IEmbeddingModel<T> _embeddingModel;
     private readonly bool _enableAdvancedEntityExtraction;
@@ -256,7 +255,7 @@ public class GraphRetriever<T> : RetrieverBase<T>
         var entities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Extract capitalized phrases (proper nouns like "Albert Einstein", "New York")
-        var properNouns = Regex.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", RegexOptions.None, RegexTimeout);
+        var properNouns = RegexHelper.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", RegexOptions.None);
         foreach (Match match in properNouns)
         {
             if (match.Value.Length > 2) // Filter out single letters
@@ -264,7 +263,7 @@ public class GraphRetriever<T> : RetrieverBase<T>
         }
 
         // Extract quoted terms (explicit entities in quotes like "machine learning")
-        var quotedTerms = Regex.Matches(text, @"""([^""]{2,})""", RegexOptions.None, RegexTimeout);
+        var quotedTerms = RegexHelper.Matches(text, @"""([^""]{2,})""", RegexOptions.None);
         foreach (Match match in quotedTerms)
         {
             entities.Add(match.Groups[1].Value);
@@ -273,14 +272,14 @@ public class GraphRetriever<T> : RetrieverBase<T>
         // Extract numbers and years (like 1905, 2024)
         if (_enableAdvancedEntityExtraction)
         {
-            var numbers = Regex.Matches(text, @"\b(19|20)\d{2}\b", RegexOptions.None, RegexTimeout); // Years
+            var numbers = RegexHelper.Matches(text, @"\b(19|20)\d{2}\b", RegexOptions.None); // Years
             foreach (Match match in numbers)
             {
                 entities.Add(match.Value);
             }
 
             // Extract technical abbreviations (AI, ML, DNA, etc.)
-            var abbreviations = Regex.Matches(text, @"\b[A-Z]{2,5}\b", RegexOptions.None, RegexTimeout);
+            var abbreviations = RegexHelper.Matches(text, @"\b[A-Z]{2,5}\b", RegexOptions.None);
             foreach (Match match in abbreviations)
             {
                 if (match.Value.Length >= 2 && match.Value.Length <= 5)
@@ -291,3 +290,6 @@ public class GraphRetriever<T> : RetrieverBase<T>
         return entities.Where(e => e.Length > 1).Distinct().ToList();
     }
 }
+
+
+

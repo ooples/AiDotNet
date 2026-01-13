@@ -41,7 +41,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </remarks>
 public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly double _verificationThreshold;
@@ -278,12 +277,10 @@ Provide only the refined reasoning step:";
             var trimmed = line.Trim();
 
             // Match "Step N:" format
-            var match = System.Text.RegularExpressions.Regex.Match(
+            var match = RegexHelper.Match(
                 trimmed,
                 @"^Step\s+\d+\s*:\s*(.+)$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-                RegexTimeout
-            );
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             if (match.Success && match.Groups[1].Value.Length > 10)
             {
@@ -292,12 +289,10 @@ Provide only the refined reasoning step:";
             // Also match numbered lists
             else
             {
-                match = System.Text.RegularExpressions.Regex.Match(
+                match = RegexHelper.Match(
                     trimmed,
                     @"^\d+[\.\)]\s*(.+)$",
-                    System.Text.RegularExpressions.RegexOptions.None,
-                    RegexTimeout
-                );
+                    System.Text.RegularExpressions.RegexOptions.None);
 
                 if (match.Success && match.Groups[1].Value.Length > 10)
                 {
@@ -324,12 +319,10 @@ Provide only the refined reasoning step:";
         string feedback = response;
 
         // Try to extract score
-        var scoreMatch = System.Text.RegularExpressions.Regex.Match(
+        var scoreMatch = RegexHelper.Match(
             response,
             @"Score\s*:\s*([0-9]*\.?[0-9]+)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-            RegexTimeout
-        );
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double parsedScore))
         {
@@ -337,12 +330,10 @@ Provide only the refined reasoning step:";
         }
 
         // Try to extract feedback
-        var feedbackMatch = System.Text.RegularExpressions.Regex.Match(
+        var feedbackMatch = RegexHelper.Match(
             response,
             @"Feedback\s*:\s*(.+)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline,
-            RegexTimeout
-        );
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
 
         if (feedbackMatch.Success)
         {
@@ -352,3 +343,6 @@ Provide only the refined reasoning step:";
         return (score, feedback);
     }
 }
+
+
+

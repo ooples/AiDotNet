@@ -63,7 +63,6 @@ public class SubQueryExpansion : QueryExpansionBase
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
@@ -126,7 +125,7 @@ public class SubQueryExpansion : QueryExpansionBase
         var subQueries = new List<string>();
 
         // Split on common conjunctions and separators
-        var parts = Regex.Split(query, @"\s+(?:and|or|also|as well as|furthermore|moreover|additionally)\s+", RegexOptions.IgnoreCase, RegexTimeout)
+        var parts = RegexHelper.Split(query, @"\s+(?:and|or|also|as well as|furthermore|moreover|additionally)\s+", RegexOptions.IgnoreCase)
             .Concat(query.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
             .Select(p => p.Trim())
             .Where(p => p.Length > 10)
@@ -183,7 +182,7 @@ public class SubQueryExpansion : QueryExpansionBase
             "where", "who", "which"
         };
 
-        var words = Regex.Split(query.ToLower(), @"\W+", RegexOptions.None, RegexTimeout)
+        var words = RegexHelper.Split(query.ToLower(), @"\W+", RegexOptions.None)
             .Where(w => w.Length > 3 && !stopWords.Contains(w))
             .ToList();
 
@@ -206,4 +205,7 @@ public class SubQueryExpansion : QueryExpansionBase
         return concepts.Distinct().ToList();
     }
 }
+
+
+
 

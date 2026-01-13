@@ -14,7 +14,6 @@ namespace AiDotNet.Reasoning.Benchmarks.Data;
 /// </remarks>
 public class GSM8KDataLoader
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     public static Task<List<GSM8KProblem>> LoadFromFileAsync(string filePath)
     {
@@ -130,7 +129,7 @@ public class GSM8KDataLoader
         }
 
         // Fallback: try to extract last number
-        var numbers = System.Text.RegularExpressions.Regex.Matches(answer, @"-?\d+\.?\d*", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
+        var numbers = RegexHelper.Matches(answer, @"-?\d+\.?\d*", System.Text.RegularExpressions.RegexOptions.None);
         return numbers.Count > 0 ? numbers[numbers.Count - 1].Value : ""; // net462: can't use ^1
     }
 
@@ -149,3 +148,6 @@ public class GSM8KProblem
     public string FinalAnswer { get; set; } = "";
     public string[] Steps { get; set; } = Array.Empty<string>();
 }
+
+
+

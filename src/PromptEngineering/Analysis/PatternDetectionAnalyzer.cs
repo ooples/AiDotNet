@@ -39,7 +39,6 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
     /// <summary>
     /// Regex timeout to prevent ReDoS attacks.
     /// </summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Initializes a new instance of the PatternDetectionAnalyzer class.
@@ -102,7 +101,7 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
         {
             foreach (var pattern in kvp.Value)
             {
-                if (Regex.IsMatch(lowerPrompt, pattern, RegexOptions.None, RegexTimeout))
+                if (RegexHelper.IsMatch(lowerPrompt, pattern, RegexOptions.None))
                 {
                     patterns.Add(kvp.Key);
                     break;
@@ -117,14 +116,14 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
     private void DetectTechniques(string prompt, string lowerPrompt, List<string> patterns)
     {
         // Chain-of-thought
-        if (Regex.IsMatch(lowerPrompt, @"\b(step.?by.?step|let'?s think|thinking through|reasoning|think about)\b", RegexOptions.None, RegexTimeout) ||
-            Regex.IsMatch(lowerPrompt, @"\bfirst.*then.*finally\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(step.?by.?step|let'?s think|thinking through|reasoning|think about)\b", RegexOptions.None) ||
+            RegexHelper.IsMatch(lowerPrompt, @"\bfirst.*then.*finally\b", RegexOptions.None))
         {
             patterns.Add("chain-of-thought");
         }
 
         // Zero-shot chain-of-thought
-        if (Regex.IsMatch(lowerPrompt, @"\blet'?s\s+think\s+(about\s+this\s+)?step\s+by\s+step\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\blet'?s\s+think\s+(about\s+this\s+)?step\s+by\s+step\b", RegexOptions.None))
         {
             patterns.Add("zero-shot-cot");
         }
@@ -141,43 +140,43 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
         }
 
         // Role-playing / persona
-        if (Regex.IsMatch(lowerPrompt, @"\b(you are|act as|pretend|role|persona|imagine you're)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(you are|act as|pretend|role|persona|imagine you're)\b", RegexOptions.None))
         {
             patterns.Add("role-playing");
         }
 
         // System prompt indicators
-        if (Regex.IsMatch(lowerPrompt, @"\b(your (task|goal|role) is|you will|you should always|never|always respond)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(your (task|goal|role) is|you will|you should always|never|always respond)\b", RegexOptions.None))
         {
             patterns.Add("system-prompt");
         }
 
         // Self-consistency
-        if (Regex.IsMatch(lowerPrompt, @"\b(multiple (ways|approaches|solutions)|different perspectives?)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(multiple (ways|approaches|solutions)|different perspectives?)\b", RegexOptions.None))
         {
             patterns.Add("self-consistency");
         }
 
         // Reflexion / self-reflection
-        if (Regex.IsMatch(lowerPrompt, @"\b(reflect|self.?check|verify your|double.?check)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(reflect|self.?check|verify your|double.?check)\b", RegexOptions.None))
         {
             patterns.Add("reflexion");
         }
 
         // Tree of thoughts
-        if (Regex.IsMatch(lowerPrompt, @"\b(explore (multiple|different)|branch|evaluate paths?)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(explore (multiple|different)|branch|evaluate paths?)\b", RegexOptions.None))
         {
             patterns.Add("tree-of-thoughts");
         }
 
         // Prompt injection defense
-        if (Regex.IsMatch(lowerPrompt, @"\b(ignore (any )?instructions|user input|untrusted)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(ignore (any )?instructions|user input|untrusted)\b", RegexOptions.None))
         {
             patterns.Add("injection-defense");
         }
 
         // Meta-prompting
-        if (Regex.IsMatch(lowerPrompt, @"\b(generate a prompt|create a prompt|write a prompt)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(generate a prompt|create a prompt|write a prompt)\b", RegexOptions.None))
         {
             patterns.Add("meta-prompting");
         }
@@ -189,44 +188,44 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
     private static void DetectStructure(string prompt, List<string> patterns)
     {
         // Template detection
-        if (Regex.IsMatch(prompt, @"\{[^}]+\}", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"\{[^}]+\}", RegexOptions.None))
         {
             patterns.Add("template");
         }
 
         // Markdown structure
-        if (Regex.IsMatch(prompt, @"^#{1,6}\s", RegexOptions.Multiline, RegexTimeout) ||
-            Regex.IsMatch(prompt, @"^\s*[-*]\s", RegexOptions.Multiline, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"^#{1,6}\s", RegexOptions.Multiline) ||
+            RegexHelper.IsMatch(prompt, @"^\s*[-*]\s", RegexOptions.Multiline))
         {
             patterns.Add("markdown-structured");
         }
 
         // Numbered lists
-        if (Regex.IsMatch(prompt, @"^\s*\d+\.\s", RegexOptions.Multiline, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"^\s*\d+\.\s", RegexOptions.Multiline))
         {
             patterns.Add("numbered-list");
         }
 
         // XML/Tag structure
-        if (Regex.IsMatch(prompt, @"<[^>]+>.*?</[^>]+>", RegexOptions.Singleline, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"<[^>]+>.*?</[^>]+>", RegexOptions.Singleline))
         {
             patterns.Add("xml-structured");
         }
 
         // Code blocks
-        if (Regex.IsMatch(prompt, @"```[\s\S]*?```", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"```[\s\S]*?```", RegexOptions.None))
         {
             patterns.Add("contains-code");
         }
 
         // Multi-turn conversation
-        if (Regex.IsMatch(prompt, @"\b(user|human|assistant|system)\s*:", RegexOptions.IgnoreCase, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"\b(user|human|assistant|system)\s*:", RegexOptions.IgnoreCase))
         {
             patterns.Add("multi-turn");
         }
 
         // Delimiter-separated sections
-        if (Regex.IsMatch(prompt, @"---+|===+|\*\*\*+", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(prompt, @"---+|===+|\*\*\*+", RegexOptions.None))
         {
             patterns.Add("section-delimited");
         }
@@ -238,37 +237,37 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
     private static void DetectOutputFormats(string lowerPrompt, List<string> patterns)
     {
         // JSON output
-        if (Regex.IsMatch(lowerPrompt, @"\b(json|json format|output.*json|respond.*json)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(json|json format|output.*json|respond.*json)\b", RegexOptions.None))
         {
             patterns.Add("json-output");
         }
 
         // YAML output
-        if (Regex.IsMatch(lowerPrompt, @"\b(yaml|yml)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(yaml|yml)\b", RegexOptions.None))
         {
             patterns.Add("yaml-output");
         }
 
         // Structured data
-        if (Regex.IsMatch(lowerPrompt, @"\b(table|csv|structured|format.*as|output.*as)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(table|csv|structured|format.*as|output.*as)\b", RegexOptions.None))
         {
             patterns.Add("structured-output");
         }
 
         // Bullet points
-        if (Regex.IsMatch(lowerPrompt, @"\b(bullet|bullets|bullet point|bulleted)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(bullet|bullets|bullet point|bulleted)\b", RegexOptions.None))
         {
             patterns.Add("bullet-output");
         }
 
         // Brief/concise
-        if (Regex.IsMatch(lowerPrompt, @"\b(brief|concise|short|one.?liner|one sentence)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(brief|concise|short|one.?liner|one sentence)\b", RegexOptions.None))
         {
             patterns.Add("concise-output");
         }
 
         // Detailed
-        if (Regex.IsMatch(lowerPrompt, @"\b(detailed|comprehensive|thorough|in.?depth|elaborate)\b", RegexOptions.None, RegexTimeout))
+        if (RegexHelper.IsMatch(lowerPrompt, @"\b(detailed|comprehensive|thorough|in.?depth|elaborate)\b", RegexOptions.None))
         {
             patterns.Add("detailed-output");
         }
@@ -282,21 +281,24 @@ public class PatternDetectionAnalyzer : PromptAnalyzerBase
         var count = 0;
 
         // Explicit example markers
-        count += Regex.Matches(prompt, @"Example\s*\d*\s*:", RegexOptions.IgnoreCase, RegexTimeout).Count;
+        count += RegexHelper.Matches(prompt, @"Example\s*\d*\s*:", RegexOptions.IgnoreCase).Count;
 
         // Input/Output pairs
-        var inputOutputPairs = Regex.Matches(prompt, @"Input:\s*.*\s*Output:", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout).Count;
+        var inputOutputPairs = RegexHelper.Matches(prompt, @"Input:\s*.*\s*Output:", RegexOptions.IgnoreCase | RegexOptions.Singleline).Count;
         count += inputOutputPairs;
 
         // Q/A pairs
-        count += Regex.Matches(prompt, @"Q:\s*.*?\s*A:", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout).Count;
+        count += RegexHelper.Matches(prompt, @"Q:\s*.*?\s*A:", RegexOptions.IgnoreCase | RegexOptions.Singleline).Count;
 
         // Arrow patterns (common in few-shot)
-        count += Regex.Matches(prompt, @"[^\n]+\s*(?:->|=>|→)\s*[^\n]+", RegexOptions.None, RegexTimeout).Count;
+        count += RegexHelper.Matches(prompt, @"[^\n]+\s*(?:->|=>|→)\s*[^\n]+", RegexOptions.None).Count;
 
         // User/Assistant pairs
-        count += Regex.Matches(prompt, @"User:\s*.*?\s*Assistant:", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout).Count;
+        count += RegexHelper.Matches(prompt, @"User:\s*.*?\s*Assistant:", RegexOptions.IgnoreCase | RegexOptions.Singleline).Count;
 
         return count;
     }
 }
+
+
+

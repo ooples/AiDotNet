@@ -182,7 +182,7 @@ internal class AdaptiveComputeScaler
         difficulty += Math.Min(0.2, (questionMarks + steps) * 0.05); // Up to 0.2
 
         // Factor 4: Mathematical/technical complexity
-        bool hasMath = System.Text.RegularExpressions.Regex.IsMatch(problem, @"[+\-*/=<>∫∑∏√]", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
+        bool hasMath = RegexHelper.IsMatch(problem, @"[+\-*/=<>∫∑∏√]", System.Text.RegularExpressions.RegexOptions.None);
         bool hasCode = lower.Contains("function") || lower.Contains("algorithm") || lower.Contains("implement");
         bool hasLogic = lower.Contains("if") && lower.Contains("then");
 
@@ -220,3 +220,4 @@ internal class AdaptiveComputeScaler
             return "Tree-of-Thoughts";
     }
 }
+

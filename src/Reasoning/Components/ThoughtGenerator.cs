@@ -28,7 +28,6 @@ namespace AiDotNet.Reasoning.Components;
 /// </remarks>
 internal class ThoughtGenerator<T> : IThoughtGenerator<T>
 {
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T> _chatModel;
 
     /// <summary>
@@ -175,7 +174,7 @@ Generate exactly {numThoughts} diverse thoughts:";
         foreach (var line in lines)
         {
             // Match patterns like "1.", "1)", "•", "-", etc.
-            var match = Regex.Match(line, @"^[\s]*(?:\d+[\.\)]\s*|[•\-\*]\s*)(.+)$", RegexOptions.None, RegexTimeout);
+            var match = RegexHelper.Match(line, @"^[\s]*(?:\d+[\.\)]\s*|[•\-\*]\s*)(.+)$", RegexOptions.None);
             if (match.Success)
             {
                 string thought = match.Groups[1].Value.Trim();
@@ -195,14 +194,14 @@ Generate exactly {numThoughts} diverse thoughts:";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
+        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -211,3 +210,6 @@ Generate exactly {numThoughts} diverse thoughts:";
         return response;
     }
 }
+
+
+
