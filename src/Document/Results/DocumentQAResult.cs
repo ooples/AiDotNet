@@ -77,9 +77,9 @@ public class DocumentQAResult<T>
     /// <summary>
     /// Gets whether the model was able to find an answer.
     /// </summary>
-public bool HasAnswer =>
-    !string.IsNullOrWhiteSpace(Answer)
-    && !string.Equals(Answer, NoAnswerSentinel, StringComparison.OrdinalIgnoreCase);
+    public bool HasAnswer =>
+        !string.IsNullOrWhiteSpace(Answer)
+        && !string.Equals(Answer, NoAnswerSentinel, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets processing time in milliseconds.

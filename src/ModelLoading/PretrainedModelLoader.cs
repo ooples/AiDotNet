@@ -333,3 +333,4 @@ public class ValidationResult
             : $"Invalid: Missing patterns: {string.Join(", ", MissingPatterns)}";
     }
 }
+

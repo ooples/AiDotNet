@@ -70,7 +70,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region Properties
 
     /// <inheritdoc/>
-    public override DocumentType SupportedDocumentTypes => DocumentType.All;    
+    public override DocumentType SupportedDocumentTypes => DocumentType.All;
 
     /// <inheritdoc/>
     public override bool RequiresOCR => false; // CRNN is the OCR recognizer     
@@ -227,7 +227,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             Confidence = NumOps.FromDouble(confidence),
             ConfidenceValue = confidence,
             Characters = characters,
-            ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds  
+            ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }
 
@@ -250,7 +250,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return null; // CRNN doesn't use attention
     }
 
-    private (string text, double confidence, List<CharacterRecognition<T>> characters) CTCDecode(Tensor<T> output)        
+    private (string text, double confidence, List<CharacterRecognition<T>> characters) CTCDecode(Tensor<T> output)
     {
         var chars = new List<char>();
         var characterResults = new List<CharacterRecognition<T>>();
@@ -430,7 +430,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 indices[timeDim] = t;
                 indices[classDim] = c;
                 return NumOps.ToDouble(output[indices]);
-            });
+            }
+            );
         }
 
         throw new ArgumentException("CTC output must be a 2D or 3D tensor.", nameof(output));
