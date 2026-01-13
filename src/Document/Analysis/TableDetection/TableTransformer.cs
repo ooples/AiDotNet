@@ -6,8 +6,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Optimizers;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.Document.Analysis.TableDetection;

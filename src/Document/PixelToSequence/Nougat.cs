@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -11,7 +12,6 @@ using AiDotNet.Postprocessing.Document;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using System.Text.RegularExpressions;
 using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.Document.PixelToSequence;
@@ -268,7 +268,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             Confidence = NumOps.FromDouble(confidence),
             ConfidenceValue = confidence,
             Question = question,
-            ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds  
+            ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }
 
@@ -300,7 +300,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 Confidence = NumOps.FromDouble(confidence),
                 ConfidenceValue = confidence,
                 Question = field,
-                ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds  
+                ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
             };
         }
 
