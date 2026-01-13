@@ -208,7 +208,7 @@ jobs:
         if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
           BRANCH="${{ github.head_ref }}"
-          git push origin "$BRANCH" --force-with-lease
+          git push origin "HEAD:$BRANCH" --force-with-lease
 
       - name: Comment on PR
         if: steps.check-commits.outputs.needs_fix == 'true'
@@ -314,7 +314,7 @@ jobs:
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
         run: |
           BRANCH="${{ github.head_ref }}"
-          git push origin "$BRANCH" --force-with-lease
+          git push origin "HEAD:$BRANCH" --force-with-lease
 
       - name: Comment on PR
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
