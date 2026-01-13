@@ -95,6 +95,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </remarks>
 public class ChainOfThoughtRetriever<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly List<string> _fewShotExamples;
@@ -428,10 +429,10 @@ public class ChainOfThoughtRetriever<T>
         var normalized = query.ToLowerInvariant().Trim();
 
         // Remove extra whitespace
-        normalized = RegexHelper.Replace(normalized, @"\s+", " ", System.Text.RegularExpressions.RegexOptions.None);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
 
         // Remove punctuation except question marks
-        normalized = RegexHelper.Replace(normalized, @"[^\w\s\?]", "", System.Text.RegularExpressions.RegexOptions.None);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"[^\w\s\?]", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
 
         return normalized;
     }
@@ -473,7 +474,7 @@ public class ChainOfThoughtRetriever<T>
             if (trimmed.EndsWith("?") && trimmed.Length > 10)
             {
                 // Remove numbering like "1. ", "- ", etc.
-                var cleaned = RegexHelper.Replace(trimmed, @"^[\d\.\-\*\)\s]+", "", System.Text.RegularExpressions.RegexOptions.None).Trim();
+                var cleaned = System.Text.RegularExpressions.Regex.Replace(trimmed, @"^[\d\.\-\*\)\s]+", "", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
                 if (cleaned.Length > 10)
                 {
                     var normalized = NormalizeQuery(cleaned);
@@ -498,10 +499,12 @@ public class ChainOfThoughtRetriever<T>
 
                 foreach (var pattern in patterns)
                 {
-                    var match = RegexHelper.Match(
+                    var match = System.Text.RegularExpressions.Regex.Match(
                         trimmed,
                         pattern,
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                        RegexTimeout
+                    );
 
                     if (match.Success && match.Groups[1].Value.Length > 5)
                     {
@@ -549,6 +552,3 @@ public class ChainOfThoughtRetriever<T>
         return false;
     }
 }
-
-
-

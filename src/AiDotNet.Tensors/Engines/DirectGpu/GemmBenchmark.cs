@@ -132,7 +132,7 @@ public sealed class GemmBenchmark
         {
             var result = BenchmarkSingle(size, size, size);
             results.Add(result);
-            Trace.WriteLine(result);
+            Console.WriteLine(result);
         }
 
         // Neural network layer sizes (typical Dense layer dimensions)
@@ -150,7 +150,7 @@ public sealed class GemmBenchmark
         {
             var result = BenchmarkSingle(M, N, K);
             results.Add(result);
-            Trace.WriteLine(result);
+            Console.WriteLine(result);
         }
 
         return results.ToArray();
@@ -201,39 +201,39 @@ public sealed class GemmBenchmark
     /// </summary>
     public static void QuickTest()
     {
-        Trace.WriteLine("DirectGpu GEMM Quick Test");
-        Trace.WriteLine("=========================");
+        Console.WriteLine("DirectGpu GEMM Quick Test");
+        Console.WriteLine("=========================");
 
         using var engine = new DirectGpuEngine();
 
         if (!engine.IsAvailable)
         {
-            Trace.WriteLine("ERROR: DirectGpu not available.");
-            Trace.WriteLine("Make sure OpenCL is installed and a compatible GPU is present.");
+            Console.WriteLine("ERROR: DirectGpu not available.");
+            Console.WriteLine("Make sure OpenCL is installed and a compatible GPU is present.");
             return;
         }
 
-        Trace.WriteLine($"GPU: {engine.DeviceName}");
-        Trace.WriteLine($"Vendor: {engine.DeviceVendor}");
-        Trace.WriteLine($"Compute Units: {engine.ComputeUnits}");
-        Trace.WriteLine($"Global Memory: {engine.GlobalMemoryGB:F1} GB");
-        Trace.WriteLine("");
+        Console.WriteLine($"GPU: {engine.DeviceName}");
+        Console.WriteLine($"Vendor: {engine.DeviceVendor}");
+        Console.WriteLine($"Compute Units: {engine.ComputeUnits}");
+        Console.WriteLine($"Global Memory: {engine.GlobalMemoryGB:F1} GB");
+        Console.WriteLine();
 
         var benchmark = new GemmBenchmark(engine);
 
         // Quick test with 2048x2048
-        Trace.WriteLine("Running quick benchmark (2048x2048x2048)...");
+        Console.WriteLine("Running quick benchmark (2048x2048x2048)...");
         var result = benchmark.BenchmarkSingle(2048, 2048, 2048);
 
-        Trace.WriteLine("");
-        Trace.WriteLine($"Result: {result.GFlops:N0} GFLOPS ({result.TFlops:F2} TFLOPS)");
-        Trace.WriteLine($"Target: 25,000 GFLOPS (25.0 TFLOPS)");
-        Trace.WriteLine($"Status: {(result.MetTarget ? "TARGET MET!" : "Below target")}");
+        Console.WriteLine();
+        Console.WriteLine($"Result: {result.GFlops:N0} GFLOPS ({result.TFlops:F2} TFLOPS)");
+        Console.WriteLine($"Target: 25,000 GFLOPS (25.0 TFLOPS)");
+        Console.WriteLine($"Status: {(result.MetTarget ? "TARGET MET!" : "Below target")}");
 
         if (result.GFlops > 0)
         {
-            Trace.WriteLine("");
-            Trace.WriteLine($"vs CLBlast (2,500 GFLOPS): {result.GFlops / 2500:F1}x faster");
+            Console.WriteLine();
+            Console.WriteLine($"vs CLBlast (2,500 GFLOPS): {result.GFlops / 2500:F1}x faster");
         }
     }
 }

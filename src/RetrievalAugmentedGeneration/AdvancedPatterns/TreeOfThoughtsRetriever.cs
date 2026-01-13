@@ -352,10 +352,12 @@ Format your response as a numbered list:
             var trimmed = line.Trim();
 
             // Match numbered list items like "1. ", "1) ", "- ", etc.
-            var match = RegexHelper.Match(
+            var match = System.Text.RegularExpressions.Regex.Match(
                 trimmed,
                 @"^(?:\d+[\.\)]\s*|[-\*]\s*)(.+)$",
-                System.Text.RegularExpressions.RegexOptions.None);
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(1)
+            );
 
             if (match.Success && match.Groups[1].Value.Length > 10)
             {
@@ -397,4 +399,3 @@ Format your response as a numbered list:
         }
     }
 }
-

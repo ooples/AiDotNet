@@ -38,6 +38,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 public class StubGenerator<T> : IGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly int _maxContextTokens;
     private readonly int _maxGenerationTokens;
 
@@ -85,7 +86,7 @@ public class StubGenerator<T> : IGenerator<T>
         {
             // This is a multi-step reasoning prompt - generate a search query
             // Extract the original query if present
-            var queryMatch = RegexHelper.Match(prompt, @"Original Query:\s*(.+?)(\n|$)", RegexOptions.IgnoreCase);
+            var queryMatch = Regex.Match(prompt, @"Original Query:\s*(.+?)(\n|$)", RegexOptions.IgnoreCase, RegexTimeout);
             if (queryMatch.Success)
             {
                 var originalQuery = queryMatch.Groups[1].Value.Trim();
@@ -175,6 +176,3 @@ public class StubGenerator<T> : IGenerator<T>
         };
     }
 }
-
-
-

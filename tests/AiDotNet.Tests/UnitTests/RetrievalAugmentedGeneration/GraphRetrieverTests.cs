@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -38,6 +39,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 return new Vector<double>(embedding);
             }
 
+            public Task<Vector<double>> EmbedAsync(string text)
+            {
+                return Task.FromResult(Embed(text));
+            }
+
             public Matrix<double> EmbedBatch(IEnumerable<string> texts)
             {
                 var textList = texts.ToList();
@@ -51,6 +57,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     }
                 }
                 return new Matrix<double>(data);
+            }
+
+            public Task<Matrix<double>> EmbedBatchAsync(IEnumerable<string> texts)
+            {
+                return Task.FromResult(EmbedBatch(texts));
             }
         }
 

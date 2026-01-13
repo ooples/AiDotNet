@@ -9739,5 +9739,389 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, numKernels, 1, 1, 0);
     }
 
+    /// <summary>
+    /// Creates default layers for a Siamese neural network using a Transformer-based encoder.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors (default: 768).</param>
+    /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
+    /// <returns>A collection of layers forming a Siamese encoder.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A Siamese Network uses two identical "twin" networks to process different inputs.
+    /// This method sets up the structure for one of those twins, typically using a Transformer encoder
+    /// to turn text into a coordinate (embedding) that can be compared to others.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSiameseLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512)
+    {
+        if (vocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+        if (embeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
+        const int numHeads = 12;
+        if (embeddingDimension % numHeads != 0)
+            throw new ArgumentException($"embeddingDimension must be divisible by {numHeads}.", nameof(embeddingDimension));
+
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, 3072);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Word2Vec model (Skip-Gram or CBOW).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a Word2Vec model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Word2Vec learns to represent words as vectors of numbers (embeddings)
+    /// such that words with similar meanings are close to each other.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWord2VecLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize,
+        int embeddingDimension)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+        if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
+            throw new ArgumentException("architecture.OutputSize must match vocabSize for Word2Vec softmax output.", nameof(architecture));
+
+        // 1. Target word embeddings (U matrix)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // 2. Context word projection (V matrix)
+        // Maps embedding space back to vocabulary for prediction
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, (IActivationFunction<T>?)null);
+
+        // 3. Output activation
+        yield return new ActivationLayer<T>([vocabSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a GloVe (Global Vectors) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a GloVe model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence
+    /// statistics of words. It uses two sets of embeddings and two sets of biases.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> The layers returned by this method are <b>not</b> intended to be used as a sequential
+    /// feed-forward stack. They represent the four components (W, W_tilde, b, b_tilde) required for
+    /// the GloVe model's custom forward pass.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGloVeLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize,
+        int embeddingDimension)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+        if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+
+        // GloVe training is typically dot(W_i, W_tilde_j) + b_i + b_tilde_j = log(X_ij)
+        // To represent this sequentially for standard backprop:
+        // Input is a pair of indices (i, j).
+        // This is tricky for a strictly sequential ILayer stack.
+        // However, for inference/embedding lookup, we just need W and W_tilde.
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W_tilde
+        yield return new EmbeddingLayer<T>(vocabSize, 1); // b
+        yield return new EmbeddingLayer<T>(vocabSize, 1); // b_tilde
+    }
+
+    /// <summary>
+    /// Creates default layers for a FastText model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">The size of the vocabulary.</param>
+    /// <param name="bucketSize">The number of buckets for n-gram hashing.</param>
+    /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
+    /// <returns>A collection of layers forming a FastText model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FastText improves on Word2Vec by considering sub-word information
+    /// (character n-grams). It represents words as the sum of their n-gram embeddings.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize,
+        int bucketSize,
+        int embeddingDimension)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+        if (bucketSize < 1) throw new ArgumentOutOfRangeException(nameof(bucketSize));
+        if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
+            throw new ArgumentException("architecture.OutputSize must match vocabSize for FastText softmax output.", nameof(architecture));
+
+        // FastText architecture:
+        // 1. Word Embeddings
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // 2. N-gram Embeddings
+        yield return new EmbeddingLayer<T>(bucketSize, embeddingDimension);
+
+        // 3. Context word projection (similar to Word2Vec)
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, (IActivationFunction<T>?)null);
+
+        // 4. Output activation
+        yield return new ActivationLayer<T>([vocabSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a BLIP-2 neural network.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBlip2Layers(
+        int imageSize = 224,
+        int channels = 3,
+        int patchSize = 14,
+        int vocabularySize = 30522,
+        int embeddingDimension = 256,
+        int qformerHiddenDim = 768,
+        int visionHiddenDim = 1408,
+        int lmHiddenDim = 2560,
+        int numQformerLayers = 12,
+        int numHeads = 12,
+        int numLmDecoderLayers = 6,
+        int maxSequenceLength = 32)
+    {
+        // 1. Vision encoder: Patch embedding
+        yield return new PatchEmbeddingLayer<T>(
+            imageSize, imageSize, channels, patchSize, visionHiddenDim);
+
+        // 2. Q-Former layers (self-attention, cross-attention, feed-forward)
+        int feedForwardDim = qformerHiddenDim * 4;
+        for (int i = 0; i < numQformerLayers; i++)
+        {
+            // Self-attention for queries
+            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+
+            // Cross-attention from queries to vision features
+            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(qformerHiddenDim, qformerHiddenDim, (IActivationFunction<T>?)null);
+        }
+
+        // 3. Text embedding for Q-Former
+        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+
+        // 4. Projection heads
+        yield return new DenseLayer<T>(qformerHiddenDim, 2, (IActivationFunction<T>?)null); // ITM
+        yield return new DenseLayer<T>(qformerHiddenDim, embeddingDimension, (IActivationFunction<T>?)null); // ITC
+        yield return new DenseLayer<T>(qformerHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null); // LM Projection
+
+        // 5. LM Decoder layers
+        int lmFeedForwardDim = lmHiddenDim * 4;
+        int lmNumHeads = Math.Max(8, lmHiddenDim / 64);
+        var geluActivation = new GELUActivation<T>();
+        for (int i = 0; i < numLmDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: lmHiddenDim,
+                numHeads: lmNumHeads,
+                feedForwardDim: lmFeedForwardDim,
+                sequenceLength: maxSequenceLength,
+                ffnActivation: geluActivation);
+        }
+
+        // 6. LM Head
+        yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a SimCSE (Simple Contrastive Learning of Sentence Embeddings) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSimCSELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Embedding Layer
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+
+        // 2. Positional Encoding
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+
+        // 3. Transformer Encoder Layers (SimCSE uses standard BERT/RoBERTa stacks)
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 4. MLM Head (Optional, but often used in SimCSE training)
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a ColBERT (Contextualized Late Interaction over BERT) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 128, // ColBERT typically projects down to smaller dimension
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder (e.g. BERT)
+        yield return new EmbeddingLayer<T>(vocabSize, 768);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+        }
+
+        // 2. Projection Layer (maps to token-level late interaction embeddings)
+        yield return new DenseLayer<T>(768, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a SPLADE (Sparse Lexical and Expansion Model) embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSPLADELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 2. SPLADE Head (maps token representations back to vocabulary log-space)
+        yield return new DenseLayer<T>(embeddingDimension, vocabSize, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Matryoshka Representation Learning (MRL) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMRLLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int maxEmbeddingDimension = 1536,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, 768);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+        }
+
+        // 2. Final projection to max Matryoshka dimension
+        yield return new DenseLayer<T>(768, maxEmbeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for an Instructor/E5 (Instruction-Tuned) embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultInstructorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // 1. Base Encoder
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // 2. Instruction Pooling/Projection
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a BGE (BAAI General Embedding) model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBGELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // BGE is typically a BERT-style encoder with specialized multi-stage training
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // BGE often uses an additional normalization/projection head for retrieval
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+    }
+
+    /// <summary>
+    /// Creates default layers for an SGPT (Sentence GPT) decoder-only embedding model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 50257, // GPT-2 vocab size
+        int embeddingDimension = 768,
+        int maxSequenceLength = 1024,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        // SGPT uses a decoder-only architecture (e.g. GPT-2, GPT-Neo)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Note: In a real decoder, we would use TransformerDecoderLayer with causal masking
+            // For embedding extraction, a simple TransformerEncoderLayer is often used as a proxy
+            // if we aren't doing autoregressive generation.
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+
+        // SGPT uses the last token's representation
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+
     #endregion
 }

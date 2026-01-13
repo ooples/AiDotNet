@@ -72,6 +72,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class BoolQBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -301,20 +302,16 @@ Answer with Yes or No.",
 
         foreach (var pattern in yesPatterns)
         {
-            if (RegexHelper.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                 return true;
         }
 
         foreach (var pattern in noPatterns)
         {
-            if (RegexHelper.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                 return false;
         }
 
         return null;
     }
 }
-
-
-
-

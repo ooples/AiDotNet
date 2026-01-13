@@ -1,7 +1,3 @@
-using System;
-using System.Diagnostics;
-using AiDotNet.Tensors.Interfaces;
-
 namespace AiDotNet.Tensors.Engines;
 
 /// <summary>
@@ -120,18 +116,18 @@ public static class AiDotNetEngine
             if (gpuEngine.SupportsGpu)
             {
                 Current = gpuEngine;
-                Trace.WriteLine($"[AiDotNet] GPU acceleration enabled: {gpuEngine.Name}");
+                Console.WriteLine($"[AiDotNet] GPU acceleration enabled: {gpuEngine.Name}");
                 return true;
             }
 
             gpuEngine.Dispose();
-            Trace.WriteLine("[AiDotNet] GPU not available, using CPU");
+            Console.WriteLine("[AiDotNet] GPU not available, using CPU");
             return false;
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"[AiDotNet] Failed to initialize DirectGpu: {ex.Message}");
-            Trace.WriteLine("[AiDotNet] Falling back to CPU");
+            Console.WriteLine($"[AiDotNet] Failed to initialize DirectGpu: {ex.Message}");
+            Console.WriteLine("[AiDotNet] Falling back to CPU");
             return false;
         }
     }
@@ -147,7 +143,7 @@ public static class AiDotNetEngine
     public static void ResetToCpu()
     {
         Current = new CpuEngine();
-        Trace.WriteLine("[AiDotNet] Reset to CPU engine");
+        Console.WriteLine("[AiDotNet] Reset to CPU engine");
     }
 
     /// <summary>

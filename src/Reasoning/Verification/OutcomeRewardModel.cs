@@ -68,6 +68,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class OutcomeRewardModel<T> : IRewardModel<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T>? _chatModel;
     private readonly INumericOperations<T> _numOps;
     private readonly bool _useSemanticSimilarity;
@@ -262,11 +263,11 @@ internal class OutcomeRewardModel<T> : IRewardModel<T>
             return string.Empty;
 
         // Remove common prefixes
-        answer = RegexHelper.Replace(answer, @"^(the answer is|final answer:?|therefore,?|thus,?)\s*", "", RegexOptions.IgnoreCase);
+        answer = Regex.Replace(answer, @"^(the answer is|final answer:?|therefore,?|thus,?)\s*", "", RegexOptions.IgnoreCase, RegexTimeout);
 
         // Remove punctuation and extra spaces
-        answer = RegexHelper.Replace(answer, @"[^\w\s\d\.]", "", RegexOptions.None);
-        answer = RegexHelper.Replace(answer, @"\s+", " ", RegexOptions.None);
+        answer = Regex.Replace(answer, @"[^\w\s\d\.]", "", RegexOptions.None, RegexTimeout);
+        answer = Regex.Replace(answer, @"\s+", " ", RegexOptions.None, RegexTimeout);
 
         return answer.Trim();
     }
@@ -307,7 +308,7 @@ internal class OutcomeRewardModel<T> : IRewardModel<T>
     {
         var numbers = new List<double>();
 
-        var matches = RegexHelper.Matches(text, @"-?\d+\.?\d*", RegexOptions.None);
+        var matches = Regex.Matches(text, @"-?\d+\.?\d*", RegexOptions.None, RegexTimeout);
         foreach (Match match in matches)
         {
             if (double.TryParse(match.Value, out double number))
@@ -347,7 +348,7 @@ Respond with ONLY a number between 0.0 and 1.0, nothing else.";
             cancellationToken.ThrowIfCancellationRequested();
 
             // Extract number from response
-            var match = RegexHelper.Match(response, @"([0-1]\.?\d*)", RegexOptions.None);
+            var match = Regex.Match(response, @"([0-1]\.?\d*)", RegexOptions.None, RegexTimeout);
             if (match.Success && double.TryParse(match.Value, out double similarity))
             {
                 return MathHelper.Clamp(similarity, 0.0, 1.0);
@@ -361,6 +362,3 @@ Respond with ONLY a number between 0.0 and 1.0, nothing else.";
         return 0.0;
     }
 }
-
-
-

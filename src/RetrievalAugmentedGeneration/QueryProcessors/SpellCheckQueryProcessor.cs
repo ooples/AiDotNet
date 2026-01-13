@@ -23,6 +23,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// </remarks>
 public class SpellCheckQueryProcessor : QueryProcessorBase
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly Dictionary<string, string> _misspellingToCorrect;
     private readonly HashSet<string> _correctWords;
     private readonly int _maxEditDistance;
@@ -54,7 +55,7 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = RegexHelper.Split(query, @"(\s+)", RegexOptions.None);
+        var words = Regex.Split(query, @"(\s+)", RegexOptions.None, RegexTimeout);
         var correctedWords = new List<string>();
 
         foreach (var word in words)
@@ -66,8 +67,8 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
             }
 
             // Extract trailing punctuation
-            var punctuation = RegexHelper.Match(word, @"[^\w]+$", RegexOptions.None).Value;
-            var leadingPunctuation = RegexHelper.Match(word, @"^[^\w]+", RegexOptions.None).Value;
+            var punctuation = Regex.Match(word, @"[^\w]+$", RegexOptions.None, RegexTimeout).Value;
+            var leadingPunctuation = Regex.Match(word, @"^[^\w]+", RegexOptions.None, RegexTimeout).Value;
             var cleanWord = word.Trim(leadingPunctuation.ToCharArray()).Trim(punctuation.ToCharArray());
 
             if (string.IsNullOrEmpty(cleanWord))
@@ -221,6 +222,3 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         };
     }
 }
-
-
-

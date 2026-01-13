@@ -348,16 +348,5 @@ public static class TensorPrimitivesHelper<T>
         return NumOps.CosineSimilarity(aArray, bArray);
     }
 
-    /// <summary>
-    /// Checks if any element in the vector is NaN or Infinity.
-    /// </summary>
-    /// <param name="x">The source vector.</param>
-    /// <param name="badIndex">The index of the first non-finite value found, or -1 if all are finite.</param>
-    /// <returns>True if any element is non-finite, false otherwise.</returns>
-    public static bool IsAnyNonFinite(Vector<T> x, out int badIndex)
-    {
-        return NumOps.IsAnyNonFinite(x.AsSpan(), out badIndex);
-    }
-
     #endregion
 }

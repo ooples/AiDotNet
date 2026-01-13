@@ -1,5 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tokenization.Interfaces;
 
@@ -10,40 +15,17 @@ namespace AiDotNet.NeuralNetworks;
 /// and images into a shared embedding space, enabling cross-modal similarity and zero-shot classification.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
-/// <remarks>
-/// <para>
-/// CLIP is a multimodal neural network that learns to align text and image representations
-/// through contrastive learning on a large dataset of (image, text) pairs. This enables
-/// powerful zero-shot capabilities where the model can classify images using natural language
-/// descriptions without task-specific training.
-/// </para>
-/// <para><b>For Beginners:</b> CLIP is like a translator between images and text.
-///
-/// Imagine you want to search through millions of photos using text queries:
-/// - You type: "a sunset over the ocean"
-/// - CLIP converts this text into a numerical representation (embedding)
-/// - CLIP also converts each photo into a similar numerical representation
-/// - Photos whose embeddings are "close" to your query's embedding are good matches!
-///
-/// The magic is that CLIP learned to put similar concepts in similar positions:
-/// - "A photo of a dog" and (actual dog image) produce similar embeddings
-/// - "A photo of a cat" and (actual dog image) produce different embeddings
-///
-/// This enables:
-/// - Image search using natural language
-/// - Zero-shot image classification (classify images using any labels you provide)
-/// - Finding similar images
-/// - Multimodal retrieval systems
-/// </para>
-/// </remarks>
-public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>
+public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
-    private readonly string _imageEncoderPath;
-    private readonly string _textEncoderPath;
+    private string _imageEncoderPath;
+    private string _textEncoderPath;
     private readonly ITokenizer _tokenizer;
-    private readonly int _embeddingDimension;
-    private readonly int _maxSequenceLength;
-    private readonly int _imageSize;
+    private int _embeddingDimension;
+    private int _maxSequenceLength;
+    private int _imageSize;
+    private InferenceSession _imageSession;
+    private InferenceSession _textSession;
+    private bool _disposed;
 
     /// <summary>
     /// Gets the embedding dimension of the CLIP model.
@@ -87,82 +69,69 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         int imageSize = 224)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
-        // Validate image encoder path (null/empty check first)
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
-        {
             throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
-        }
-
-        // Validate text encoder path (null/empty check before file existence checks)
         if (string.IsNullOrWhiteSpace(textEncoderPath))
-        {
             throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
-        }
 
-        // Validate tokenizer
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
 
-        // Now check file existence for both paths
         if (!File.Exists(imageEncoderPath))
-        {
             throw new FileNotFoundException($"Image encoder model file not found: {imageEncoderPath}", imageEncoderPath);
-        }
         if (!File.Exists(textEncoderPath))
-        {
             throw new FileNotFoundException($"Text encoder model file not found: {textEncoderPath}", textEncoderPath);
-        }
 
-        // Store validated paths and parameters
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;
         _imageSize = imageSize;
 
+        using (var sessionOptions = new SessionOptions())
+        {
+            try
+            {
+                _imageSession = new InferenceSession(imageEncoderPath, sessionOptions);
+                try
+                {
+                    _textSession = new InferenceSession(textEncoderPath, sessionOptions);
+                }
+                catch
+                {
+                    _imageSession.Dispose();
+                    throw;
+                }
+            }
+            catch
+            {
+                throw;
+            }
+        }
+
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes the layers of the CLIP model.
-    /// </summary>
-    /// <remarks>
-    /// CLIP is typically used with pre-trained weights loaded from ONNX models.
-    /// This method initializes empty layers as placeholders.
-    /// </remarks>
     protected override void InitializeLayers()
     {
         ClearLayers();
-        // CLIP uses external ONNX models for encoding, so no internal layers are needed
     }
 
-    /// <summary>
-    /// Makes a prediction (generates embedding) for the input.
-    /// </summary>
-    /// <param name="input">The input tensor (image data in CHW format).</param>
-    /// <returns>The embedding tensor.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    public override AiDotNet.Tensors.LinearAlgebra.Tensor<T> Predict(AiDotNet.Tensors.LinearAlgebra.Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
-
-        // Convert tensor to double array for image embedding
         var imageData = new double[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
             imageData[i] = NumOps.ToDouble(input.Data[i]);
         }
 
-        // Generate image embedding
         var embedding = EncodeImage(imageData);
-
-        // Convert to tensor
-        var result = new Tensor<T>(new[] { 1, _embeddingDimension });
+        var result = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(new[] { 1, _embeddingDimension });
         for (int i = 0; i < _embeddingDimension; i++)
         {
             result[0, i] = embedding[i];
@@ -171,28 +140,16 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         return result;
     }
 
-    /// <summary>
-    /// Training is not supported for CLIP inference mode.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    public override void Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T> input, AiDotNet.Tensors.LinearAlgebra.Tensor<T> expectedOutput)
     {
-        throw new NotSupportedException(
-            "CLIP neural network in inference mode does not support training. " +
-            "Use pre-trained weights loaded from ONNX models.");
+        throw new NotSupportedException("CLIP neural network in inference mode does not support training.");
     }
 
-    /// <summary>
-    /// Updates the network's parameters.
-    /// </summary>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // CLIP uses external ONNX models, parameters are managed externally
         // No-op for inference mode
     }
 
-    /// <summary>
-    /// Gets the model metadata.
-    /// </summary>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -213,9 +170,6 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         };
     }
 
-    /// <summary>
-    /// Serializes CLIP-specific data.
-    /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_imageEncoderPath);
@@ -225,211 +179,24 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         writer.Write(_imageSize);
     }
 
-    /// <summary>
-    /// Deserializes CLIP-specific data.
-    /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        throw new NotSupportedException(
-            "CLIP neural network deserialization is not supported. " +
-            "Create a new instance with the appropriate configuration instead.");
+        _imageEncoderPath = reader.ReadString();
+        _textEncoderPath = reader.ReadString();
+        _embeddingDimension = reader.ReadInt32();
+        _maxSequenceLength = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+
+        // Re-initialize sessions with loaded paths
+        _imageSession.Dispose();
+        _textSession.Dispose();
+
+        var sessionOptions = new SessionOptions();
+        _imageSession = new InferenceSession(_imageEncoderPath, sessionOptions);
+        _textSession = new InferenceSession(_textEncoderPath, sessionOptions);
     }
 
-    /// <summary>
-    /// Encodes text into an embedding vector.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <returns>A normalized embedding vector representing the text.</returns>
-    public Vector<T> EncodeText(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            throw new ArgumentException("Text cannot be null or empty", nameof(text));
-        }
-
-        // Tokenize the text
-        var tokenResult = _tokenizer.Encode(text);
-
-        // Pad or truncate to max sequence length
-        var paddedTokens = PadOrTruncateTokens(tokenResult.TokenIds.ToArray(), _maxSequenceLength);
-
-        // Generate embedding using the text encoder
-        var embedding = GenerateTextEmbedding(paddedTokens);
-
-        // Normalize to unit length
-        return embedding.Normalize();
-    }
-
-    /// <summary>
-    /// Encodes multiple texts into embedding vectors in a batch.
-    /// </summary>
-    /// <param name="texts">The texts to encode.</param>
-    /// <returns>A matrix where each row is an embedding for the corresponding text.</returns>
-    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
-    {
-        if (texts == null)
-        {
-            throw new ArgumentNullException(nameof(texts));
-        }
-
-        var textList = texts.ToList();
-        if (textList.Count == 0)
-        {
-            return new Matrix<T>(0, _embeddingDimension);
-        }
-
-        var embeddings = new T[textList.Count, _embeddingDimension];
-
-        for (int i = 0; i < textList.Count; i++)
-        {
-            var embedding = EncodeText(textList[i]);
-            for (int j = 0; j < _embeddingDimension; j++)
-            {
-                embeddings[i, j] = embedding[j];
-            }
-        }
-
-        return new Matrix<T>(embeddings);
-    }
-
-    /// <summary>
-    /// Encodes an image into an embedding vector.
-    /// </summary>
-    /// <param name="imageData">The preprocessed image data as a flattened array in CHW format.</param>
-    /// <returns>A normalized embedding vector representing the image.</returns>
-    public Vector<T> EncodeImage(double[] imageData)
-    {
-        if (imageData == null || imageData.Length == 0)
-        {
-            throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
-        }
-
-        // Expected size: 3 * imageSize * imageSize (RGB image)
-        int expectedSize = 3 * _imageSize * _imageSize;
-        if (imageData.Length != expectedSize)
-        {
-            throw new ArgumentException(
-                $"Image data has {imageData.Length} elements but expected {expectedSize} " +
-                $"(3 channels x {_imageSize} x {_imageSize})", nameof(imageData));
-        }
-
-        // Generate embedding using the image encoder
-        var embedding = GenerateImageEmbedding(imageData);
-
-        // Normalize to unit length
-        return embedding.Normalize();
-    }
-
-    /// <summary>
-    /// Encodes multiple images into embedding vectors in a batch.
-    /// </summary>
-    /// <param name="imageDataBatch">The preprocessed images as flattened arrays.</param>
-    /// <returns>A matrix where each row is an embedding for the corresponding image.</returns>
-    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
-    {
-        if (imageDataBatch == null)
-        {
-            throw new ArgumentNullException(nameof(imageDataBatch));
-        }
-
-        var imageList = imageDataBatch.ToList();
-        if (imageList.Count == 0)
-        {
-            return new Matrix<T>(0, _embeddingDimension);
-        }
-
-        var embeddings = new T[imageList.Count, _embeddingDimension];
-
-        for (int i = 0; i < imageList.Count; i++)
-        {
-            var embedding = EncodeImage(imageList[i]);
-            for (int j = 0; j < _embeddingDimension; j++)
-            {
-                embeddings[i, j] = embedding[j];
-            }
-        }
-
-        return new Matrix<T>(embeddings);
-    }
-
-    /// <summary>
-    /// Computes the similarity between two embeddings using cosine similarity.
-    /// </summary>
-    /// <param name="embedding1">The first embedding.</param>
-    /// <param name="embedding2">The second embedding.</param>
-    /// <returns>Similarity score between -1 and 1 (for normalized vectors, equals dot product).</returns>
-    public T ComputeSimilarity(Vector<T> embedding1, Vector<T> embedding2)
-    {
-        if (embedding1 == null || embedding2 == null)
-        {
-            throw new ArgumentNullException(embedding1 == null ? nameof(embedding1) : nameof(embedding2));
-        }
-
-        if (embedding1.Length != embedding2.Length)
-        {
-            throw new ArgumentException(
-                $"Embeddings have different lengths: {embedding1.Length} vs {embedding2.Length}");
-        }
-
-        // For normalized vectors, cosine similarity equals dot product
-        return embedding1.DotProduct(embedding2);
-    }
-
-    /// <summary>
-    /// Performs zero-shot classification of an image against a set of text labels.
-    /// </summary>
-    /// <param name="imageData">The preprocessed image data.</param>
-    /// <param name="labels">The candidate class labels.</param>
-    /// <returns>A dictionary mapping each label to its probability score.</returns>
-    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
-    {
-        if (imageData == null || imageData.Length == 0)
-        {
-            throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
-        }
-
-        var labelList = labels?.ToList() ?? throw new ArgumentNullException(nameof(labels));
-        if (labelList.Count == 0)
-        {
-            throw new ArgumentException("Labels collection cannot be empty", nameof(labels));
-        }
-
-        // Encode the image
-        var imageEmbedding = EncodeImage(imageData);
-
-        // Encode text prompts for each label
-        var textEmbeddings = new List<Vector<T>>();
-        foreach (var label in labelList)
-        {
-            var prompt = $"a photo of a {label}";
-            textEmbeddings.Add(EncodeText(prompt));
-        }
-
-        // Compute similarities
-        var similarities = new double[labelList.Count];
-        for (int i = 0; i < labelList.Count; i++)
-        {
-            var sim = ComputeSimilarity(imageEmbedding, textEmbeddings[i]);
-            similarities[i] = NumOps.ToDouble(sim);
-        }
-
-        // Apply softmax to get probabilities
-        var probabilities = Softmax(similarities);
-
-        // Create result dictionary
-        var result = new Dictionary<string, T>();
-        for (int i = 0; i < labelList.Count; i++)
-        {
-            result[labelList[i]] = NumOps.FromDouble(probabilities[i]);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this network with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    protected override IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> CreateNewInstance()
     {
         return new ClipNeuralNetwork<T>(
             Architecture,
@@ -442,118 +209,231 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             _imageSize);
     }
 
-    /// <summary>
-    /// Generates a text embedding from tokenized input.
-    /// </summary>
-    private Vector<T> GenerateTextEmbedding(int[] tokens)
+    /// <inheritdoc/>
+    public Vector<T> EncodeText(string text)
     {
-        // Create a deterministic embedding based on token patterns
-        // This is a placeholder that should be replaced with actual ONNX inference
-        var values = new T[_embeddingDimension];
+        var tokens = _tokenizer.Encode(text).TokenIds.ToArray();
+        var attentionMask = new long[_maxSequenceLength];
+        for (int i = 0; i < Math.Min(tokens.Length, _maxSequenceLength); i++)
+            attentionMask[i] = 1;
 
-        // Use token values to generate consistent embeddings
-        long hash = ComputeTokenHash(tokens);
-
-        for (int i = 0; i < _embeddingDimension; i++)
-        {
-            // Generate values using trigonometric functions for smooth embeddings
-            var seed = (hash + i * 31) & 0x7FFFFFFF;
-            var val = Math.Sin((double)seed * 0.000001) * 0.5 + Math.Cos((double)(seed * 37) * 0.0000001) * 0.5;
-            values[i] = NumOps.FromDouble(val);
-        }
-
-        return new Vector<T>(values);
+        return GenerateTextEmbedding(PadOrTruncateTokens(tokens, _maxSequenceLength), attentionMask);
     }
 
-    /// <summary>
-    /// Generates an image embedding from preprocessed image data.
-    /// </summary>
-    private Vector<T> GenerateImageEmbedding(double[] imageData)
+    /// <inheritdoc/>
+    public Task<Vector<T>> EmbedAsync(string text)
     {
-        var values = new T[_embeddingDimension];
-
-        // Compute image statistics for deterministic embedding generation
-        double mean = 0;
-        double variance = 0;
-        for (int i = 0; i < imageData.Length; i++)
-        {
-            mean += imageData[i];
-        }
-        mean /= imageData.Length;
-
-        for (int i = 0; i < imageData.Length; i++)
-        {
-            variance += (imageData[i] - mean) * (imageData[i] - mean);
-        }
-        variance /= imageData.Length;
-
-        // Sample pixels at regular intervals for embedding generation
-        int stride = Math.Max(1, imageData.Length / _embeddingDimension);
-        for (int i = 0; i < _embeddingDimension; i++)
-        {
-            int idx = i * stride;
-            double pixelVal = idx < imageData.Length ? imageData[idx] : mean;
-
-            // Combine pixel value with statistics for richer embedding
-            var val = Math.Tanh(pixelVal * 2 - 1) * 0.5 +
-                      Math.Sin((mean + variance) * (i + 1) * 0.1) * 0.3 +
-                      Math.Cos(pixelVal * (i + 1) * 0.05) * 0.2;
-
-            values[i] = NumOps.FromDouble(val);
-        }
-
-        return new Vector<T>(values);
+        return Task.FromResult(EncodeText(text));
     }
 
-    /// <summary>
-    /// Pads or truncates token sequence to the specified length.
-    /// </summary>
-    private static int[] PadOrTruncateTokens(int[] tokens, int targetLength)
+    /// <inheritdoc/>
+    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
-        var result = new int[targetLength];
+        var textList = texts.ToList();
+        var result = new Matrix<T>(textList.Count, _embeddingDimension);
+        for (int i = 0; i < textList.Count; i++)
+        {
+            var emb = EncodeText(textList[i]);
+            for (int j = 0; j < _embeddingDimension; j++) result[i, j] = emb[j];
+        }
+        return result;
+    }
 
-        // Copy tokens (truncating if necessary)
-        int copyLength = Math.Min(tokens.Length, targetLength);
-        Array.Copy(tokens, result, copyLength);
+    /// <inheritdoc/>
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        return Task.FromResult(EncodeTextBatch(texts));
+    }
 
-        // Pad with zeros if necessary (zeros are padding tokens)
-        // Remaining elements are already initialized to 0
+
+    public Vector<T> EncodeImage(double[] imageData)
+    {
+        if (imageData == null || imageData.Length == 0)
+            throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
+
+        int expectedSize = 3 * _imageSize * _imageSize;
+        if (imageData.Length != expectedSize)
+            throw new ArgumentException($"Image data has {imageData.Length} elements but expected {expectedSize}", nameof(imageData));
+
+        var embedding = GenerateImageEmbedding(imageData);
+        return embedding.SafeNormalize();
+    }
+
+    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
+    {
+        if (imageDataBatch == null) throw new ArgumentNullException(nameof(imageDataBatch));
+        var imageList = imageDataBatch.ToList();
+        if (imageList.Count == 0) return new Matrix<T>(0, _embeddingDimension);
+
+        var embeddings = new T[imageList.Count, _embeddingDimension];
+        for (int i = 0; i < imageList.Count; i++)
+        {
+            var embedding = EncodeImage(imageList[i]);
+            for (int j = 0; j < _embeddingDimension; j++)
+                embeddings[i, j] = embedding[j];
+        }
+
+        return new Matrix<T>(embeddings);
+    }
+
+    public T ComputeSimilarity(Vector<T> embedding1, Vector<T> embedding2)
+    {
+        if (embedding1 == null || embedding2 == null)
+            throw new ArgumentNullException(embedding1 == null ? nameof(embedding1) : nameof(embedding2));
+
+        if (embedding1.Length != embedding2.Length)
+            throw new ArgumentException($"Embeddings have different lengths: {embedding1.Length} vs {embedding2.Length}");
+
+        return embedding1.DotProduct(embedding2);
+    }
+
+    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
+    {
+        if (imageData == null || imageData.Length == 0)
+            throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
+
+        var labelList = labels?.ToList() ?? throw new ArgumentNullException(nameof(labels));
+        if (labelList.Count == 0)
+            throw new ArgumentException("Labels collection cannot be empty", nameof(labels));
+
+        var imageEmbedding = EncodeImage(imageData);
+        var textEmbeddings = labelList.Select(l => EncodeText($"a photo of a {l}")).ToList();
+
+        var similarities = new double[labelList.Count];
+        for (int i = 0; i < labelList.Count; i++)
+        {
+            similarities[i] = NumOps.ToDouble(ComputeSimilarity(imageEmbedding, textEmbeddings[i]));
+        }
+
+        var probabilities = Softmax(similarities);
+        var result = new Dictionary<string, T>();
+        for (int i = 0; i < labelList.Count; i++)
+        {
+            result[labelList[i]] = NumOps.FromDouble(probabilities[i]);
+        }
 
         return result;
     }
 
-    /// <summary>
-    /// Computes a hash value from token array.
-    /// </summary>
-    private static long ComputeTokenHash(int[] tokens)
+    private Vector<T> GenerateTextEmbedding(int[] tokens, long[] attentionMask)
     {
-        unchecked
+        var inputIds = tokens.Select(t => (long)t).ToArray();
+        var shape = new[] { 1, _maxSequenceLength };
+
+        var inputs = new List<NamedOnnxValue>
         {
-            long hash = 17;
-            foreach (var token in tokens)
+            NamedOnnxValue.CreateFromTensor("input_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(inputIds, shape)),
+            NamedOnnxValue.CreateFromTensor("attention_mask", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(attentionMask, shape))
+        };
+
+        using var results = _textSession.Run(inputs);
+        var output = results.FirstOrDefault(r => 
+            r.Name == "text_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
+
+        if (output == null)
+            throw new InvalidOperationException("Could not find suitable output in text encoder model.");
+
+        var embedding = new T[_embeddingDimension];
+        if (output.Dimensions.Length == 3)
+        {
+            int dim = output.Dimensions[2];
+            if (dim < _embeddingDimension)
             {
-                hash = (hash * 31) + token;
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
             }
-            return hash;
+
+            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
+                embedding[i] = NumOps.FromDouble(output[0, 0, i]);
         }
+        else
+        {
+            int dim = output.Dimensions[1];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
+            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
+                embedding[i] = NumOps.FromDouble(output[0, i]);
+        }
+
+        return new Vector<T>(embedding);
     }
 
-    /// <summary>
-    /// Applies softmax to convert scores to probabilities.
-    /// </summary>
+    private Vector<T> GenerateImageEmbedding(double[] imageData)
+    {
+        var floatData = imageData.Select(d => (float)d).ToArray();
+        var shape = new[] { 1, 3, _imageSize, _imageSize };
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("pixel_values", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>(floatData, shape))
+        };
+
+        using var results = _imageSession.Run(inputs);
+        var output = results.FirstOrDefault(r => 
+            r.Name == "image_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
+
+        if (output == null)
+            throw new InvalidOperationException("Could not find suitable output in image encoder model.");
+
+        var embedding = new T[_embeddingDimension];
+        if (output.Dimensions.Length == 3)
+        {
+            int dim = output.Dimensions[2];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
+            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
+                embedding[i] = NumOps.FromDouble(output[0, 0, i]);
+        }
+        else
+        {
+            int dim = output.Dimensions[1];
+            if (dim < _embeddingDimension)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: ONNX model output dimension ({dim}) is smaller than configured EmbeddingDimension ({_embeddingDimension}). Remaining values will be zero.");
+            }
+
+            for (int i = 0; i < Math.Min(_embeddingDimension, dim); i++)
+                embedding[i] = NumOps.FromDouble(output[0, i]);
+        }
+
+        return new Vector<T>(embedding);
+    }
+
+    private static int[] PadOrTruncateTokens(int[] tokens, int targetLength)
+    {
+        var result = new int[targetLength];
+        Array.Copy(tokens, result, Math.Min(tokens.Length, targetLength));
+        return result;
+    }
+
     private static double[] Softmax(double[] scores)
     {
-        // Temperature scaling (100 is typical for CLIP)
         double temperature = 100.0;
-
-        // Find max for numerical stability
         double max = scores.Max();
-
-        // Compute exp with temperature scaling
         var expScores = scores.Select(s => Math.Exp((s - max) * temperature)).ToArray();
         double sumExp = expScores.Sum();
-
-        // Normalize
         return expScores.Select(e => e / sumExp).ToArray();
     }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _imageSession?.Dispose();
+                _textSession?.Dispose();
+            }
+
+            _disposed = true;
+        }
+
+        base.Dispose(disposing);
+    }
 }
+
+    

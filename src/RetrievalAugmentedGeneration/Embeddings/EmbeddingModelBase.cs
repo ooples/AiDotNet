@@ -22,7 +22,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
+public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
 {
     /// <summary>
     /// Gets the numeric operations for type T.
@@ -51,6 +51,17 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
     }
 
     /// <summary>
+    /// Asynchronously embeds a single text string into a vector representation.
+    /// </summary>
+    /// <param name="text">The text to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting vector.</returns>
+    public virtual Task<Vector<T>> EmbedAsync(string text)
+    {
+        ValidateText(text);
+        return Task.FromResult(EmbedCore(text));
+    }
+
+    /// <summary>
     /// Embeds multiple text strings into vector representations in a single batch operation.
     /// </summary>
     /// <param name="texts">The collection of texts to embed.</param>
@@ -70,6 +81,28 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
         }
 
         return EmbedBatchCore(textList);
+    }
+
+    /// <summary>
+    /// Asynchronously embeds multiple text strings into vector representations in a single batch operation.
+    /// </summary>
+    /// <param name="texts">The collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    public virtual async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
+
+        var textList = texts.ToList();
+        if (textList.Count == 0)
+            throw new ArgumentException("Text collection cannot be empty", nameof(texts));
+
+        foreach (var text in textList)
+        {
+            ValidateText(text);
+        }
+
+        return await EmbedBatchCoreAsync(textList);
     }
 
     /// <summary>
@@ -127,6 +160,22 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
     }
 
     /// <summary>
+    /// Asynchronous core batch embedding logic to be implemented by derived classes.
+    /// </summary>
+    /// <param name="texts">The validated collection of texts to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
+    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    {
+        var embeddings = new List<Vector<T>>();
+        foreach (var text in texts)
+        {
+            embeddings.Add(await EmbedAsync(text));
+        }
+
+        return CreateMatrixFromVectors(embeddings);
+    }
+
+    /// <summary>
     /// Validates the input text.
     /// </summary>
     /// <param name="text">The text to validate.</param>
@@ -171,5 +220,23 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
         }
 
         return new Matrix<T>(data);
+    }
+
+    /// <summary>
+    /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases unmanaged and - optionally - managed resources.
+    /// </summary>
+    /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        // Base implementation does nothing, intended for overrides
     }
 }

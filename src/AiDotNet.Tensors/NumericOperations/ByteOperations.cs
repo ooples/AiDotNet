@@ -671,26 +671,6 @@ public class ByteOperations : INumericOperations<byte>
     /// <returns>The value as a double.</returns>
     public double ToDouble(byte value) => (double)value;
 
-    /// <summary>
-    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
-    /// Byte values are always finite.
-    /// </summary>
-    public bool AllFinite(ReadOnlySpan<byte> x, out int badIndex)
-    {
-        badIndex = -1;
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if any element in the span is NaN or Infinity.
-    /// Byte values are always finite.
-    /// </summary>
-    public bool IsAnyNonFinite(ReadOnlySpan<byte> x, out int badIndex)
-    {
-        badIndex = -1;
-        return false;
-    }
-
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => false;
 

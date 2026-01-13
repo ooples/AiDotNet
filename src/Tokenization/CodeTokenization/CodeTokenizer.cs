@@ -14,6 +14,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
     /// </summary>
     public class CodeTokenizer : TokenizerBase
     {
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
         private readonly HashSet<string> _keywords;
         private readonly ITokenizer _baseTokenizer;
         private readonly bool _splitIdentifiers;
@@ -340,7 +341,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
                 \s+                             # Whitespace
             ";
 
-            var regex = RegexHelper.Create(pattern, RegexOptions.IgnorePatternWhitespace);
+            var regex = new Regex(pattern, RegexOptions.IgnorePatternWhitespace, RegexTimeout);
             var matches = regex.Matches(code);
 
             foreach (Match match in matches)
@@ -396,7 +397,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             // Handle camelCase and PascalCase
             var pattern = @"([A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b))";
-            var matches = RegexHelper.Matches(identifier, pattern, RegexOptions.None);
+            var matches = Regex.Matches(identifier, pattern, RegexOptions.None, RegexTimeout);
 
             if (matches.Count > 0)
             {
@@ -444,7 +445,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
                 \s+                             # Whitespace
             ";
 
-            var regex = RegexHelper.Create(pattern, RegexOptions.IgnorePatternWhitespace);
+            var regex = new Regex(pattern, RegexOptions.IgnorePatternWhitespace, RegexTimeout);
             var matches = regex.Matches(code);
 
             tokens.AddRange(matches.Cast<Match>()
@@ -460,7 +461,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
         /// </summary>
         private bool IsIdentifier(string token)
         {
-            return RegexHelper.IsMatch(token, @"^[a-zA-Z_][a-zA-Z0-9_]*$", RegexOptions.None);
+            return Regex.IsMatch(token, @"^[a-zA-Z_][a-zA-Z0-9_]*$", RegexOptions.None, RegexTimeout);
         }
 
         /// <summary>
@@ -479,7 +480,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             // Handle camelCase and PascalCase
             var pattern = @"([A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b))";
-            var matches = RegexHelper.Matches(identifier, pattern, RegexOptions.None);
+            var matches = Regex.Matches(identifier, pattern, RegexOptions.None, RegexTimeout);
 
             if (matches.Count > 0)
             {
@@ -502,6 +503,3 @@ namespace AiDotNet.Tokenization.CodeTokenization
         }
     }
 }
-
-
-

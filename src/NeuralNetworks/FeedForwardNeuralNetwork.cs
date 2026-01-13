@@ -345,34 +345,26 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // Write optimizer type
-        writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-
-        // Write loss function type
-        writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
+        // Serialize optimizer and loss function interfaces
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
     }
 
-    /// <summary>
-    /// Deserializes feed-forward neural network-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific parameters and state of the feed-forward neural network from a binary stream.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is like loading a saved network state from a file. It rebuilds the
-    /// network exactly as it was when you saved it, including all its learned information.
-    /// This allows you to use a previously trained model without having to train it again.
-    /// </para>
-    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read optimizer type
-        string optimizerType = reader.ReadString();
+        // Deserialize and restore optimizer
+        var optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
+        if (optimizer != null)
+        {
+            _optimizer = optimizer;
+        }
 
-        // Read loss function type
-        string lossFunctionType = reader.ReadString();
+        // Deserialize and restore loss function
+        var lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+        if (lossFunction != null)
+        {
+            _lossFunction = lossFunction;
+        }
     }
 
     /// <summary>

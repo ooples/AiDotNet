@@ -41,6 +41,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// </remarks>
 public class GraphQueryMatcher<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly KnowledgeGraph<T> _graph;
 
     /// <summary>
@@ -307,7 +308,7 @@ public class GraphQueryMatcher<T>
 
         // Simple regex-based pattern parser
         // Pattern: (SourceLabel {prop: "value"})-[RELATIONSHIP]->(TargetLabel {prop: "value"})
-        var regex = RegexHelper.Create(@"\((\w+)(?:\s*\{([^}]+)\})?\)-\[(\w+)\]->\((\w+)(?:\s*\{([^}]+)\})?\)", RegexOptions.None);
+        var regex = new Regex(@"\((\w+)(?:\s*\{([^}]+)\})?\)-\[(\w+)\]->\((\w+)(?:\s*\{([^}]+)\})?\)", RegexOptions.None, RegexTimeout);
         var match = regex.Match(pattern);
 
         if (!match.Success)
@@ -431,6 +432,3 @@ public class GraphPath<T>
         return $"({SourceNode.Label}:{SourceNode.Id})-[{Edge.RelationType}]->({TargetNode.Label}:{TargetNode.Id})";
     }
 }
-
-
-

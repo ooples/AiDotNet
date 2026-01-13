@@ -29,6 +29,7 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly HashSet<string> _stopWords;
     private readonly bool _preserveFirstWord;
@@ -51,7 +52,7 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = RegexHelper.Split(query, @"(\s+)", RegexOptions.None)
+        var words = Regex.Split(query, @"(\s+)", RegexOptions.None, RegexTimeout)
             .Where(w => !string.IsNullOrWhiteSpace(w) || w == " ")
             .ToList();
 
@@ -96,6 +97,3 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
         };
     }
 }
-
-
-

@@ -31,6 +31,7 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly HashSet<string> _stopWords;
     private readonly int _minWordLength;
@@ -53,7 +54,7 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = RegexHelper.Split(query.ToLowerInvariant(), @"\W+", RegexOptions.None)
+        var words = Regex.Split(query.ToLowerInvariant(), @"\W+", RegexOptions.None, RegexTimeout)
             .Where(w => !string.IsNullOrWhiteSpace(w))
             .Where(w => w.Length >= _minWordLength)
             .Where(w => !_stopWords.Contains(w))
@@ -76,6 +77,3 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
         };
     }
 }
-
-
-

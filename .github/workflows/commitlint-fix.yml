@@ -31,13 +31,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Checkout PR head branch
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          BRANCH="${{ github.head_ref }}"
-          git fetch origin "$BRANCH"
-          git checkout -B "$BRANCH" "origin/$BRANCH"
-
 
       - name: Get commits to check
         id: get-commits
@@ -162,7 +155,7 @@ jobs:
           fi
 
       - name: Apply fixes to commits
-        if: steps.check-commits.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
           BASE_BRANCH="${{ github.base_ref }}"
           COMMIT_COUNT=${{ steps.get-commits.outputs.commit_count }}
@@ -212,13 +205,13 @@ jobs:
           fi
 
       - name: Force push fixes
-        if: steps.check-commits.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-commits.outputs.needs_fix == 'true'
         run: |
           BRANCH="${{ github.head_ref }}"
           git push origin "HEAD:$BRANCH" --force-with-lease
 
       - name: Comment on PR
-        if: steps.check-commits.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-commits.outputs.needs_fix == 'true'
         uses: actions/github-script@v8
         with:
           script: |
@@ -259,13 +252,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Checkout PR head branch
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          BRANCH="${{ github.head_ref }}"
-          git fetch origin "$BRANCH"
-          git checkout -B "$BRANCH" "origin/$BRANCH"
-
 
       - name: Get dependabot commit
         id: get-commit
@@ -305,7 +291,7 @@ jobs:
           echo "needs_fix=$NEEDS_FIX" >> $GITHUB_OUTPUT
 
       - name: Fix dependabot commit
-        if: steps.check-needs-fix.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-needs-fix.outputs.needs_fix == 'true'
         run: |
           COMMIT_SHA="${{ steps.get-commit.outputs.commit_sha }}"
           NEW_SUBJECT="${{ steps.check-needs-fix.outputs.new_subject }}"
@@ -325,13 +311,13 @@ jobs:
           echo -e "$NEW_MSG" | git commit --amend --file=-
 
       - name: Force push fix
-        if: steps.check-needs-fix.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-needs-fix.outputs.needs_fix == 'true'
         run: |
           BRANCH="${{ github.head_ref }}"
           git push origin "HEAD:$BRANCH" --force-with-lease
 
       - name: Comment on PR
-        if: steps.check-needs-fix.outputs.needs_fix == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.check-needs-fix.outputs.needs_fix == 'true'
         uses: actions/github-script@v8
         with:
           script: |

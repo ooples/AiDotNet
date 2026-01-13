@@ -44,6 +44,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class HumanEvalBenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private readonly HumanEvalBenchmarkOptions _options;
     private List<BenchmarkProblem>? _cachedProblems;
@@ -326,7 +327,7 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
         }
 
         var normalizedCompletion = completion.Replace("\r\n", "\n").Trim();
-        if (RegexHelper.IsMatch(normalizedCompletion, @"(?m)^\s*def\s+\w+\s*\(", RegexOptions.None))
+        if (Regex.IsMatch(normalizedCompletion, @"(?m)^\s*def\s+\w+\s*\(", RegexOptions.None, RegexTimeout))
         {
             return normalizedCompletion;
         }
@@ -424,7 +425,7 @@ def separate_paren_groups(paren_string: str) -> List[str]:
             return null;
 
         // Extract from markdown code blocks
-        var match = RegexHelper.Match(text, @"```(?:python)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline);
+        var match = Regex.Match(text, @"```(?:python)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline, RegexTimeout);
         if (match.Success)
         {
             return match.Groups[1].Value.Trim();
@@ -469,6 +470,3 @@ public sealed class HumanEvalBenchmarkOptions
         };
     }
 }
-
-
-

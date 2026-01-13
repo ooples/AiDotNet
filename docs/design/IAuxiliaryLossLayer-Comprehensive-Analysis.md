@@ -265,14 +265,15 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
 ---
 
-#### 8. SiameseNetwork ✅ HIGH
-**File:** `src/NeuralNetworks/SiameseNetwork.cs`
-
+#### 8. SiameseNeuralNetwork ✅ HIGH
+**File:** `src/NeuralNetworks/SiameseNeuralNetwork.cs`
+**Purpose:** Similarity learning between two inputs using shared weights.
 **Auxiliary Loss:** Contrastive Loss / Triplet Loss
-
-**Formula:**
+**Implementation Details:**
+- Uses a dual-encoder architecture (e.g., Transformer or CNN).
 - Contrastive: `L = (1-Y) * 0.5 * D² + Y * 0.5 * max(0, margin - D)²`
-- Triplet: `L = max(0, D(anchor, positive) - D(anchor, negative) + margin)`
+- Triplet: `L = max(0, dist(a,p) - dist(a,n) + margin)`
+- Standardized to use the sequential `Layers` collection for performance optimization.
 
 ---
 

@@ -24,6 +24,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly ITokenizer _tokenizer;
 
     protected CodeSynthesisArchitecture<T> CodeArchitecture { get; }
@@ -1092,10 +1093,11 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 
         foreach (var (pattern, kind) in patterns)
         {
-            foreach (Match m in RegexHelper.Matches(
+            foreach (Match m in Regex.Matches(
                          text,
                          pattern,
-                         RegexOptions.Multiline | RegexOptions.CultureInvariant))
+                         RegexOptions.Multiline | RegexOptions.CultureInvariant,
+                         RegexTimeout))
             {
                 if (m.Groups.Count < 2)
                 {
@@ -1488,6 +1490,3 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
             .ToList();
     }
 }
-
-
-

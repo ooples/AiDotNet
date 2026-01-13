@@ -28,6 +28,7 @@ public class LemmatizationQueryProcessor : QueryProcessorBase
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly Dictionary<string, string> _lemmaMap;
 
@@ -45,7 +46,7 @@ public class LemmatizationQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = RegexHelper.Split(query, @"(\s+)", RegexOptions.None);
+        var words = Regex.Split(query, @"(\s+)", RegexOptions.None, RegexTimeout);
         var lemmatized = new List<string>();
 
         foreach (var word in words)
@@ -134,6 +135,3 @@ public class LemmatizationQueryProcessor : QueryProcessorBase
         };
     }
 }
-
-
-

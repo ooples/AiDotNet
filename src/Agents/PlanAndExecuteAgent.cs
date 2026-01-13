@@ -73,6 +73,7 @@ namespace AiDotNet.Agents;
 /// </remarks>
 public class PlanAndExecuteAgent<T> : AgentBase<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly bool _allowPlanRevision;
 
     /// <summary>
@@ -505,13 +506,13 @@ Final answer:";
     /// </summary>
     private string ExtractJsonFromResponse(string response)
     {
-        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
-        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -528,8 +529,8 @@ Final answer:";
         var plan = new Plan();
 
         // Try to find numbered steps
-        var stepMatches = RegexHelper.Matches(response, @"(?:Step\s*)?(\d+)[.:\)]\s*(.+?)(?=(?:Step\s*)?\d+[.:\)]|$)",
-            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline);
+        var stepMatches = Regex.Matches(response, @"(?:Step\s*)?(\d+)[.:\)]\s*(.+?)(?=(?:Step\s*)?\d+[.:\)]|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline, RegexTimeout);
 
         foreach (Match match in stepMatches)
         {
@@ -575,6 +576,3 @@ Final answer:";
         public string? Result { get; set; }
     }
 }
-
-
-

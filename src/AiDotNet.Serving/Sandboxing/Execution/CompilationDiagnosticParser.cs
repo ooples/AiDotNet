@@ -8,6 +8,7 @@ namespace AiDotNet.Serving.Sandboxing.Execution;
 
 public static class CompilationDiagnosticParser
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     public static List<CompilationDiagnostic> Parse(ProgramLanguage language, string compileOutput)
     {
@@ -287,9 +288,10 @@ public static class CompilationDiagnosticParser
     private static List<CompilationDiagnostic> ParseJavacText(string text)
     {
         var diagnostics = new List<CompilationDiagnostic>();
-        var regex = RegexHelper.Create(
+        var regex = new Regex(
             @"^(?<file>[^:\r\n]+):(?<line>\d+):\s*(?<severity>error|warning):\s*(?<message>.+)$",
-            RegexOptions.Multiline | RegexOptions.CultureInvariant);
+            RegexOptions.Multiline | RegexOptions.CultureInvariant,
+            RegexTimeout);
 
         foreach (Match match in regex.Matches(text))
         {
@@ -312,9 +314,10 @@ public static class CompilationDiagnosticParser
     {
         var diagnostics = new List<CompilationDiagnostic>();
 
-        var regex = RegexHelper.Create(
+        var regex = new Regex(
             @"^(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s*(?<severity>error|warning)\s*(?<code>[A-Z]{2}\d+):\s*(?<message>.+)$",
-            RegexOptions.Multiline | RegexOptions.CultureInvariant);
+            RegexOptions.Multiline | RegexOptions.CultureInvariant,
+            RegexTimeout);
 
         foreach (Match match in regex.Matches(text))
         {
@@ -353,6 +356,3 @@ public static class CompilationDiagnosticParser
         };
     }
 }
-
-
-

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -48,7 +51,7 @@ public enum EmbeddingInputMode
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.
@@ -275,6 +278,35 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> GetTokenEmbeddings(IReadOnlyList<int> tokenIds)
+    {
+        if (tokenIds is null)
+        {
+            throw new ArgumentNullException(nameof(tokenIds));
+        }
+
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
+        var result = new Matrix<T>(tokenIds.Count, embeddingDim);
+
+        for (int i = 0; i < tokenIds.Count; i++)
+        {
+            int tokenId = tokenIds[i];
+            if (tokenId < 0 || tokenId >= vocabSize)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tokenIds), $"Token id {tokenId} is out of range 0..{vocabSize - 1}.");
+            }
+
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                result[i, d] = _embeddingTensor[tokenId, d];
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

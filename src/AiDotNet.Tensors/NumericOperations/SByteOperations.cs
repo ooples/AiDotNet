@@ -738,26 +738,6 @@ public class SByteOperations : INumericOperations<sbyte>
     /// </summary>
     public double ToDouble(sbyte value) => (double)value;
 
-    /// <summary>
-    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
-    /// SByte values are always finite.
-    /// </summary>
-    public bool AllFinite(ReadOnlySpan<sbyte> x, out int badIndex)
-    {
-        badIndex = -1;
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if any element in the span is NaN or Infinity.
-    /// SByte values are always finite.
-    /// </summary>
-    public bool IsAnyNonFinite(ReadOnlySpan<sbyte> x, out int badIndex)
-    {
-        badIndex = -1;
-        return false;
-    }
-
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => false;
 

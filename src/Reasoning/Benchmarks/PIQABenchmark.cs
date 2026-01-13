@@ -90,6 +90,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public class PIQABenchmark<T> : IBenchmark<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private List<BenchmarkProblem>? _cachedProblems;
 
@@ -330,7 +331,7 @@ Solution 2: Make the thread thicker by doubling it over multiple times",
 
         foreach (var pattern in patterns)
         {
-            var match = RegexHelper.Match(text, pattern, RegexOptions.IgnoreCase);
+            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase, RegexTimeout);
             if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
             {
                 return num;
@@ -344,6 +345,3 @@ Solution 2: Make the thread thicker by doubling it over multiple times",
         return null;
     }
 }
-
-
-
