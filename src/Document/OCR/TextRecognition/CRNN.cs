@@ -60,11 +60,6 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     private Tensor<T>? _lastCharacterProbs;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _cnnLayersList = [];
-    private readonly List<ILayer<T>> _rnnLayersList = [];
-    private readonly List<ILayer<T>> _outputLayersList = [];
-
     #endregion
 
     #region Properties
@@ -623,8 +618,24 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
+        int expectedCount = ParameterCount;
+        if (gradients.Length != expectedCount)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedCount} gradients, but got {gradients.Length}",
+                nameof(gradients));
+        }
+
         var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
+        if (_optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
+            return;
+        }
+
+        var options = _optimizer?.GetOptions();
+        T lr = NumOps.FromDouble(options?.InitialLearningRate ?? 0.0001);
         for (int i = 0; i < currentParams.Length; i++)
             currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
         SetParameters(currentParams);

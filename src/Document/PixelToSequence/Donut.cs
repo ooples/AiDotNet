@@ -817,8 +817,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         if (_onnxEncoderSession is null)
             throw new InvalidOperationException("Encoder session not initialized.");
 
-        // Use OnnxModel wrapper or direct inference
-        return RunOnnxInference(input);
+        var inputs = BuildEncoderInputs(_onnxEncoderSession, input);
+        return RunOnnxSession(_onnxEncoderSession, inputs, preferredOutputNames: null);
     }
 
     private string GenerateText(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
@@ -855,8 +855,349 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
     private string GenerateTextOnnx(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
     {
-        // Similar to native but using ONNX decoder
-        return GenerateText(encoderOutput, prompt, maxLength);
+        if (_onnxDecoderSession is null)
+            throw new InvalidOperationException("Decoder session not initialized.");
+
+        if (maxLength < 0) maxLength = _maxGenerationLength;
+
+        var tokenResult = _tokenizer.Encode(prompt);
+        var generatedTokens = new List<int>(tokenResult.TokenIds);
+
+        const int eosTokenId = 2;
+
+        for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
+        {
+            var decoderOutput = RunDecoderOnnx(generatedTokens, encoderOutput);
+            int nextToken = GetNextToken(decoderOutput);
+
+            if (nextToken == eosTokenId)
+                break;
+
+            generatedTokens.Add(nextToken);
+        }
+
+        return _tokenizer.Decode(generatedTokens);
+    }
+
+    private Tensor<T> RunDecoderOnnx(IReadOnlyList<int> tokens, Tensor<T> encoderOutput)
+    {
+        if (_onnxDecoderSession is null)
+            throw new InvalidOperationException("Decoder session not initialized.");
+
+        var inputs = BuildDecoderInputs(_onnxDecoderSession, tokens, encoderOutput);
+        return RunOnnxSession(_onnxDecoderSession, inputs, ["logits", "output", "decoder"]);
+    }
+
+    private Dictionary<string, Tensor<T>> BuildEncoderInputs(InferenceSession session, Tensor<T> input)
+    {
+        if (session.InputMetadata.Count == 0)
+            throw new InvalidOperationException("ONNX encoder session has no inputs.");
+
+        var inputs = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        foreach (var entry in session.InputMetadata)
+        {
+            string name = entry.Key;
+            if (IsAttentionMaskInputName(name))
+            {
+                int[]? dims = GetDimensions(entry.Value);
+                inputs[name] = CreateAttentionMask(
+                    input.Rank >= 4 ? input.Shape[0] : 1,
+                    GetImageSequenceLength(input),
+                    dims,
+                    name);
+                continue;
+            }
+
+            if (session.InputMetadata.Count == 1 || IsEncoderInputName(name))
+            {
+                inputs[name] = input;
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Unrecognized encoder input '{name}'. Update Donut ONNX input mapping.");
+        }
+
+        return inputs;
+    }
+
+    private Dictionary<string, Tensor<T>> BuildDecoderInputs(
+        InferenceSession session,
+        IReadOnlyList<int> tokens,
+        Tensor<T> encoderOutput)
+    {
+        if (session.InputMetadata.Count == 0)
+            throw new InvalidOperationException("ONNX decoder session has no inputs.");
+
+        var inputs = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        Tensor<T>? tokenTensor = null;
+        Tensor<T>? decoderEmbeddings = null;
+        Tensor<T>? decoderMask = null;
+        Tensor<T>? encoderMask = null;
+
+        foreach (var entry in session.InputMetadata)
+        {
+            string name = entry.Key;
+            var metadata = entry.Value;
+
+            if (IsAttentionMaskInputName(name))
+            {
+                int[]? dims = GetDimensions(metadata);
+                if (IsEncoderAttentionMaskInputName(name))
+                {
+                    encoderMask ??= CreateAttentionMask(
+                        encoderOutput.Rank > 0 ? encoderOutput.Shape[0] : 1,
+                        GetEncoderSequenceLength(encoderOutput),
+                        dims,
+                        name);
+                    inputs[name] = encoderMask;
+                }
+                else
+                {
+                    decoderMask ??= CreateAttentionMask(
+                        1,
+                        tokens.Count,
+                        dims,
+                        name);
+                    inputs[name] = decoderMask;
+                }
+                continue;
+            }
+
+            if (IsDecoderTokenInputName(name) || IsIntegerElementType(metadata))
+            {
+                tokenTensor ??= CreateTokenIdTensor(tokens);
+                inputs[name] = tokenTensor;
+                continue;
+            }
+
+            if (IsDecoderEmbeddingInputName(name))
+            {
+                decoderEmbeddings ??= CreateDecoderInput(tokens is List<int> list ? list : new List<int>(tokens));
+                inputs[name] = decoderEmbeddings;
+                continue;
+            }
+
+            if (IsEncoderInputName(name))
+            {
+                inputs[name] = encoderOutput;
+                continue;
+            }
+
+            if (session.InputMetadata.Count == 1)
+            {
+                tokenTensor ??= CreateTokenIdTensor(tokens);
+                inputs[name] = tokenTensor;
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Unrecognized decoder input '{name}'. Update Donut ONNX input mapping.");
+        }
+
+        return inputs;
+    }
+
+    private static Tensor<T> RunOnnxSession(
+        InferenceSession session,
+        IReadOnlyDictionary<string, Tensor<T>> inputs,
+        string[]? preferredOutputNames)
+    {
+        if (session.OutputMetadata.Count == 0)
+            throw new InvalidOperationException("ONNX session has no outputs.");
+
+        var onnxInputs = new List<NamedOnnxValue>(inputs.Count);
+        foreach (var entry in inputs)
+        {
+            if (!session.InputMetadata.TryGetValue(entry.Key, out var metadata))
+            {
+                throw new InvalidOperationException(
+                    $"Input '{entry.Key}' not found in ONNX session metadata.");
+            }
+
+            string elementType = metadata.ElementType.ToString();
+            onnxInputs.Add(OnnxTensorConverter.ToOnnxValue(entry.Key, entry.Value, elementType));
+        }
+
+        using var results = session.Run(onnxInputs);
+        if (results.Count == 0)
+            throw new InvalidOperationException("ONNX session returned no outputs.");
+
+        DisposableNamedOnnxValue? selected = null;
+        if (preferredOutputNames is not null)
+        {
+            selected = results.FirstOrDefault(result => NameMatches(result.Name, preferredOutputNames));
+        }
+
+        selected ??= results.FirstOrDefault();
+        if (selected is null)
+            throw new InvalidOperationException("ONNX session returned no outputs.");
+
+        return OnnxTensorConverter.FromOnnxValue<T>(selected)
+            ?? throw new InvalidOperationException("Failed to convert ONNX output tensor.");
+    }
+
+    private Tensor<T> CreateTokenIdTensor(IReadOnlyList<int> tokens)
+    {
+        if (tokens.Count == 0)
+            throw new InvalidOperationException("Decoder token list is empty.");
+
+        var tokenTensor = new Tensor<T>([1, tokens.Count]);
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            int tokenId = tokens[i];
+            if (tokenId < 0 || tokenId >= _vocabSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(tokens),
+                    $"Token id {tokenId} is out of range for vocab size {_vocabSize}.");
+            }
+
+            tokenTensor.Data[i] = NumOps.FromDouble(tokenId);
+        }
+
+        return tokenTensor;
+    }
+
+    private static int[]? GetDimensions(NodeMetadata metadata)
+    {
+        if (metadata.Dimensions is null || metadata.Dimensions.Length == 0)
+            return null;
+
+        var dims = new int[metadata.Dimensions.Length];
+        for (int i = 0; i < metadata.Dimensions.Length; i++)
+        {
+            dims[i] = Convert.ToInt32(metadata.Dimensions[i]);
+        }
+
+        return dims;
+    }
+
+    private static int GetImageSequenceLength(Tensor<T> input)
+    {
+        if (input.Rank >= 4)
+            return input.Shape[2] * input.Shape[3];
+        if (input.Rank == 3)
+            return input.Shape[1] * input.Shape[2];
+        if (input.Rank == 2)
+            return input.Shape[1];
+
+        throw new InvalidOperationException("Input tensor rank is too small to infer sequence length.");
+    }
+
+    private static int GetEncoderSequenceLength(Tensor<T> encoderOutput)
+    {
+        if (encoderOutput.Rank < 2)
+            throw new InvalidOperationException("Encoder output must be at least 2D.");
+
+        return encoderOutput.Shape[1];
+    }
+
+    private Tensor<T> CreateAttentionMask(
+        int batchSize,
+        int seqLen,
+        int[]? dims,
+        string inputName)
+    {
+        if (batchSize <= 0 || seqLen <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Invalid attention mask size for input '{inputName}': batch={batchSize}, seq={seqLen}.");
+        }
+
+        int[] shape;
+        if (dims is null || dims.Length == 0)
+        {
+            shape = [batchSize, seqLen];
+        }
+        else
+        {
+            shape = new int[dims.Length];
+            for (int i = 0; i < dims.Length; i++)
+            {
+                int dim = dims[i];
+                if (dim > 0)
+                {
+                    shape[i] = dim;
+                }
+                else if (i == 0)
+                {
+                    shape[i] = batchSize;
+                }
+                else if (i == dims.Length - 1)
+                {
+                    shape[i] = seqLen;
+                }
+                else
+                {
+                    shape[i] = 1;
+                }
+            }
+
+            if (shape[0] != batchSize)
+            {
+                throw new InvalidOperationException(
+                    $"Attention mask batch size {shape[0]} does not match expected {batchSize} for '{inputName}'.");
+            }
+
+            if (shape[^1] != seqLen)
+            {
+                throw new InvalidOperationException(
+                    $"Attention mask sequence length {shape[^1]} does not match expected {seqLen} for '{inputName}'.");
+            }
+        }
+
+        var mask = new Tensor<T>(shape);
+        T one = NumOps.FromDouble(1);
+        for (int i = 0; i < mask.Data.Length; i++)
+            mask.Data[i] = one;
+
+        return mask;
+    }
+
+    private static bool IsIntegerElementType(NodeMetadata metadata)
+    {
+        string elementType = metadata.ElementType.ToString();
+        return elementType.Equals("Int64", StringComparison.OrdinalIgnoreCase)
+            || elementType.Equals("Int32", StringComparison.OrdinalIgnoreCase)
+            || elementType.Equals("UInt64", StringComparison.OrdinalIgnoreCase)
+            || elementType.Equals("UInt32", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsEncoderInputName(string name)
+    {
+        return NameMatches(name, "encoder", "memory", "context", "pixel", "image", "vision");
+    }
+
+    private static bool IsDecoderTokenInputName(string name)
+    {
+        return NameMatches(name, "input_ids", "decoder_input_ids", "token_ids", "tokens");
+    }
+
+    private static bool IsDecoderEmbeddingInputName(string name)
+    {
+        return NameMatches(name, "inputs_embeds", "decoder_inputs_embeds", "embeddings", "embed");
+    }
+
+    private static bool IsAttentionMaskInputName(string name)
+    {
+        return NameMatches(name, "attention_mask", "attn_mask", "mask");
+    }
+
+    private static bool IsEncoderAttentionMaskInputName(string name)
+    {
+        return NameMatches(name, "encoder_attention_mask", "encoder_attn_mask", "encoder_mask", "memory_mask", "context_mask", "pixel_mask");
+    }
+
+    private static bool NameMatches(string name, params string[] tokens)
+    {
+        foreach (var token in tokens)
+        {
+            if (name.Contains(token, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private Tensor<T> CreateDecoderInput(List<int> tokens)
