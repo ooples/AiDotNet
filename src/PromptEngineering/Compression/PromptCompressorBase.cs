@@ -27,6 +27,7 @@ public abstract class PromptCompressorBase : IPromptCompressor
     /// <summary>
     /// Regex timeout to prevent ReDoS attacks.
     /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly Func<string, int>? _tokenCounter;
 
@@ -189,7 +190,7 @@ public abstract class PromptCompressorBase : IPromptCompressor
     {
         var variables = new Dictionary<string, string>();
         var pattern = @"\{[^}]+\}";
-        var matches = RegexHelper.Matches(prompt, pattern, RegexOptions.None);
+        var matches = Regex.Matches(prompt, pattern, RegexOptions.None, RegexTimeout);
 
         for (int i = 0; i < matches.Count; i++)
         {
@@ -241,7 +242,7 @@ public abstract class PromptCompressorBase : IPromptCompressor
     {
         var codeBlocks = new Dictionary<string, string>();
         var pattern = @"```[\s\S]*?```";
-        var matches = RegexHelper.Matches(prompt, pattern, RegexOptions.None);
+        var matches = Regex.Matches(prompt, pattern, RegexOptions.None, RegexTimeout);
 
         for (int i = 0; i < matches.Count; i++)
         {
@@ -278,6 +279,3 @@ public abstract class PromptCompressorBase : IPromptCompressor
         return result;
     }
 }
-
-
-

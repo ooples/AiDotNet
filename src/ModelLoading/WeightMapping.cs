@@ -60,7 +60,7 @@ public class WeightMapping
     /// <param name="replacement">Replacement pattern.</param>
     public void AddPatternMapping(string pattern, string replacement)
     {
-        _patternMappings.Add((RegexHelper.Create(pattern, RegexOptions.Compiled), replacement));
+        _patternMappings.Add((new Regex(pattern, RegexOptions.Compiled, TimeSpan.FromSeconds(1)), replacement));
     }
 
     /// <summary>
@@ -338,4 +338,3 @@ public class WeightMapping
     /// </summary>
     public int PatternMappingCount => _patternMappings.Count;
 }
-

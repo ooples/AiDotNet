@@ -801,39 +801,6 @@ public class DoubleOperations : INumericOperations<double>
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;
 
-    /// <summary>
-    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
-    /// </summary>
-    /// <param name="x">The source span.</param>
-    /// <param name="badIndex">The index of the first non-finite value found, or -1 if all are finite.</param>
-    /// <returns>True if all elements are finite, false otherwise.</returns>
-    public bool AllFinite(ReadOnlySpan<double> x, out int badIndex)
-    {
-        // Fallback or find the exact index of the non-finite value
-        for (int i = 0; i < x.Length; i++)
-        {
-            if (double.IsNaN(x[i]) || double.IsInfinity(x[i]))
-            {
-                badIndex = i;
-                return false;
-            }
-        }
-
-        badIndex = -1;
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if any element in the span is NaN or Infinity.
-    /// </summary>
-    /// <param name="x">The source span.</param>
-    /// <param name="badIndex">When this method returns true, contains the index of the first non-finite value found; otherwise, -1.</param>
-    /// <returns>True if any element is non-finite; otherwise, false.</returns>
-    public bool IsAnyNonFinite(ReadOnlySpan<double> x, out int badIndex)
-    {
-        return !AllFinite(x, out badIndex);
-    }
-
     #region IVectorizedOperations<double> Implementation - SIMD via TensorPrimitivesCore
 
     /// <summary>

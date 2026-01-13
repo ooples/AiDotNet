@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP.Kernels;
 using AiDotNet.Tensors.Engines.DirectGpu.Sparsity;
@@ -208,7 +207,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             if (!hasGemmKernel)
             {
-                Trace.WriteLine("[HipBackend] No GEMM kernels compiled - backend not available");
+                Console.WriteLine("[HipBackend] No GEMM kernels compiled - backend not available");
                 IsAvailable = false;
                 return;
             }
@@ -262,7 +261,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         string source = HipMfmaKernel.GetSource();
         string compileFlags = HipMfmaKernel.GetCompileFlags(_architecture);
 
-        Trace.WriteLine($"[HipBackend] Compiling kernels for {_architecture} with flags: {compileFlags}");
+        Console.WriteLine($"[HipBackend] Compiling kernels for {_architecture} with flags: {compileFlags}");
 
         try
         {
@@ -347,12 +346,12 @@ public sealed class HipBackend : IAsyncGpuBackend
             CompileKernelModule(Kernels.HipSpatialTransformerKernels.GetSource(), "spatial_transformer", ref _spatialTransformerModule,
                 Kernels.HipSpatialTransformerKernels.GetKernelNames());
 
-            Trace.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
+            Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"[HipBackend] Kernel compilation EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[HipBackend] Kernel compilation EXCEPTION: {ex.GetType().Name}: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP kernel compilation failed: {ex.Message}");
         }
     }
@@ -372,7 +371,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         if (rtcResult != HipRtcResult.Success)
         {
-            Trace.WriteLine($"[HipBackend] Failed to create program for {moduleName}: {rtcResult}");
+            Console.WriteLine($"[HipBackend] Failed to create program for {moduleName}: {rtcResult}");
             return;
         }
 
@@ -396,7 +395,7 @@ public sealed class HipBackend : IAsyncGpuBackend
                 HipNativeBindings.hiprtcGetProgramLog(prog, logPtr);
                 string log = Marshal.PtrToStringAnsi(logPtr) ?? "";
                 Marshal.FreeHGlobal(logPtr);
-                Trace.WriteLine($"[HipBackend] Compile failed for {moduleName}: {log}");
+                Console.WriteLine($"[HipBackend] Compile failed for {moduleName}: {log}");
             }
             HipNativeBindings.hiprtcDestroyProgram(ref prog);
             return;
@@ -425,7 +424,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         if (hipResult != HipError.Success)
         {
-            Trace.WriteLine($"[HipBackend] Failed to load module {moduleName}: {hipResult}");
+            Console.WriteLine($"[HipBackend] Failed to load module {moduleName}: {hipResult}");
             return;
         }
 

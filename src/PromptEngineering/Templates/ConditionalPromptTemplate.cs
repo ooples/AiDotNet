@@ -41,17 +41,22 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// </remarks>
 public class ConditionalPromptTemplate : PromptTemplateBase
 {
-    private static readonly Regex ConditionalPattern = RegexHelper.Create(
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    private static readonly Regex ConditionalPattern = new(
         @"\{\{#if\s+(\w+)\}\}(.*?)\{\{/if\}\}",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled | RegexOptions.Singleline, RegexTimeout);
 
-    private static readonly Regex UnlessPattern = RegexHelper.Create(
+    private static readonly Regex UnlessPattern = new(
         @"\{\{#unless\s+(\w+)\}\}(.*?)\{\{/unless\}\}",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled | RegexOptions.Singleline, RegexTimeout);
 
-    private static readonly Regex EqualsPattern = RegexHelper.Create(
+    private static readonly Regex EqualsPattern = new(
         @"\{\{#equals\s+(\w+)\s+""([^""]*)""\}\}(.*?)\{\{/equals\}\}",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+        RegexOptions.Compiled | RegexOptions.Singleline, RegexTimeout);
 
     /// <summary>
     /// Initializes a new instance of the ConditionalPromptTemplate class.
@@ -142,7 +147,7 @@ public class ConditionalPromptTemplate : PromptTemplateBase
         }
 
         // Clean up extra whitespace from removed sections
-        result = RegexHelper.Replace(result, @"\n\s*\n\s*\n", "\n\n", RegexOptions.None);
+        result = Regex.Replace(result, @"\n\s*\n\s*\n", "\n\n", RegexOptions.None, RegexTimeout);
 
         return result.Trim();
     }
@@ -170,7 +175,7 @@ public class ConditionalPromptTemplate : PromptTemplateBase
         tempTemplate = EqualsPattern.Replace(tempTemplate, "");
 
         // Extract remaining variables
-        var variablePattern = RegexHelper.Create(@"\{(\w+)\}", RegexOptions.None);
+        var variablePattern = new Regex(@"\{(\w+)\}", RegexOptions.None, RegexTimeout);
         var matches = variablePattern.Matches(tempTemplate);
 
         return new HashSet<string>(
@@ -179,6 +184,3 @@ public class ConditionalPromptTemplate : PromptTemplateBase
                 .Select(m => m.Groups[1].Value));
     }
 }
-
-
-

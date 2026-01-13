@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -58,6 +59,11 @@ public class VectorRetrieverTests
             return vector;
         }
 
+        public Task<Vector<double>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
+        }
+
         public Matrix<double> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
@@ -71,6 +77,11 @@ public class VectorRetrieverTests
                 }
             }
             return matrix;
+        }
+
+        public Task<Matrix<double>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
         }
     }
 

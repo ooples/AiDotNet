@@ -13,7 +13,6 @@ namespace AiDotNet.Tokenization;
 /// Different language models use different tokenization schemes:
 /// <list type="bullet">
 /// <item><description>OPT, Chinchilla: GPT-style BPE tokenization</description></item>
-/// <item><description>RoBERTa: byte-level BPE tokenization</description></item>
 /// <item><description>Flan-T5: T5-style SentencePiece tokenization</description></item>
 /// <item><description>LLaMA, Vicuna, Mistral: LLaMA-style SentencePiece tokenization</description></item>
 /// <item><description>Phi, Qwen: GPT-style BPE with custom vocabulary</description></item>
@@ -50,7 +49,7 @@ public static class LanguageModelTokenizerFactory
     public static ITokenizer CreateForBackbone(
         LanguageModelBackbone backbone,
         IEnumerable<string>? corpus = null,
-        int vocabSize = 1000)
+        int vocabSize = 30000)
     {
         corpus ??= GetDefaultCorpus();
 
@@ -62,11 +61,11 @@ public static class LanguageModelTokenizerFactory
             LanguageModelBackbone.Phi or
             LanguageModelBackbone.Qwen => CreateGptStyleTokenizer(corpus, vocabSize),
 
-            // RoBERTa-style models (byte-level BPE)
-            LanguageModelBackbone.RoBERTa => CreateRobertaStyleTokenizer(corpus, vocabSize),
-
             // T5-style models (Flan-T5)
             LanguageModelBackbone.FlanT5 => CreateT5StyleTokenizer(corpus, vocabSize),
+
+            // BERT-style models (RoBERTa)
+            LanguageModelBackbone.RoBERTa => CreateBertStyleTokenizer(corpus, vocabSize),
 
             // LLaMA-style models (LLaMA, Vicuna, Mistral)
             LanguageModelBackbone.LLaMA or
@@ -126,13 +125,13 @@ public static class LanguageModelTokenizerFactory
             LanguageModelBackbone.Phi or
             LanguageModelBackbone.Qwen => SpecialTokens.Gpt(),
 
-            LanguageModelBackbone.RoBERTa => SpecialTokens.Roberta(),
-
             LanguageModelBackbone.FlanT5 => SpecialTokens.T5(),
 
             LanguageModelBackbone.LLaMA or
             LanguageModelBackbone.Vicuna or
             LanguageModelBackbone.Mistral => CreateLlamaSpecialTokens(),
+
+            LanguageModelBackbone.RoBERTa => SpecialTokens.Bert(),
 
             _ => SpecialTokens.Default()
         };
@@ -161,15 +160,6 @@ public static class LanguageModelTokenizerFactory
             @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+");
     }
 
-    private static BpeTokenizer CreateRobertaStyleTokenizer(IEnumerable<string> corpus, int vocabSize)
-    {
-        return BpeTokenizer.Train(
-            corpus,
-            vocabSize,
-            SpecialTokens.Roberta(),
-            @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+");
-    }
-
     private static SentencePieceTokenizer CreateT5StyleTokenizer(IEnumerable<string> corpus, int vocabSize)
     {
         return SentencePieceTokenizer.Train(
@@ -184,6 +174,14 @@ public static class LanguageModelTokenizerFactory
             corpus,
             vocabSize,
             CreateLlamaSpecialTokens());
+    }
+
+    private static WordPieceTokenizer CreateBertStyleTokenizer(IEnumerable<string> corpus, int vocabSize)
+    {
+        return WordPieceTokenizer.Train(
+            corpus,
+            vocabSize,
+            SpecialTokens.Bert());
     }
 
     private static IEnumerable<string> GetDefaultCorpus()

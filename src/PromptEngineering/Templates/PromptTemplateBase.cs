@@ -25,7 +25,12 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// </remarks>
 public abstract class PromptTemplateBase : IPromptTemplate
 {
-    private static readonly Regex VariablePattern = RegexHelper.Create(@"\{(\w+)\}", RegexOptions.Compiled);
+    /// <summary>
+    /// Regex timeout to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    private static readonly Regex VariablePattern = new(@"\{(\w+)\}", RegexOptions.Compiled, RegexTimeout);
 
     /// <summary>
     /// Gets the raw template string before variable substitution.
@@ -143,6 +148,3 @@ public abstract class PromptTemplateBase : IPromptTemplate
         return variables.ToList();
     }
 }
-
-
-

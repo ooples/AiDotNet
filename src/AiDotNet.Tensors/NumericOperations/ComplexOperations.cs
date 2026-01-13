@@ -960,33 +960,6 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
         return _ops.ToDouble(value.Real);
     }
 
-    /// <summary>
-    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
-    /// </summary>
-    public bool AllFinite(ReadOnlySpan<Complex<T>> x, out int badIndex)
-    {
-        for (int i = 0; i < x.Length; i++)
-        {
-            if (_ops.IsNaN(x[i].Real) || _ops.IsInfinity(x[i].Real) ||
-                _ops.IsNaN(x[i].Imaginary) || _ops.IsInfinity(x[i].Imaginary))
-            {
-                badIndex = i;
-                return false;
-            }
-        }
-
-        badIndex = -1;
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if any element in the span is NaN or Infinity.
-    /// </summary>
-    public bool IsAnyNonFinite(ReadOnlySpan<Complex<T>> x, out int badIndex)
-    {
-        return !AllFinite(x, out badIndex);
-    }
-
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => false;
 

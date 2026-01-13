@@ -808,7 +808,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (resultData == null)
                 return base.MatrixMultiply(a, b);
 
-            return new Matrix<T>(a.Rows, b.Columns, resultData);
+            var result = new Matrix<T>(a.Rows, b.Columns);
+            resultData.AsSpan().CopyTo(result.AsWritableSpan());
+            return result;
         }
         catch
         {

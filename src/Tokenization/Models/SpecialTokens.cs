@@ -135,20 +135,6 @@ namespace AiDotNet.Tokenization.Models
         };
 
         /// <summary>
-        /// Creates RoBERTa-style special tokens.
-        /// </summary>
-        public static SpecialTokens Roberta() => new SpecialTokens
-        {
-            UnkToken = "<unk>",
-            PadToken = "<pad>",
-            BosToken = "<s>",
-            EosToken = "</s>",
-            ClsToken = "<s>",
-            SepToken = "</s>",
-            MaskToken = "<mask>"
-        };
-
-        /// <summary>
         /// Creates default special tokens (BERT-style).
         /// </summary>
         public static SpecialTokens Default() => Bert();

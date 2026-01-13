@@ -47,6 +47,7 @@ namespace AiDotNet.Agents;
 /// </remarks>
 public class Agent<T> : AgentBase<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Agent{T}"/> class.
@@ -287,14 +288,14 @@ Respond now with your next step in JSON format:";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers if present
-        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object without code blocks (non-greedy)
-        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.Multiline);
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.Multiline, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -327,28 +328,28 @@ Respond now with your next step in JSON format:";
         var parsed = new ParsedResponse();
 
         // Try to extract thought
-        var thoughtMatch = RegexHelper.Match(response, @"thought:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var thoughtMatch = Regex.Match(response, @"thought:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
         if (thoughtMatch.Success)
         {
             parsed.Thought = thoughtMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract action
-        var actionMatch = RegexHelper.Match(response, @"action:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var actionMatch = Regex.Match(response, @"action:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
         if (actionMatch.Success)
         {
             parsed.Action = actionMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract action input
-        var actionInputMatch = RegexHelper.Match(response, @"action[_ ]input:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var actionInputMatch = Regex.Match(response, @"action[_ ]input:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
         if (actionInputMatch.Success)
         {
             parsed.ActionInput = actionInputMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract final answer
-        var finalAnswerMatch = RegexHelper.Match(response, @"final[_ ]answer:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var finalAnswerMatch = Regex.Match(response, @"final[_ ]answer:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline, RegexTimeout);
         if (finalAnswerMatch.Success)
         {
             parsed.FinalAnswer = finalAnswerMatch.Groups[1].Value.Trim();
@@ -405,6 +406,3 @@ Respond now with your next step in JSON format:";
         public bool HasFinalAnswer { get; set; }
     }
 }
-
-
-

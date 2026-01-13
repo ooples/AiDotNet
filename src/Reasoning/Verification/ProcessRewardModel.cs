@@ -43,6 +43,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class ProcessRewardModel<T> : IRewardModel<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
@@ -218,7 +219,7 @@ Evaluate the step:";
         }
 
         // Fallback: look for numbers
-        var numberMatch = RegexHelper.Match(response, @"(?:reward|score)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase);
+        var numberMatch = Regex.Match(response, @"(?:reward|score)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
         if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, out double reward))
         {
             // Normalize if needed
@@ -240,13 +241,13 @@ Evaluate the step:";
     /// </summary>
     private string ExtractJsonFromResponse(string response)
     {
-        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
-        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -255,6 +256,3 @@ Evaluate the step:";
         return response;
     }
 }
-
-
-

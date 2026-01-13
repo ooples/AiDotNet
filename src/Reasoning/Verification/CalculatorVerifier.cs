@@ -37,6 +37,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
@@ -63,9 +64,9 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
                content.Contains("=") ||
                content.Contains("×") ||
                content.Contains("÷") ||
-               RegexHelper.IsMatch(content, @"\d+\s*[\+\-\*/]\s*\d+", RegexOptions.None) || // arithmetic expressions
-               RegexHelper.IsMatch(content, @"\d+%", RegexOptions.None) || // percentages
-               RegexHelper.IsMatch(content, @"(?:sum|product|quotient|difference)", RegexOptions.None);
+               Regex.IsMatch(content, @"\d+\s*[\+\-\*/]\s*\d+", RegexOptions.None, RegexTimeout) || // arithmetic expressions
+               Regex.IsMatch(content, @"\d+%", RegexOptions.None, RegexTimeout) || // percentages
+               Regex.IsMatch(content, @"(?:sum|product|quotient|difference)", RegexOptions.None, RegexTimeout);
     }
 
     /// <inheritdoc/>
@@ -140,7 +141,7 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
         var expressions = new List<(string, string)>();
 
         // Pattern 1: "X = Y" style
-        var equalsMatches = RegexHelper.Matches(text, @"([0-9\.\+\-\*/\(\)\^%\s×÷]+)\s*=\s*([0-9\.]+)", RegexOptions.None);
+        var equalsMatches = Regex.Matches(text, @"([0-9\.\+\-\*/\(\)\^%\s×÷]+)\s*=\s*([0-9\.]+)", RegexOptions.None, RegexTimeout);
         foreach (Match match in equalsMatches)
         {
             string expr = match.Groups[1].Value.Trim();
@@ -153,7 +154,7 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
         }
 
         // Pattern 2: "X% of Y"
-        var percentMatches = RegexHelper.Matches(text, @"([0-9\.]+)%\s+of\s+([0-9\.]+)", RegexOptions.None);
+        var percentMatches = Regex.Matches(text, @"([0-9\.]+)%\s+of\s+([0-9\.]+)", RegexOptions.None, RegexTimeout);
         foreach (Match match in percentMatches)
         {
             double percent = double.Parse(match.Groups[1].Value);
@@ -161,7 +162,7 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
             string expr = $"{percent / 100} * {number}";
 
             // Try to find the claimed result nearby
-            var resultMatch = RegexHelper.Match(text, $@"{RegexHelper.Escape(match.Value)}[^\d]*([0-9\.]+)", RegexOptions.None);
+            var resultMatch = Regex.Match(text, $@"{Regex.Escape(match.Value)}[^\d]*([0-9\.]+)", RegexOptions.None, RegexTimeout);
             if (resultMatch.Success)
             {
                 string result = resultMatch.Groups[1].Value;
@@ -220,7 +221,7 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
     {
         while (expression.Contains("**"))
         {
-            var match = RegexHelper.Match(expression, @"([0-9\.]+)\s*\*\*\s*([0-9\.]+)", RegexOptions.None);
+            var match = Regex.Match(expression, @"([0-9\.]+)\s*\*\*\s*([0-9\.]+)", RegexOptions.None, RegexTimeout);
             if (!match.Success) break;
 
             double baseNum = double.Parse(match.Groups[1].Value);
@@ -249,6 +250,3 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
         return Math.Abs(expectedValue - actualValue) <= tolerance;
     }
 }
-
-
-

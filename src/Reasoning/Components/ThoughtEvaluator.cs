@@ -26,6 +26,7 @@ namespace AiDotNet.Reasoning.Components;
 /// </remarks>
 internal class ThoughtEvaluator<T> : IThoughtEvaluator<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
@@ -125,7 +126,7 @@ Evaluate the thought:";
         }
 
         // Fallback: look for decimal numbers in the response
-        var numberMatch = RegexHelper.Match(response, @"(?:score|rating|evaluation)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase);
+        var numberMatch = Regex.Match(response, @"(?:score|rating|evaluation)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
         if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, out double fallbackScore))
         {
             // Normalize if needed (might be out of 10, 5, etc.)
@@ -151,14 +152,14 @@ Evaluate the thought:";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers
-        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object
-        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -167,6 +168,3 @@ Evaluate the thought:";
         return response;
     }
 }
-
-
-

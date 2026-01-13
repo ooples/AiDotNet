@@ -23,7 +23,7 @@ namespace AiDotNet.Reasoning.Benchmarks;
 /// </remarks>
 public sealed class CodeXGlueBenchmark<T> : IBenchmark<T>
 {
-    private static readonly Regex TokenSplitRegex = RegexHelper.Create(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
+    private static readonly Regex TokenSplitRegex = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private readonly INumericOperations<T> _numOps;
     private readonly CodeXGlueBenchmarkOptions _options;
     private List<CodeXGlueProblem>? _cachedProblems;
@@ -570,4 +570,3 @@ public sealed class CodeXGlueBenchmarkOptions
     /// </summary>
     public string CategoryField { get; set; } = "category";
 }
-

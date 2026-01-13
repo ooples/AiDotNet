@@ -2522,6 +2522,12 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
+    public Task<Vector<T>> EmbedAsync(string text)
+    {
+        return Task.FromResult(EncodeText(text));
+    }
+
+    /// <inheritdoc/>
     public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
         var embeddings = GetTextEmbeddings(texts).ToList();
@@ -2539,6 +2545,12 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
         }
         return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        return Task.FromResult(EncodeTextBatch(texts));
     }
 
     /// <inheritdoc/>

@@ -58,6 +58,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class CodeExecutionVerifier<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly INumericOperations<T> _numOps;
     private readonly int _timeoutMilliseconds;
     private readonly string _workingDirectory;
@@ -368,7 +369,7 @@ internal class CodeExecutionVerifier<T>
         foreach (var text in textsToSearch)
         {
             // Try to extract from code blocks
-            var match = RegexHelper.Match(text, @"```(?:python|javascript|csharp|py|js|cs)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline);
+            var match = Regex.Match(text, @"```(?:python|javascript|csharp|py|js|cs)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline, RegexTimeout);
             if (match.Success)
             {
                 return match.Groups[1].Value.Trim();
@@ -391,7 +392,7 @@ internal class CodeExecutionVerifier<T>
         // Look for explicit test cases in the chain
         string fullText = string.Join("\n", chain.Steps.Select(s => s.Content));
 
-        var assertMatches = RegexHelper.Matches(fullText, @"assert\s+(.+?)(?:\n|$)", RegexOptions.Multiline);
+        var assertMatches = Regex.Matches(fullText, @"assert\s+(.+?)(?:\n|$)", RegexOptions.Multiline, RegexTimeout);
         foreach (Match match in assertMatches)
         {
             testCases.Add(match.Groups[1].Value.Trim());
@@ -546,6 +547,3 @@ internal class TestCaseResult
     /// </summary>
     public TimeSpan ExecutionTime { get; set; }
 }
-
-
-

@@ -51,7 +51,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Indicates whether this BLIP network uses native layers (true) or ONNX models (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -173,52 +173,52 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// The dimensionality of the shared embedding space.
     /// </summary>
-    private readonly int _embeddingDimension;
+    private int _embeddingDimension;
 
     /// <summary>
     /// Maximum sequence length for text encoder.
     /// </summary>
-    private readonly int _maxSequenceLength;
+    private int _maxSequenceLength;
 
     /// <summary>
     /// Expected image size (width and height).
     /// </summary>
-    private readonly int _imageSize;
+    private int _imageSize;
 
     /// <summary>
     /// Hidden dimension for transformer layers.
     /// </summary>
-    private readonly int _hiddenDim;
+    private int _hiddenDim;
 
     /// <summary>
     /// Number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// MLP hidden dimension.
     /// </summary>
-    private readonly int _mlpDim;
+    private int _mlpDim;
 
     /// <summary>
     /// Patch size for vision transformer.
     /// </summary>
-    private readonly int _patchSize;
+    private int _patchSize;
 
     /// <summary>
     /// Vocabulary size for text encoder.
     /// </summary>
-    private readonly int _vocabularySize;
+    private int _vocabularySize;
 
     /// <summary>
     /// Number of decoder layers.
     /// </summary>
-    private readonly int _numDecoderLayers;
+    private int _numDecoderLayers;
 
     #endregion
 
@@ -1929,38 +1929,19 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        int embeddingDim = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        int imgSize = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int mlpDim = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        bool useNative = reader.ReadBoolean();
+        _embeddingDimension = reader.ReadInt32();
+        _maxSequenceLength = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _mlpDim = reader.ReadInt32();
+        _patchSize = reader.ReadInt32();
+        _vocabularySize = reader.ReadInt32();
+        _useNativeMode = reader.ReadBoolean();
         _ = reader.ReadString(); // optimizer type
         _ = reader.ReadString(); // loss function type
-
-        // Validate loaded values
-        if (embeddingDim != _embeddingDimension)
-        {
-            throw new InvalidOperationException(
-                $"Loaded embedding dimension ({embeddingDim}) doesn't match current ({_embeddingDimension}).");
-        }
-
-        if (maxSeqLen != _maxSequenceLength)
-        {
-            throw new InvalidOperationException(
-                $"Loaded max sequence length ({maxSeqLen}) doesn't match current ({_maxSequenceLength}).");
-        }
-
-        if (imgSize != _imageSize)
-        {
-            throw new InvalidOperationException(
-                $"Loaded image size ({imgSize}) doesn't match current ({_imageSize}).");
-        }
     }
 
     #endregion
@@ -1991,6 +1972,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <inheritdoc/>
+    public Task<Vector<T>> EmbedAsync(string text)
+    {
+        return Task.FromResult(EncodeText(text));
+    }
+
+    /// <inheritdoc/>
     public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
         var embeddings = GetTextEmbeddings(texts).ToList();
@@ -2008,6 +1995,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             }
         }
         return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    {
+        return Task.FromResult(EncodeTextBatch(texts));
     }
 
     /// <inheritdoc/>

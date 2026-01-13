@@ -3,7 +3,6 @@
 // Provides direct access to HIP for MFMA kernel execution.
 
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
@@ -291,7 +290,7 @@ internal static class HipNativeBindings
     private static void LogDiagnostic(string message)
     {
         if (EnableDiagnostics)
-            Trace.WriteLine(message);
+            Console.WriteLine(message);
     }
 
     /// <summary>

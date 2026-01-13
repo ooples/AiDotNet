@@ -243,36 +243,6 @@ public class HalfOperations : INumericOperations<Half>
     /// </remarks>
     public double ToDouble(Half value) => (double)value;
 
-    /// <summary>
-    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
-    /// </summary>
-    public bool AllFinite(ReadOnlySpan<Half> x, out int badIndex)
-    {
-        // Fallback or find the exact index of the non-finite value
-        for (int i = 0; i < x.Length; i++)
-        {
-            if (Half.IsNaN(x[i]) || Half.IsInfinity(x[i]))
-            {
-                badIndex = i;
-                return false;
-            }
-        }
-
-        badIndex = -1;
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if any element in the span is NaN or Infinity.
-    /// </summary>
-    /// <param name="x">The source span.</param>
-    /// <param name="badIndex">When this method returns true, contains the index of the first non-finite value found; otherwise, -1.</param>
-    /// <returns>True if any element is non-finite; otherwise, false.</returns>
-    public bool IsAnyNonFinite(ReadOnlySpan<Half> x, out int badIndex)
-    {
-        return !AllFinite(x, out badIndex);
-    }
-
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => true;
 

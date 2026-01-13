@@ -36,6 +36,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class CriticModel<T> : ICriticModel<T>
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
@@ -251,7 +252,7 @@ Provide your critique:";
         };
 
         // Try to extract a score
-        var scoreMatch = RegexHelper.Match(response, @"(?:score|rating)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase);
+        var scoreMatch = Regex.Match(response, @"(?:score|rating)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
         if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double score))
         {
             if (score > 1.0 && score <= 10.0) score /= 10.0;
@@ -273,14 +274,14 @@ Provide your critique:";
     private string ExtractJsonFromResponse(string response)
     {
         // Remove markdown code block markers
-        var jsonMatch = RegexHelper.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
         // Try to find JSON object
-        var jsonObjectMatch = RegexHelper.Match(response, @"\{[\s\S]*?\}", RegexOptions.None);
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -289,6 +290,3 @@ Provide your critique:";
         return response;
     }
 }
-
-
-

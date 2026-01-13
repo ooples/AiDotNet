@@ -29,7 +29,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// </remarks>
 public abstract class GeneratorBase<T> : IGenerator<T>
 {
-
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.
     /// </summary>
@@ -187,7 +186,7 @@ public abstract class GeneratorBase<T> : IGenerator<T>
     protected virtual Dictionary<int, Document<T>> ExtractCitations(string generatedText, List<Document<T>> sourceDocuments)
     {
         var citations = new Dictionary<int, Document<T>>();
-        var citationPattern = RegexHelper.Create(@"\[(\d+)\]");
+        var citationPattern = new System.Text.RegularExpressions.Regex(@"\[(\d+)\]");
         var matches = citationPattern.Matches(generatedText);
 
         foreach (System.Text.RegularExpressions.Match match in matches.Cast<System.Text.RegularExpressions.Match>())
@@ -205,6 +204,3 @@ public abstract class GeneratorBase<T> : IGenerator<T>
         return citations;
     }
 }
-
-
-

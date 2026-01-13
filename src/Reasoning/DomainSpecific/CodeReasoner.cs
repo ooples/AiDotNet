@@ -243,10 +243,11 @@ Provide:
             return null;
 
         // Try to extract code from markdown code blocks
-        var match = RegexHelper.Match(
+        var match = System.Text.RegularExpressions.Regex.Match(
             text,
             @"```(?:[\w]+)?\s*\n([\s\S]*?)\n```",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
+            System.Text.RegularExpressions.RegexOptions.Multiline,
+            TimeSpan.FromSeconds(1));
 
         if (match.Success)
         {
@@ -303,4 +304,3 @@ Provide:
         return (braces > 2 || (parens > 4 && semicolons > 0) || text.Contains("def ") || text.Contains("function "));
     }
 }
-

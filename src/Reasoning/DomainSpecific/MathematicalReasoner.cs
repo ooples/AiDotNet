@@ -280,12 +280,12 @@ public class MathematicalReasoner<T>
             return null;
 
         // Try to extract a number from the final answer
-        var match = RegexHelper.Match(
+        var match = System.Text.RegularExpressions.Regex.Match(
             result.FinalAnswer,
             @"-?[0-9]+\.?[0-9]*",
-            System.Text.RegularExpressions.RegexOptions.None);
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromSeconds(1));
 
         return match.Success ? match.Value : null;
     }
 }
-

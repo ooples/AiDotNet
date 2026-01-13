@@ -158,7 +158,7 @@ internal sealed class DynamicGemmKernel : IDisposable
             {
                 if (EnableDiagnostics)
                 {
-                    Trace.WriteLine($"[DynamicGemm] Size {M}x{N}x{K} < {MinSwizzleSize}, falling back from variant {KernelVariant} to CLBlast baseline");
+                    Console.WriteLine($"[DynamicGemm] Size {M}x{N}x{K} < {MinSwizzleSize}, falling back from variant {KernelVariant} to CLBlast baseline");
                 }
                 return 0; // Fall back to CLBlast baseline
             }
@@ -255,12 +255,12 @@ internal sealed class DynamicGemmKernel : IDisposable
                 catch
                 {
                     // Fall back to console on error
-                    Trace.WriteLine(logLine);
+                    Console.WriteLine(logLine);
                 }
             }
             else
             {
-                Trace.WriteLine(logLine);
+                Console.WriteLine(logLine);
             }
         }
     }
@@ -374,10 +374,10 @@ internal sealed class DynamicGemmKernel : IDisposable
             if (EnableDiagnostics)
             {
                 var lines = source.Split('\n');
-                Trace.WriteLine($"[DynamicGemm] Kernel source (first 30 lines):");
+                Console.WriteLine($"[DynamicGemm] Kernel source (first 30 lines):");
                 for (int i = 0; i < Math.Min(30, lines.Length); i++)
                 {
-                    Trace.WriteLine($"  {i + 1:D3}: {lines[i].TrimEnd()}");
+                    Console.WriteLine($"  {i + 1:D3}: {lines[i].TrimEnd()}");
                 }
             }
             throw;
@@ -509,9 +509,9 @@ internal sealed class DynamicGemmKernel : IDisposable
                     var source = ClBlastXgemmKernel.BuildSourceWithSwizzle(config, gemmK, 0x0F);
                     if (EnableDiagnostics)
                     {
-                        Trace.WriteLine($"[DynamicGemm] SELECTED XOR SWIZZLE kernel: {config.KernelName} GEMMK={gemmK}");
-                        Trace.WriteLine($"[DynamicGemm] Swizzle defines present: LDS_SWIZZLE_A={source.Contains("LDS_SWIZZLE_A(kg, mg)")}, LDS_STRIDE_A={source.Contains("LDS_STRIDE_A")}");
-                        Trace.WriteLine($"[DynamicGemm] Original pattern present: alm[kg*(MWG/VWM)={source.Contains("alm[kg*(MWG/VWM)")}");
+                        Console.WriteLine($"[DynamicGemm] SELECTED XOR SWIZZLE kernel: {config.KernelName} GEMMK={gemmK}");
+                        Console.WriteLine($"[DynamicGemm] Swizzle defines present: LDS_SWIZZLE_A={source.Contains("LDS_SWIZZLE_A(kg, mg)")}, LDS_STRIDE_A={source.Contains("LDS_STRIDE_A")}");
+                        Console.WriteLine($"[DynamicGemm] Original pattern present: alm[kg*(MWG/VWM)={source.Contains("alm[kg*(MWG/VWM)")}");
                     }
                     return source;
                 }
@@ -519,14 +519,14 @@ internal sealed class DynamicGemmKernel : IDisposable
                 case 2:
                     // RDNA1 optimized - XOR swizzle + Wave32 hints
                     if (EnableDiagnostics)
-                        Trace.WriteLine($"[DynamicGemm] SELECTED RDNA1 OPTIMIZED kernel: {config.KernelName} GEMMK={gemmK}");
+                        Console.WriteLine($"[DynamicGemm] SELECTED RDNA1 OPTIMIZED kernel: {config.KernelName} GEMMK={gemmK}");
                     return ClBlastXgemmKernel.BuildSourceOptimizedRdna1(config, gemmK, 0x0F, true);
 
                 case 0:
                 default:
                     // Original CLBlast baseline (default)
                     if (EnableDiagnostics)
-                        Trace.WriteLine($"[DynamicGemm] SELECTED CLBlast BASELINE kernel: {config.KernelName} GEMMK={gemmK}");
+                        Console.WriteLine($"[DynamicGemm] SELECTED CLBlast BASELINE kernel: {config.KernelName} GEMMK={gemmK}");
                     return ClBlastXgemmKernel.BuildSource(config, gemmK);
             }
         }
@@ -689,7 +689,7 @@ internal sealed class DynamicGemmKernel : IDisposable
 
         if (EnableDiagnostics && config.UseTrueVectorLDS)
         {
-            Trace.WriteLine($"[DynamicGemm] UseTrueVectorLDS check: config.UseTrueVectorLDS={config.UseTrueVectorLDS}, VWM={VWM}>1={VWM > 1}, MWI%VWM={MWI % VWM}==0, NWI%VWN={NWI % VWN}==0, result={useTrueVectorLDS}");
+            Console.WriteLine($"[DynamicGemm] UseTrueVectorLDS check: config.UseTrueVectorLDS={config.UseTrueVectorLDS}, VWM={VWM}>1={VWM > 1}, MWI%VWM={MWI % VWM}==0, NWI%VWN={NWI % VWN}==0, result={useTrueVectorLDS}");
         }
 
         // COOPERATIVE LOADING KERNEL (CLBlast-style MDIMA/NDIMB)
@@ -707,7 +707,7 @@ internal sealed class DynamicGemmKernel : IDisposable
             // Use TRUE CLBlast-style vectorized LDS kernel
             // This achieves maximum performance by using vector types throughout
             if (EnableDiagnostics)
-                Trace.WriteLine($"[DynamicGemm] SELECTED TRUE VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN} MWI={MWI} NWI={NWI}");
+                Console.WriteLine($"[DynamicGemm] SELECTED TRUE VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN} MWI={MWI} NWI={NWI}");
             GenerateCLBlastTrueVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG, config.UseColumnMajorA);
         }
         else if (useCooperativeLoading)
@@ -715,7 +715,7 @@ internal sealed class DynamicGemmKernel : IDisposable
             // Use cooperative loading kernel - MDIMA/NDIMB differ from MDIMC/NDIMC
             // This is how CLBlast achieves maximum memory bandwidth
             if (EnableDiagnostics)
-                Trace.WriteLine($"[DynamicGemm] SELECTED COOPERATIVE kernel: {config.KernelName} MDIMA={MDIMA} NDIMB={NDIMB}");
+                Console.WriteLine($"[DynamicGemm] SELECTED COOPERATIVE kernel: {config.KernelName} MDIMA={MDIMA} NDIMB={NDIMB}");
             GenerateCooperativeLoadingKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG, MDIMA, NDIMB, MDIMC, NDIMC);
         }
         else if (isHighOccupancy)
@@ -723,21 +723,21 @@ internal sealed class DynamicGemmKernel : IDisposable
             // Use high-occupancy kernel with TRUE double-buffering (ping-pong)
             // This hides 100% of memory latency by overlapping load and compute
             if (EnableDiagnostics)
-                Trace.WriteLine($"[DynamicGemm] SELECTED HIGH-OCCUPANCY kernel: {config.KernelName}");
+                Console.WriteLine($"[DynamicGemm] SELECTED HIGH-OCCUPANCY kernel: {config.KernelName}");
             GenerateHighOccupancyDoubleBufferedKernel(sb, MWI, NWI, VWN, KWG);
         }
         else if (KREG > 1 && (VWN > 1 || VWM > 1))
         {
             // Use vectorized kernel WITH KREG for CLBlast-style performance
             if (EnableDiagnostics)
-                Trace.WriteLine($"[DynamicGemm] SELECTED KREG kernel: {config.KernelName} KREG={KREG}");
+                Console.WriteLine($"[DynamicGemm] SELECTED KREG kernel: {config.KernelName} KREG={KREG}");
             GenerateVectorizedKernelWithKreg(sb, MWI, NWI, VWM, VWN, KWI, KREG, useSubgroups);
         }
         else if (VWN > 1 || VWM > 1)
         {
             // Use vectorized kernel WITHOUT KREG (simpler, often faster!)
             if (EnableDiagnostics)
-                Trace.WriteLine($"[DynamicGemm] SELECTED VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN}");
+                Console.WriteLine($"[DynamicGemm] SELECTED VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN}");
             GenerateVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI);
         }
         else

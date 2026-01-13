@@ -135,15 +135,15 @@ public sealed class GemmProfiler
 
         if (_config.Verbose)
         {
-            Trace.WriteLine("=".PadRight(80, '='));
-            Trace.WriteLine("GEMM PROFILING SESSION");
-            Trace.WriteLine("=".PadRight(80, '='));
-            Trace.WriteLine($"Device: {_backend.DeviceName}");
-            Trace.WriteLine($"Architecture: {_arch.Name}");
-            Trace.WriteLine($"Peak: {_roofline.PeakGflops:F0} GFLOPS, {_roofline.PeakBandwidthGBs:F0} GB/s");
-            Trace.WriteLine($"Ridge Point: {_roofline.RidgePoint:F1} FLOPS/byte");
-            Trace.WriteLine($"Sizes: {string.Join(", ", _config.Sizes)}");
-            Trace.WriteLine("-".PadRight(80, '-'));
+            Console.WriteLine("=".PadRight(80, '='));
+            Console.WriteLine("GEMM PROFILING SESSION");
+            Console.WriteLine("=".PadRight(80, '='));
+            Console.WriteLine($"Device: {_backend.DeviceName}");
+            Console.WriteLine($"Architecture: {_arch.Name}");
+            Console.WriteLine($"Peak: {_roofline.PeakGflops:F0} GFLOPS, {_roofline.PeakBandwidthGBs:F0} GB/s");
+            Console.WriteLine($"Ridge Point: {_roofline.RidgePoint:F1} FLOPS/byte");
+            Console.WriteLine($"Sizes: {string.Join(", ", _config.Sizes)}");
+            Console.WriteLine("-".PadRight(80, '-'));
         }
 
         foreach (var size in _config.Sizes)
@@ -155,14 +155,14 @@ public sealed class GemmProfiler
 
                 if (_config.Verbose)
                 {
-                    Trace.WriteLine(entry.GetSummary());
+                    Console.WriteLine(entry.GetSummary());
                 }
             }
             catch (Exception ex)
             {
                 if (_config.Verbose)
                 {
-                    Trace.WriteLine($"{size}x{size}x{size}: ERROR - {ex.Message}");
+                    Console.WriteLine($"{size}x{size}x{size}: ERROR - {ex.Message}");
                 }
             }
         }
@@ -183,10 +183,10 @@ public sealed class GemmProfiler
 
         if (_config.Verbose)
         {
-            Trace.WriteLine("-".PadRight(80, '-'));
-            Trace.WriteLine($"Profiling complete in {result.ProfileDurationSeconds:F1}s");
-            Trace.WriteLine($"Best: {result.BestGflops:F0} GFLOPS ({result.BestEfficiencyPercent:F1}% efficiency)");
-            Trace.WriteLine("=".PadRight(80, '='));
+            Console.WriteLine("-".PadRight(80, '-'));
+            Console.WriteLine($"Profiling complete in {result.ProfileDurationSeconds:F1}s");
+            Console.WriteLine($"Best: {result.BestGflops:F0} GFLOPS ({result.BestEfficiencyPercent:F1}% efficiency)");
+            Console.WriteLine("=".PadRight(80, '='));
         }
 
         // Export if configured
@@ -194,14 +194,14 @@ public sealed class GemmProfiler
         {
             ProfileExporter.ToJsonFile(result, _config.JsonOutputPath);
             if (_config.Verbose)
-                Trace.WriteLine($"JSON exported to: {_config.JsonOutputPath}");
+                Console.WriteLine($"JSON exported to: {_config.JsonOutputPath}");
         }
 
         if (_config.CsvOutputPath is { Length: > 0 })
         {
             ProfileExporter.ToCsvFile(result, _config.CsvOutputPath);
             if (_config.Verbose)
-                Trace.WriteLine($"CSV exported to: {_config.CsvOutputPath}");
+                Console.WriteLine($"CSV exported to: {_config.CsvOutputPath}");
         }
 
         return result;
@@ -313,9 +313,9 @@ public sealed class GemmProfiler
 
         if (_config.Verbose)
         {
-            Trace.WriteLine("=".PadRight(80, '='));
-            Trace.WriteLine("RECTANGULAR GEMM PROFILING");
-            Trace.WriteLine("=".PadRight(80, '='));
+            Console.WriteLine("=".PadRight(80, '='));
+            Console.WriteLine("RECTANGULAR GEMM PROFILING");
+            Console.WriteLine("=".PadRight(80, '='));
         }
 
         foreach (var m in mSizes)
@@ -331,14 +331,14 @@ public sealed class GemmProfiler
 
                         if (_config.Verbose)
                         {
-                            Trace.WriteLine(entry.GetSummary());
+                            Console.WriteLine(entry.GetSummary());
                         }
                     }
                     catch (Exception ex)
                     {
                         if (_config.Verbose)
                         {
-                            Trace.WriteLine($"{m}x{n}x{k}: ERROR - {ex.Message}");
+                            Console.WriteLine($"{m}x{n}x{k}: ERROR - {ex.Message}");
                         }
                     }
                 }

@@ -881,17 +881,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Vector<T> NormalizeVector(Vector<T> vector)
     {
-        // Use IEngine vectorized operations for L2 normalization
-        T magnitude = ComputeVectorMagnitude(vector);
-        var magValue = NumOps.ToDouble(magnitude);
-
-        if (magValue < 1e-8)
-        {
-            return vector;
-        }
-
-        // Vectorized division by scalar
-        return Engine.Divide(vector, magnitude);
+        return vector.SafeNormalize();
     }
 
     private T ComputeVectorMagnitude(Vector<T> vector)

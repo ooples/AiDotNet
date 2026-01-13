@@ -120,6 +120,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     private ONNXSentenceTransformer<T> _baseModel;
     private bool _isFineTuned;
     private Dictionary<string, Vector<T>> _fineTunedEmbeddingsCache;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SentenceTransformersFineTuner{T}"/> class.
@@ -285,6 +286,21 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
             values[i] = NumOps.Add(baseEmb[i], adjustment[i]);
         }
         return new Vector<T>(values).Normalize();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _baseModel?.Dispose();
+            }
+
+            _disposed = true;
+        }
+
+        base.Dispose(disposing);
     }
 }
 
