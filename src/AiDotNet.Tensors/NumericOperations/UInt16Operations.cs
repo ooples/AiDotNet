@@ -703,6 +703,26 @@ public class UInt16Operations : INumericOperations<ushort>
     /// </summary>
     public double ToDouble(ushort value) => (double)value;
 
+    /// <summary>
+    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
+    /// UInt16 values are always finite.
+    /// </summary>
+    public bool AllFinite(ReadOnlySpan<ushort> x, out int badIndex)
+    {
+        badIndex = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if any element in the span is NaN or Infinity.
+    /// UInt16 values are always finite.
+    /// </summary>
+    public bool IsAnyNonFinite(ReadOnlySpan<ushort> x, out int badIndex)
+    {
+        badIndex = -1;
+        return false;
+    }
+
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => false;
 

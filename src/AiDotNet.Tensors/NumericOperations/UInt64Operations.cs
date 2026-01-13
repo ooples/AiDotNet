@@ -761,6 +761,26 @@ public class UInt64Operations : INumericOperations<ulong>
     /// </summary>
     public double ToDouble(ulong value) => (double)value;
 
+    /// <summary>
+    /// Checks if all elements in the span are finite (neither NaN nor Infinity).
+    /// UInt64 values are always finite.
+    /// </summary>
+    public bool AllFinite(ReadOnlySpan<ulong> x, out int badIndex)
+    {
+        badIndex = -1;
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if any element in the span is NaN or Infinity.
+    /// UInt64 values are always finite.
+    /// </summary>
+    public bool IsAnyNonFinite(ReadOnlySpan<ulong> x, out int badIndex)
+    {
+        badIndex = -1;
+        return false;
+    }
+
     /// <inheritdoc/>
     public bool SupportsCpuAcceleration => false;
 

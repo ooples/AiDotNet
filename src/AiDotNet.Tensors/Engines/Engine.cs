@@ -2,6 +2,7 @@
 // Automatic engine selection based on hardware capabilities
 
 using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.Intrinsics;
 using System.Text;
@@ -167,22 +168,22 @@ namespace AiDotNet.Tensors.Engines
                 if (directGpu != null && directGpu.IsAvailable)
                 {
                     var directEngine = new DirectGpuTensorEngine(directGpu);
-                    Console.WriteLine($"[Engine] DirectGpu available: {directGpu.BackendName} ({directGpu.DeviceName})");
-                    Console.WriteLine($"[Engine] DirectGpu: {directGpu.ComputeUnits} CUs, {directGpu.GlobalMemoryGB:F1}GB VRAM");
+                    Trace.WriteLine($"[Engine] DirectGpu available: {directGpu.BackendName} ({directGpu.DeviceName})");
+                    Trace.WriteLine($"[Engine] DirectGpu: {directGpu.ComputeUnits} CUs, {directGpu.GlobalMemoryGB:F1}GB VRAM");
                     return directEngine;
                 }
 
-                Console.WriteLine("[Engine] DirectGpu: Not available (no compatible GPU backends found)");
+                Trace.WriteLine("[Engine] DirectGpu: Not available (no compatible GPU backends found)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Engine] DirectGpu initialization failed: {ex.Message}");
+                Trace.WriteLine($"[Engine] DirectGpu initialization failed: {ex.Message}");
             }
 
             // Fallback to CPU (always available)
             var cpuEngine = new CpuEngine();
-            Console.WriteLine($"[Engine] Auto-selected: {cpuEngine.Name}");
-            Console.WriteLine($"[Engine] No GPU detected - operations will use CPU with SIMD acceleration");
+            Trace.WriteLine($"[Engine] Auto-selected: {cpuEngine.Name}");
+            Trace.WriteLine($"[Engine] No GPU detected - operations will use CPU with SIMD acceleration");
             return cpuEngine;
         }
 

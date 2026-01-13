@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.Tensors.Engines.DirectGpu.CUDA;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
@@ -13,19 +14,12 @@ namespace AiDotNet.Tensors.Engines.DirectGpu;
 /// <remarks>
 /// <para><b>Design Philosophy:</b></para>
 /// <para>
-/// This engine provides the fastest GPU path by:
-/// 1. Using float32-only kernels (optimal GPU performance)
-/// 2. Converting generic types at the boundary (preserves clean API)
-/// 3. Implementing optimizations CLBlast misses (tensor cores, fusion, double-buffering)
+/// This engine provides the fastest GPU path by using specialized math kernels 
+/// that run directly on your graphics card.
 /// </para>
-/// <para><b>Fallback Tiers:</b></para>
-/// <code>
-/// DirectGpuEngine (this) - custom optimized kernels
-///     ↓ fallback
-/// CLBlast - tuned but missing optimizations
-///     ↓ fallback
-/// CPU - always available
-/// </code>
+/// <para><b>For Beginners:</b> Think of this as a high-speed lane for math. 
+/// It bypasses the normal slow ways computers do math and uses the massive 
+/// parallel power of your graphics card to speed up AI calculations.</para>
 /// </remarks>
 public sealed class DirectGpuEngine : IDisposable
 {
@@ -35,6 +29,8 @@ public sealed class DirectGpuEngine : IDisposable
     private bool _disposed;
     private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";
     private static readonly string[] DefaultBackendOrder = new[] { "cuda", "opencl", "hip" };
+    private static readonly bool GemmValidateEnabled =
+        Environment.GetEnvironmentVariable("AIDOTNET_GEMM_VALIDATE") == "1";
 
     /// <summary>
     /// Gets whether the direct GPU engine is available.
@@ -88,30 +84,28 @@ public sealed class DirectGpuEngine : IDisposable
     public long LocalMemoryBytes => _backend?.LocalMemoryBytes ?? 0;
 
     /// <summary>
-    /// Initializes the DirectGpuEngine, automatically selecting the best available backend.
+    /// Initializes a new instance of the <see cref="DirectGpuEngine"/> class.
     /// </summary>
     /// <remarks>
-    /// Backend selection order:
-    /// 1. CUDA (NVIDIA GPUs with NVRTC available)
-    /// 2. OpenCL (works on AMD, Intel, and NVIDIA)
-    /// 3. HIP (AMD GPUs with MFMA support - MI100/200/300, RDNA3)
-    /// </remarks>
+    /// <para><b>For Beginners:</b> This method searches your computer for a 
+/// graphics card it can use. It tries CUDA first (NVIDIA), then OpenCL (standard), 
+/// then HIP (AMD) until it finds a way to run fast math.</para>
+/// </remarks>
     public DirectGpuEngine()
     {
-        // Initialize fusion manager
+        // Initialize local state first
         _fusionManager = new KernelFusionManager();
-
-        Console.WriteLine("[DirectGpuEngine] Initializing GPU backends...");
+        Trace.WriteLine("[DirectGpuEngine] Initializing GPU backends...");
 
         var backendOrder = GetBackendOrderFromEnv();
         if (backendOrder.Count == 0)
         {
-            Console.WriteLine($"[DirectGpuEngine] Direct GPU backends disabled via {BackendOrderEnvVar}.");
+            Trace.WriteLine($"[DirectGpuEngine] Direct GPU backends disabled via {BackendOrderEnvVar}.");
             _isAvailable = false;
             return;
         }
 
-        Console.WriteLine($"[DirectGpuEngine] Backend order: {string.Join(", ", backendOrder)}");
+        Trace.WriteLine($"[DirectGpuEngine] Backend order: {string.Join(", ", backendOrder)}");
         foreach (var backendName in backendOrder)
         {
             var backend = TryCreateBackend(backendName);
@@ -123,7 +117,7 @@ public sealed class DirectGpuEngine : IDisposable
             }
         }
 
-        Console.WriteLine("[DirectGpuEngine] No GPU backends available. Falling back to CPU.");
+        Trace.WriteLine("[DirectGpuEngine] No GPU backends available. Falling back to CPU.");
         _isAvailable = false;
     }
 
@@ -170,7 +164,7 @@ public sealed class DirectGpuEngine : IDisposable
                 case "":
                     break;
                 default:
-                    Console.WriteLine($"[DirectGpuEngine] Unknown backend token '{token}' in {BackendOrderEnvVar}. Expected: cuda, opencl, hip, auto, none.");
+                    Trace.WriteLine($"[DirectGpuEngine] Unknown backend token '{token}' in {BackendOrderEnvVar}. Expected: cuda, opencl, hip, auto, none.");
                     break;
             }
         }
@@ -199,45 +193,45 @@ public sealed class DirectGpuEngine : IDisposable
     {
         try
         {
-            Console.WriteLine("[DirectGpuEngine] Checking CUDA availability...");
+            Trace.WriteLine("[DirectGpuEngine] Checking CUDA availability...");
             if (CudaBackend.IsCudaAvailable)
             {
-                Console.WriteLine("[DirectGpuEngine] Creating CUDA backend...");
+                Trace.WriteLine("[DirectGpuEngine] Creating CUDA backend...");
                 var cudaBackend = new CudaBackend();
-                Console.WriteLine($"[DirectGpuEngine] CUDA backend created, IsAvailable = {cudaBackend.IsAvailable}");
+                Trace.WriteLine($"[DirectGpuEngine] CUDA backend created, IsAvailable = {cudaBackend.IsAvailable}");
 
                 if (cudaBackend.IsAvailable)
                 {
-                    Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using CUDA backend on {cudaBackend.DeviceName}");
+                    Trace.WriteLine($"[DirectGpuEngine] SUCCESS: Using CUDA backend on {cudaBackend.DeviceName}");
                     System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using CUDA backend on {cudaBackend.DeviceName}");
                     return cudaBackend;
                 }
-                Console.WriteLine("[DirectGpuEngine] CUDA backend created but not available, disposing...");
+                Trace.WriteLine("[DirectGpuEngine] CUDA backend created but not available, disposing...");
                 cudaBackend.Dispose();
             }
             else
             {
-                Console.WriteLine("[DirectGpuEngine] CUDA is not available on this system");
+                Trace.WriteLine("[DirectGpuEngine] CUDA is not available on this system");
             }
         }
         catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] CUDA library not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] CUDA library not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"CUDA library not found: {ex.Message}");
         }
         catch (TypeInitializationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
             System.Diagnostics.Debug.WriteLine($"CUDA type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] CUDA initialization failed: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] CUDA initialization failed: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"CUDA initialization failed: {ex.Message}");
         }
         catch (EntryPointNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] CUDA function not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] CUDA function not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"CUDA function not found: {ex.Message}");
         }
 
@@ -248,40 +242,40 @@ public sealed class DirectGpuEngine : IDisposable
     {
         try
         {
-            Console.WriteLine("[DirectGpuEngine] Checking OpenCL availability...");
-            Console.WriteLine($"[DirectGpuEngine] OpenClBackend.IsOpenClAvailable = {OpenClBackend.IsOpenClAvailable}");
+            Trace.WriteLine("[DirectGpuEngine] Checking OpenCL availability...");
+            Trace.WriteLine($"[DirectGpuEngine] OpenClBackend.IsOpenClAvailable = {OpenClBackend.IsOpenClAvailable}");
 
-            Console.WriteLine("[DirectGpuEngine] Creating OpenCL backend...");
+            Trace.WriteLine("[DirectGpuEngine] Creating OpenCL backend...");
             var openClBackend = new OpenClBackend();
-            Console.WriteLine($"[DirectGpuEngine] OpenCL backend created, IsAvailable = {openClBackend.IsAvailable}");
+            Trace.WriteLine($"[DirectGpuEngine] OpenCL backend created, IsAvailable = {openClBackend.IsAvailable}");
 
             if (openClBackend.IsAvailable)
             {
-                Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using OpenCL backend on {openClBackend.DeviceName}");
+                Trace.WriteLine($"[DirectGpuEngine] SUCCESS: Using OpenCL backend on {openClBackend.DeviceName}");
                 System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using OpenCL backend on {openClBackend.DeviceName}");
                 return openClBackend;
             }
-            Console.WriteLine("[DirectGpuEngine] OpenCL backend created but not available, disposing...");
+            Trace.WriteLine("[DirectGpuEngine] OpenCL backend created but not available, disposing...");
             openClBackend.Dispose();
         }
         catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] OpenCL library not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] OpenCL library not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"OpenCL library not found: {ex.Message}");
         }
         catch (TypeInitializationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
             System.Diagnostics.Debug.WriteLine($"OpenCL type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] OpenCL initialization failed: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] OpenCL initialization failed: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"OpenCL initialization failed: {ex.Message}");
         }
         catch (EntryPointNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] OpenCL function not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] OpenCL function not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"OpenCL function not found: {ex.Message}");
         }
 
@@ -292,43 +286,43 @@ public sealed class DirectGpuEngine : IDisposable
     {
         try
         {
-            Console.WriteLine("[DirectGpuEngine] Checking HIP availability...");
+            Trace.WriteLine("[DirectGpuEngine] Checking HIP availability...");
             if (HipBackend.IsHipAvailable)
             {
-                Console.WriteLine("[DirectGpuEngine] HIP is available, creating HIP backend...");
+                Trace.WriteLine("[DirectGpuEngine] HIP is available, creating HIP backend...");
                 var hipBackend = new HipBackend();
                 if (hipBackend.IsAvailable)
                 {
-                    Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using HIP backend with {hipBackend.Architecture} architecture");
+                    Trace.WriteLine($"[DirectGpuEngine] SUCCESS: Using HIP backend with {hipBackend.Architecture} architecture");
                     System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using HIP backend with {hipBackend.Architecture} architecture");
                     return hipBackend;
                 }
-                Console.WriteLine("[DirectGpuEngine] HIP backend created but not available, disposing...");
+                Trace.WriteLine("[DirectGpuEngine] HIP backend created but not available, disposing...");
                 hipBackend.Dispose();
             }
             else
             {
-                Console.WriteLine("[DirectGpuEngine] HIP is not available on this system");
+                Trace.WriteLine("[DirectGpuEngine] HIP is not available on this system");
             }
         }
         catch (DllNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] HIP library not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] HIP library not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP library not found: {ex.Message}");
         }
         catch (TypeInitializationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP type initialization failed: {ex.InnerException?.Message ?? ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] HIP initialization failed: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] HIP initialization failed: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP initialization failed: {ex.Message}");
         }
         catch (EntryPointNotFoundException ex)
         {
-            Console.WriteLine($"[DirectGpuEngine] HIP function not found: {ex.Message}");
+            Trace.WriteLine($"[DirectGpuEngine] HIP function not found: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP function not found: {ex.Message}");
         }
 
@@ -400,8 +394,20 @@ public sealed class DirectGpuEngine : IDisposable
         // Download result
         float[] resultFloat = _backend.DownloadBuffer(bufferC);
 
+        if (GemmValidateEnabled && IsAnyNonFinite(resultFloat, out int badIndex))
+        {
+            Trace.WriteLine($"[DirectGpuEngine] GEMM produced non-finite values (first index {badIndex}). Falling back to CPU.");
+            return null;
+        }
+
         // Convert back to T
         return FromFloatArray<T>(resultFloat);
+    }
+
+    private static bool IsAnyNonFinite(float[] data, out int badIndex)
+    {
+        var numOps = MathHelper.GetNumericOperations<float>();
+        return numOps.IsAnyNonFinite(data, out badIndex);
     }
 
     /// <summary>
@@ -417,6 +423,11 @@ public sealed class DirectGpuEngine : IDisposable
         using var bufferC = _backend.MatMul(bufferInput, cachedWeights, M, N, K);
 
         float[] resultFloat = _backend.DownloadBuffer(bufferC);
+        if (GemmValidateEnabled && IsAnyNonFinite(resultFloat, out int badIndex))
+        {
+            Trace.WriteLine($"[DirectGpuEngine] GEMM produced non-finite values (first index {badIndex}). Falling back to CPU.");
+            return null;
+        }
         return FromFloatArray<T>(resultFloat);
     }
 

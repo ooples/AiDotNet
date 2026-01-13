@@ -50,6 +50,34 @@ public readonly struct GemmConfig
     public bool UseTrueVectorLDS { get; init; }  // Use vectorized LDS arrays instead of scalar
     public bool UseColumnMajorA { get; init; }   // Treat A as column-major (packed/transpose path)
 
+    public GemmConfig WithColumnMajorA(bool useColumnMajorA)
+    {
+        return new GemmConfig
+        {
+            TileM = TileM,
+            TileN = TileN,
+            TileK = TileK,
+            ThreadTileM = ThreadTileM,
+            ThreadTileN = ThreadTileN,
+            VectorWidthM = VectorWidthM,
+            VectorWidthN = VectorWidthN,
+            UseDoubleBuffering = UseDoubleBuffering,
+            UseVectorizedLoads = UseVectorizedLoads,
+            KernelName = KernelName,
+            KReg = KReg,
+            KUnroll = KUnroll,
+            UseSubgroupOps = UseSubgroupOps,
+            StrideM = StrideM,
+            StrideN = StrideN,
+            CacheA = CacheA,
+            CacheB = CacheB,
+            MdimaSize = MdimaSize,
+            NdimbSize = NdimbSize,
+            UseTrueVectorLDS = UseTrueVectorLDS,
+            UseColumnMajorA = useColumnMajorA
+        };
+    }
+
     /// <summary>
     /// Generates a unique cache key for this configuration.
     /// Used by DynamicGemmKernel to cache compiled kernels.
@@ -153,7 +181,7 @@ public sealed class GemmAutoTuner
             catch
             {
                 if (EnableDiagnostics && Logger == null)
-                    Console.WriteLine(logLine);
+                    Trace.WriteLine(logLine);
             }
         }
         else if (EnableDiagnostics && Logger == null)
@@ -180,7 +208,7 @@ public sealed class GemmAutoTuner
     {
         if (Console.IsOutputRedirected)
         {
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
             return;
         }
 
@@ -189,12 +217,12 @@ public sealed class GemmAutoTuner
         {
             var previous = Console.ForegroundColor;
             Console.ForegroundColor = color.Value;
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
             Console.ForegroundColor = previous;
         }
         else
         {
-            Console.WriteLine(message);
+            Trace.WriteLine(message);
         }
     }
 

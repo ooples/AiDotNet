@@ -408,6 +408,22 @@ public interface IVectorizedOperations<T>
     /// <param name="destination">The destination span for values of type T.</param>
     void FromHalfSpan(ReadOnlySpan<Half> source, Span<T> destination);
 
+    /// <summary>
+    /// Checks if all elements in the span are finite (not NaN or Infinity).
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="badIndex">The index of the first non-finite value found, or -1 if all are finite.</param>
+    /// <returns>True if all elements are finite, false otherwise.</returns>
+    bool AllFinite(ReadOnlySpan<T> x, out int badIndex);
+
+    /// <summary>
+    /// Checks if any element in the span is NaN or Infinity.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="badIndex">When this method returns true, contains the index of the first non-finite value found; otherwise, -1.</param>
+    /// <returns>True if any element is non-finite; otherwise, false.</returns>
+    bool IsAnyNonFinite(ReadOnlySpan<T> x, out int badIndex);
+
     #region Vectorized Activation Functions
 
     /// <summary>
