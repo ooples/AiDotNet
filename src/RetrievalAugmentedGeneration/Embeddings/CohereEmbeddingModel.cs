@@ -88,8 +88,8 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
             input_type = _inputType
         };
 
-        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
+        using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -118,8 +118,24 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
         return matrix;
     }
 
-        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
+    /// <summary>
+    /// Asynchronously generates an embedding for a single text using the Cohere API.
+    /// </summary>
+    /// <param name="text">The text to encode.</param>
+    /// <returns>A task representing the async operation, with the resulting vector.</returns>
+    public override async Task<Vector<T>> EmbedAsync(string text)
+    {
+        ValidateText(text);
+
+        var requestBody = new
+        {
+            texts = new[] { text },
+            model = _model,
+            input_type = _inputType
+        };
+
+        using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("https://api.cohere.ai/v1/embed", content);
 
         if (!response.IsSuccessStatusCode)
         {

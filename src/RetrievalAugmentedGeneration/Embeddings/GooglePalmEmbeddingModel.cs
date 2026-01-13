@@ -91,8 +91,8 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
             }
         };
 
-        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync(endpoint, content);
+        using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(endpoint, content);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -144,8 +144,8 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
             instances = texts.Select(t => new { content = t }).ToArray()
         };
 
-        var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync(endpoint, content);
+        using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(endpoint, content);
 
         if (!response.IsSuccessStatusCode)
         {

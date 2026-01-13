@@ -88,8 +88,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 model = _modelName
             };
 
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -118,8 +118,23 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return matrix;
         }
 
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
+        /// <summary>
+        /// Asynchronously encodes a single text into a vector representation via the OpenAI API.
+        /// </summary>
+        /// <param name="text">The text to encode.</param>
+        /// <returns>A task representing the async operation, with the resulting vector.</returns>
+        public override async Task<Vector<T>> EmbedAsync(string text)
+        {
+            ValidateText(text);
+
+            var requestBody = new
+            {
+                input = new[] { text },
+                model = _modelName
+            };
+
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
 
             if (!response.IsSuccessStatusCode)
             {

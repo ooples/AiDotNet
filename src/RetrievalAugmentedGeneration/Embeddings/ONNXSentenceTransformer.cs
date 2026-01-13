@@ -101,8 +101,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         private float[] ApplyMeanPooling(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> lastHiddenState, long[] attentionMask)
         {
-            int seqLength = (int)lastHiddenState.Dimensions[1];
-            int hiddenDim = (int)lastHiddenState.Dimensions[2];
+            int seqLength = lastHiddenState.Dimensions[1];
+            int hiddenDim = lastHiddenState.Dimensions[2];
             var pooled = new float[hiddenDim];
             float sumMask = 0;
 

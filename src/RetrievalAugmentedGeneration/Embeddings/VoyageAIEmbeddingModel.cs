@@ -11,6 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
 public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
 {
+    private const int DefaultMaxTokens = 16000;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly string _inputType;
@@ -42,7 +43,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
         _onnxTransformer = new ONNXSentenceTransformer<T>(
             modelPath: _model,
             dimension: _dimension,
-            maxTokens: MaxTokens
+            maxTokens: DefaultMaxTokens
         );
     }
 
@@ -50,7 +51,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
     public override int EmbeddingDimension => _dimension;
 
     /// <inheritdoc />
-    public override int MaxTokens => 16000;
+    public override int MaxTokens => DefaultMaxTokens;
 
     /// <inheritdoc />
     protected override Vector<T> EmbedCore(string text)

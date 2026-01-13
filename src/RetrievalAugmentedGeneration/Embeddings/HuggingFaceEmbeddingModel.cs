@@ -66,8 +66,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             var endpoint = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{_modelName}";
             var requestBody = new { inputs = new[] { text } };
 
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(endpoint, content);
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync(endpoint, content);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -115,8 +115,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             var endpoint = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{_modelName}";
             var requestBody = new { inputs = texts };
 
-            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(endpoint, content);
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync(endpoint, content);
 
             if (!response.IsSuccessStatusCode)
             {
