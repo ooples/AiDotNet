@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -192,7 +193,16 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Encodes a batch of strings into a matrix of embedding vectors.
+        /// Asynchronously encodes a single string into an embedding vector.
+        /// </summary>
+        public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Embed(text));
+        }
+
+        /// <summary>
+        /// Encodes a batch of strings into a matrix of embedding vectors.      
         /// </summary>
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
@@ -204,6 +214,15 @@ namespace AiDotNet.NeuralNetworks
                 for (int j = 0; j < _embeddingDimension; j++) matrix[i, j] = emb[j];
             }
             return matrix;
+        }
+
+        /// <summary>
+        /// Asynchronously encodes a batch of strings into a matrix of embedding vectors.
+        /// </summary>
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(EmbedBatch(texts));
         }
 
         #endregion
@@ -306,7 +325,7 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 // Fallback for other loss functions
-                base.Train(input, expectedOutput);
+                throw new NotSupportedException("SiameseNeuralNetwork training requires a ContrastiveLoss.");
             }
 
             _optimizer.UpdateParameters(Layers);

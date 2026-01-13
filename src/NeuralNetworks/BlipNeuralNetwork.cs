@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -1972,8 +1973,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <inheritdoc/>
-    public Task<Vector<T>> EmbedAsync(string text)
+    public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeText(text));
     }
 
@@ -1998,8 +2000,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <inheritdoc/>
-    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeTextBatch(texts));
     }
 

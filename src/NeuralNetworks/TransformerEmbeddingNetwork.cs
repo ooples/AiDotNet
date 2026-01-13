@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -99,6 +100,11 @@ namespace AiDotNet.NeuralNetworks
 
         /// <inheritdoc/>
         public int MaxTokens => _maxSequenceLength;
+
+        /// <summary>
+        /// Gets the configured pooling strategy for derived models.
+        /// </summary>
+        protected PoolingStrategy CurrentPoolingStrategy => _poolingStrategy;
 
         /// <summary>
         /// Defines the available pooling strategies for creating a single sentence embedding.
@@ -261,8 +267,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public virtual Task<Vector<T>> EmbedAsync(string text)
+        public virtual Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Embed(text));
         }
 
@@ -289,8 +296,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public virtual Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        public virtual Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(EmbedBatch(texts));
         }
 

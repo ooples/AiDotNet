@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -68,19 +69,9 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
     /// <summary>
     /// Generates embeddings using Google Vertex AI API.
     /// </summary>
-    protected override Vector<T> EmbedCore(string text)
+    protected override async Task<Vector<T>> EmbedCoreAsync(string text, CancellationToken cancellationToken = default)
     {
-        return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
-    }
-
-    /// <summary>
-    /// Asynchronously generates an embedding for the specified text using Google Vertex AI API.
-    /// </summary>
-    /// <param name="text">The text to encode.</param>
-    /// <returns>A task representing the async operation, with the resulting vector.</returns>
-    public virtual async Task<Vector<T>> EmbedAsync(string text)
-    {
-        ValidateText(text);
+        cancellationToken.ThrowIfCancellationRequested();
         var endpoint = $"https://{_location}-aiplatform.googleapis.com/v1/projects/{_projectId}/locations/{_location}/publishers/google/models/{_model}:predict";
 
         var requestBody = new
@@ -92,15 +83,19 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         };
 
         using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync(endpoint, content);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = content
+        };
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = await response.Content.ReadAsStringAsync();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"Vertex AI API request failed with status code {response.StatusCode}: {errorContent}");
         }
 
-        var responseJson = await response.Content.ReadAsStringAsync();
+        var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = JsonConvert.DeserializeObject<VertexAIPredictionResponse>(responseJson);
 
         if (result?.Predictions == null || result.Predictions.Count == 0)
@@ -123,7 +118,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
     /// </summary>
     /// <param name="texts">The collection of texts to encode.</param>
     /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-    public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
     {
         var textList = texts.ToList();
         if (textList.Count == 0)
@@ -132,11 +127,12 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         foreach (var text in textList)
             ValidateText(text);
 
-        return await EmbedBatchCoreAsync(textList);
+        return await EmbedBatchCoreAsync(textList, cancellationToken).ConfigureAwait(false);
     }
 
-    protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var endpoint = $"https://{_location}-aiplatform.googleapis.com/v1/projects/{_projectId}/locations/{_location}/publishers/google/models/{_model}:predict";
 
         var requestBody = new
@@ -145,15 +141,19 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         };
 
         using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync(endpoint, content);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = content
+        };
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = await response.Content.ReadAsStringAsync();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"Vertex AI API request failed with status code {response.StatusCode}: {errorContent}");
         }
 
-        var responseJson = await response.Content.ReadAsStringAsync();
+        var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = JsonConvert.DeserializeObject<VertexAIPredictionResponse>(responseJson);
 
         if (result?.Predictions == null || result.Predictions.Count != texts.Count)

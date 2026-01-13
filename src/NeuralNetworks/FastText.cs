@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -297,7 +298,12 @@ namespace AiDotNet.NeuralNetworks
                 var ngrams = GetCharacterNGrams(tokens[s], 3, 6);
                 if (ngrams.Count > 0)
                 {
-                    var ngramIndices = ngrams.Select(ng => (double)(Math.Abs(ng.GetHashCode()) % _bucketSize)).ToArray();
+                    var ngramIndices = ngrams.Select(ng =>
+                    {
+                        uint hash = unchecked((uint)ng.GetHashCode());
+                        int bucket = (int)(hash % (uint)_bucketSize);
+                        return NumOps.FromDouble(bucket);
+                    }).ToArray();
                     var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramIndices), [ngrams.Count]);
                     var ngramEmbeds = Layers[1].Forward(ngramInputTensor);
 
@@ -323,8 +329,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public Task<Vector<T>> EmbedAsync(string text)
+        public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Embed(text));
         }
 
@@ -367,8 +374,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(EmbedBatch(texts));
         }
 

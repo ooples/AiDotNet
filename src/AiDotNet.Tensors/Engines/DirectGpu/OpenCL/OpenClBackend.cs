@@ -1619,9 +1619,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"[GEMM] Packed GEMM: {M}x{N}x{K} -> {mPad}x{nPad}x{kPad}");
             }
 
-            using var aPad = AllocateBuffer(mPad * kPad);
-            using var bPad = AllocateBuffer(kPad * nPad);
-            using var cPad = AllocateBuffer(mPad * nPad);
+            int aPadElements = checked((int)aSize);
+            int bPadElements = checked((int)bSize);
+            int cPadElements = checked((int)cSize);
+
+            using var aPad = AllocateBuffer(aPadElements);
+            using var bPad = AllocateBuffer(bPadElements);
+            using var cPad = AllocateBuffer(cPadElements);
 
             if (useColumnMajorA)
                 PadCopyTransposeMatrix(A, aPad, M, K, mPad, kPad);
@@ -1633,14 +1637,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 if (beta != 0.0f)
                     PadCopyTransposeMatrix(C, cPad, M, N, mPad, nPad);
                 else
-                    PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+                    ZeroBuffer(cPad, cPadElements);
             }
             else
             {
                 if (beta != 0.0f)
                     PadCopyMatrix(C, cPad, M, N, mPad, nPad);
                 else
-                    PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+                    ZeroBuffer(cPad, cPadElements);
             }
 
             if (!TryExecuteDynamicGemm(aPad, bPad, cPad, mPad, nPad, kPad, alpha, beta, config))

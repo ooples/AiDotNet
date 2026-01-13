@@ -1,3 +1,4 @@
+using System.Threading;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -73,8 +74,9 @@ public interface IEmbeddingModel<T>
     /// Asynchronously embeds a single text string into a vector representation.
     /// </summary>
     /// <param name="text">The text to embed.</param>
+    /// <param name="cancellationToken">Token to cancel the asynchronous operation.</param>
     /// <returns>A task representing the async operation, with the resulting vector.</returns>
-    Task<Vector<T>> EmbedAsync(string text);
+    Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Embeds multiple text strings into vector representations in a single batch operation.
@@ -103,8 +105,9 @@ public interface IEmbeddingModel<T>
     /// Asynchronously embeds multiple text strings into vector representations in a single batch operation.
     /// </summary>
     /// <param name="texts">The collection of texts to embed.</param>
+    /// <param name="cancellationToken">Token to cancel the asynchronous operation.</param>
     /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-    Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts);
+    Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the maximum length of text (in tokens) that this model can process.

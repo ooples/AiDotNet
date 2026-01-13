@@ -359,6 +359,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public static void PrintDllSearchDiagnostics()
         {
+            if (Environment.GetEnvironmentVariable("AIDOTNET_OPENCL_DIAGNOSTICS") != "1")
+                return;
             Console.WriteLine("[OpenCL DLL Diagnostics] Searching for OpenCL.dll...");
 
             // Check common Windows locations for OpenCL.dll
@@ -587,22 +589,32 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         {
             get
             {
+                bool diagnosticsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_OPENCL_DIAGNOSTICS") == "1";
                 try
                 {
                     int err = GetPlatformIDs(0, null, out uint numPlatforms);
                     bool available = err == CL_SUCCESS && numPlatforms > 0;
-                    Console.WriteLine($"[OpenCL Diagnostics] GetPlatformIDs returned error code: {err}, platforms found: {numPlatforms}, available: {available}");
+                    if (diagnosticsEnabled)
+                    {
+                        Console.WriteLine($"[OpenCL Diagnostics] GetPlatformIDs returned error code: {err}, platforms found: {numPlatforms}, available: {available}");
+                    }
                     return available;
                 }
                 catch (DllNotFoundException ex)
                 {
-                    Console.WriteLine($"[OpenCL Diagnostics] DllNotFoundException: {ex.Message}");
-                    PrintDllSearchDiagnostics();
+                    if (diagnosticsEnabled)
+                    {
+                        Console.WriteLine($"[OpenCL Diagnostics] DllNotFoundException: {ex.Message}");
+                        PrintDllSearchDiagnostics();
+                    }
                     return false;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[OpenCL Diagnostics] Exception during OpenCL availability check: {ex.GetType().Name}: {ex.Message}");
+                    if (diagnosticsEnabled)
+                    {
+                        Console.WriteLine($"[OpenCL Diagnostics] Exception during OpenCL availability check: {ex.GetType().Name}: {ex.Message}");
+                    }
                     return false;
                 }
             }

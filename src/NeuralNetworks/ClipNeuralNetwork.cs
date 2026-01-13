@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -17,14 +18,14 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
-    private readonly string _imageEncoderPath;
-    private readonly string _textEncoderPath;
+    private string _imageEncoderPath;
+    private string _textEncoderPath;
     private readonly ITokenizer _tokenizer;
-    private readonly int _embeddingDimension;
-    private readonly int _maxSequenceLength;
-    private readonly int _imageSize;
-    private readonly InferenceSession _imageSession;
-    private readonly InferenceSession _textSession;
+    private int _embeddingDimension;
+    private int _maxSequenceLength;
+    private int _imageSize;
+    private InferenceSession _imageSession;
+    private InferenceSession _textSession;
     private bool _disposed;
 
     /// <summary>
@@ -218,8 +219,9 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     }
 
     /// <inheritdoc/>
-    public Task<Vector<T>> EmbedAsync(string text)
+    public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeText(text));
     }
 
@@ -237,8 +239,9 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     }
 
     /// <inheritdoc/>
-    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeTextBatch(texts));
     }
 

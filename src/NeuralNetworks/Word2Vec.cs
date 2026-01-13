@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -354,20 +355,22 @@ namespace AiDotNet.NeuralNetworks
                 return new Vector<T>(_embeddingDimension);
 
             // Extract embeddings from the first layer (The learned word vector table)
-            if (Layers[0] is not ITokenEmbedding<T> embeddingLayer)
+            if (Layers[0] is not EmbeddingLayer<T> embeddingLayer)
             {
-                throw new InvalidOperationException("First layer must implement ITokenEmbedding<T> for word lookup.");
+                throw new InvalidOperationException("First layer must be an EmbeddingLayer<T> for word lookup.");
             }
 
-            var embeddings = embeddingLayer.GetTokenEmbeddings(tokenIds);
+            var tokenTensor = Tensor<T>.FromVector(
+                new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray()),
+                [tokenIds.Count]);
+            var embeddings = embeddingLayer.Forward(tokenTensor);
             
             var sumVector = new Vector<T>(_embeddingDimension);
             for (int s = 0; s < tokenIds.Count; s++)
             {
-                var tokenEmb = embeddings.GetRow(s);
                 for (int d = 0; d < _embeddingDimension; d++)
                 {
-                    sumVector[d] = NumOps.Add(sumVector[d], tokenEmb[d]);
+                    sumVector[d] = NumOps.Add(sumVector[d], embeddings[s, d]);
                 }
             }
 
@@ -382,8 +385,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public Task<Vector<T>> EmbedAsync(string text)
+        public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Embed(text));
         }
 
@@ -414,8 +418,9 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(EmbedBatch(texts));
         }
 

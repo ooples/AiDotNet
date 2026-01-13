@@ -8144,8 +8144,27 @@ public static class LayerHelper<T>
         int numQformerLayers = 12,
         int numHeads = 12,
         int numLmDecoderLayers = 6,
-        int maxSequenceLength = 32)
+        int maxSequenceLength = 32,
+        int numQueryTokens = 32)
     {
+        if (imageSize <= 0) throw new ArgumentOutOfRangeException(nameof(imageSize));
+        if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
+        if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize));
+        if (imageSize % patchSize != 0)
+            throw new ArgumentException("imageSize must be divisible by patchSize.", nameof(patchSize));
+        if (vocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(vocabularySize));
+        if (embeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (qformerHiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(qformerHiddenDim));
+        if (visionHiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(visionHiddenDim));
+        if (lmHiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(lmHiddenDim));
+        if (numQformerLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numQformerLayers));
+        if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
+        if (qformerHiddenDim % numHeads != 0)
+            throw new ArgumentException("qformerHiddenDim must be divisible by numHeads.", nameof(qformerHiddenDim));
+        if (numLmDecoderLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLmDecoderLayers));
+        if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
+        if (numQueryTokens <= 0) throw new ArgumentOutOfRangeException(nameof(numQueryTokens));
+
         // 1. Vision encoder: Patch embedding
         yield return new PatchEmbeddingLayer<T>(
             imageSize, imageSize, channels, patchSize, visionHiddenDim);
@@ -8156,9 +8175,9 @@ public static class LayerHelper<T>
         {
             // Self-attention for queries
             yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
-            
+
             // Cross-attention from queries to vision features
-            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            yield return new CrossAttentionLayer<T>(qformerHiddenDim, qformerHiddenDim, numHeads, numQueryTokens);
             
             // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, qformerHiddenDim, (IActivationFunction<T>?)null);
@@ -8175,6 +8194,8 @@ public static class LayerHelper<T>
         // 5. LM Decoder layers
         int lmFeedForwardDim = lmHiddenDim * 4;
         int lmNumHeads = Math.Max(8, lmHiddenDim / 64);
+        if (lmHiddenDim % lmNumHeads != 0)
+            throw new ArgumentException("lmHiddenDim must be divisible by lmNumHeads.", nameof(lmHiddenDim));
         var geluActivation = new GELUActivation<T>();
         for (int i = 0; i < numLmDecoderLayers; i++)
         {

@@ -16,7 +16,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly string _model;
     private readonly string _inputType;
     private readonly int _dimension;
-    private readonly ONNXSentenceTransformer<T> _onnxTransformer;
+    private readonly Lazy<ONNXSentenceTransformer<T>> _onnxTransformer;
     private bool _disposed;
 
     /// <summary>
@@ -39,12 +39,11 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
         _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
         _dimension = dimension;
 
-        // Initialize ONNX transformer once
-        _onnxTransformer = new ONNXSentenceTransformer<T>(
-            modelPath: _model,
-            dimension: _dimension,
-            maxTokens: DefaultMaxTokens
-        );
+        _onnxTransformer = new Lazy<ONNXSentenceTransformer<T>>(
+            () => new ONNXSentenceTransformer<T>(
+                modelPath: _model,
+                dimension: _dimension,
+                maxTokens: DefaultMaxTokens));
     }
 
     /// <inheritdoc />
@@ -56,7 +55,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
     /// <inheritdoc />
     protected override Vector<T> EmbedCore(string text)
     {
-        return _onnxTransformer.Embed(text);
+        return _onnxTransformer.Value.Embed(text);
     }
 
     protected override void Dispose(bool disposing)
@@ -65,7 +64,10 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
         {
             if (disposing)
             {
-                _onnxTransformer.Dispose();
+                if (_onnxTransformer.IsValueCreated)
+                {
+                    _onnxTransformer.Value.Dispose();
+                }
             }
             _disposed = true;
         }

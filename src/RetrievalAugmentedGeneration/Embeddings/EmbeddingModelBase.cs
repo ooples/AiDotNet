@@ -1,4 +1,5 @@
 
+using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -47,7 +48,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     public Vector<T> Embed(string text)
     {
         ValidateText(text);
-        return EmbedCore(text);
+        return EmbedCoreAsync(text, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -55,10 +56,10 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// </summary>
     /// <param name="text">The text to embed.</param>
     /// <returns>A task representing the async operation, with the resulting vector.</returns>
-    public virtual Task<Vector<T>> EmbedAsync(string text)
+    public virtual async Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
         ValidateText(text);
-        return Task.FromResult(EmbedCore(text));
+        return await EmbedCoreAsync(text, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -80,7 +81,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
             ValidateText(text);
         }
 
-        return EmbedBatchCore(textList);
+        return EmbedBatchCoreAsync(textList, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -88,7 +89,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// </summary>
     /// <param name="texts">The collection of texts to embed.</param>
     /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-    public virtual async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    public virtual async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
     {
         if (texts == null)
             throw new ArgumentNullException(nameof(texts));
@@ -102,7 +103,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
             ValidateText(text);
         }
 
-        return await EmbedBatchCoreAsync(textList);
+        return await EmbedBatchCoreAsync(textList, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -126,7 +127,21 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// Just focus on: Converting the text into a Vector<T> of size EmbeddingDimension.
     /// </para>
     /// </remarks>
-    protected abstract Vector<T> EmbedCore(string text);
+    protected virtual Vector<T> EmbedCore(string text)
+    {
+        throw new NotSupportedException("Override EmbedCore or EmbedCoreAsync to provide embedding logic.");
+    }
+
+    /// <summary>
+    /// Asynchronous core embedding logic to be implemented by derived classes.
+    /// </summary>
+    /// <param name="text">The validated text to embed.</param>
+    /// <returns>A task representing the async operation, with the resulting vector.</returns>
+    protected virtual Task<Vector<T>> EmbedCoreAsync(string text, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(EmbedCore(text));
+    }
 
     /// <summary>
     /// Core batch embedding logic to be implemented by derived classes.
@@ -148,12 +163,13 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// If you don't override, each text is embedded individually (slower but works).
     /// </para>
     /// </remarks>
-    protected virtual Matrix<T> EmbedBatchCore(IList<string> texts)
+    protected virtual Matrix<T> EmbedBatchCore(IList<string> texts, CancellationToken cancellationToken = default)
     {
         var embeddings = new List<Vector<T>>();
         foreach (var text in texts)
         {
-            embeddings.Add(EmbedCore(text));
+            cancellationToken.ThrowIfCancellationRequested();
+            embeddings.Add(EmbedCoreAsync(text, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult());
         }
 
         return CreateMatrixFromVectors(embeddings);
@@ -164,44 +180,13 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// </summary>
     /// <param name="texts">The validated collection of texts to embed.</param>
     /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts, CancellationToken cancellationToken = default)
     {
         var embeddings = new List<Vector<T>>();
         foreach (var text in texts)
         {
-            embeddings.Add(await EmbedAsync(text));
-        }
-
-        return CreateMatrixFromVectors(embeddings);
-    }
-
-    /// <summary>
-    /// Asynchronous core batch embedding logic to be implemented by derived classes.
-    /// </summary>
-    /// <param name="texts">The validated collection of texts to embed.</param>
-    /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
-    {
-        var embeddings = new List<Vector<T>>();
-        foreach (var text in texts)
-        {
-            embeddings.Add(await EmbedAsync(text));
-        }
-
-        return CreateMatrixFromVectors(embeddings);
-    }
-
-    /// <summary>
-    /// Asynchronous core batch embedding logic to be implemented by derived classes.
-    /// </summary>
-    /// <param name="texts">The validated collection of texts to embed.</param>
-    /// <returns>A matrix where each row represents the embedding of the corresponding input text.</returns>
-    protected virtual async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
-    {
-        var embeddings = new List<Vector<T>>();
-        foreach (var text in texts)
-        {
-            embeddings.Add(await EmbedAsync(text));
+            cancellationToken.ThrowIfCancellationRequested();
+            embeddings.Add(await EmbedCoreAsync(text, cancellationToken).ConfigureAwait(false));
         }
 
         return CreateMatrixFromVectors(embeddings);

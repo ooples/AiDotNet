@@ -554,14 +554,21 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
     private string ExtractSection(string text, string sectionName)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            text,
-            $@"{sectionName}\s*(.+?)(?=\n[A-Z_]+:|$)",
-            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase,
-            RegexTimeout
-        );
+        try
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                text,
+                $@"{sectionName}\s*(.+?)(?=\n[A-Z_]+:|$)",
+                System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                RegexTimeout
+            );
 
-        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+            return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            return string.Empty;
+        }
     }
 
     private List<(string toolName, string input)> ParseToolCalls(string response)

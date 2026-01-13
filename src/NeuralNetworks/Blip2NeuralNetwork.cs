@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -37,7 +38,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <summary>
     /// Indicates whether the model is running using native library layers or pre-trained ONNX sessions.
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     private readonly InferenceSession? _visionEncoder;
     private readonly InferenceSession? _qformer;
@@ -67,16 +68,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// Query positional embeddings.
     /// </summary>
     private Tensor<T>? _queryPositionalEmbeddings;
-
-    /// <summary>
-    /// Gradient storage for query tokens.
-    /// </summary>
-    private Tensor<T>? _queryTokensGradients;
-
-    /// <summary>
-    /// Gradient storage for positional embeddings.
-    /// </summary>
-    private Tensor<T>? _queryPositionalEmbeddingsGradients;
 
     /// <summary>
     /// Learnable query tokens for Q-Former.
@@ -307,7 +298,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultBlip2Layers(
                 _imageSize, Architecture.InputDepth, _patchSize, _vocabularySize, _embeddingDimension,
                 _qformerHiddenDim, _visionHiddenDim, _lmHiddenDim, _numQformerLayers, _numHeads,
-                _numLmDecoderLayers, _maxSequenceLength));
+                _numLmDecoderLayers, _maxSequenceLength, numQueryTokens: _numQueryTokens));
         }
 
         MapLayersToFields();
@@ -390,14 +381,16 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
-    public Task<Vector<T>> EmbedAsync(string text)
+    public Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeText(text));
     }
 
     /// <inheritdoc/>
-    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+    public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(EncodeTextBatch(texts));
     }
 
@@ -661,7 +654,17 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
     private Tensor<T> ApplyCrossAttention(ILayer<T> layer, Tensor<T> queries, Tensor<T> keyValues)
     {
-        return layer.Forward(queries, keyValues); 
+        if (layer is CrossAttentionLayer<T> crossAttentionLayer)
+        {
+            return crossAttentionLayer.Forward(queries, keyValues);
+        }
+
+        if (layer is TransformerDecoderLayer<T> decoderLayer)
+        {
+            return decoderLayer.Forward(queries, keyValues);
+        }
+
+        return layer.Forward(queries);
     }
 
     private T ComputeItmNative(Tensor<T> image, string text)
@@ -936,6 +939,11 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         writer.Write(_numLmDecoderLayers);
         writer.Write((int)_languageModelBackbone);
         writer.Write(_useNativeMode);
+
+        if (_visionClsToken == null || _visionPositionalEmbeddings == null || _queryTokens == null || _queryPositionalEmbeddings == null)
+        {
+            throw new InvalidOperationException("BLIP-2 tensors must be initialized before serialization.");
+        }
 
         SerializationHelper<T>.SerializeTensor(writer, _visionClsToken);
         SerializationHelper<T>.SerializeTensor(writer, _visionPositionalEmbeddings);

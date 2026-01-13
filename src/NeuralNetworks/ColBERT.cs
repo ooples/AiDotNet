@@ -230,14 +230,14 @@ namespace AiDotNet.NeuralNetworks
         {
             return new ColBERT<T>(
                 Architecture,
+                _tokenizer,
                 null,
-                null,
-                30522,
+                _vocabSize,
                 _outputDim,
                 MaxTokens,
-                12,
-                12,
-                3072,
+                _numLayers,
+                _numHeads,
+                _feedForwardDim,
                 LossFunction,
                 Convert.ToDouble(MaxGradNorm));
         }
@@ -260,6 +260,10 @@ namespace AiDotNet.NeuralNetworks
         {
             base.SerializeNetworkSpecificData(writer);
             writer.Write(_outputDim);
+            writer.Write(_vocabSize);
+            writer.Write(_numLayers);
+            writer.Write(_numHeads);
+            writer.Write(_feedForwardDim);
         }
 
         /// <inheritdoc/>
@@ -267,6 +271,10 @@ namespace AiDotNet.NeuralNetworks
         {
             base.DeserializeNetworkSpecificData(reader);
             _outputDim = reader.ReadInt32();
+            _vocabSize = reader.ReadInt32();
+            _numLayers = reader.ReadInt32();
+            _numHeads = reader.ReadInt32();
+            _feedForwardDim = reader.ReadInt32();
         }
 
         #endregion

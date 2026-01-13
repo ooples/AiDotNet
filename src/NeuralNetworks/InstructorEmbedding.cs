@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -204,14 +205,16 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        public override Task<Vector<T>> EmbedAsync(string text)
+        public override Task<Vector<T>> EmbedAsync(string text, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Embed(text));
         }
 
         /// <inheritdoc/>
-        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        public override Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(EmbedBatch(texts));
         }
 

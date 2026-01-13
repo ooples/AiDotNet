@@ -71,26 +71,38 @@ public class PromptValidator
         // Basic validation
         issues.AddRange(ValidateBasic(prompt));
 
-        // Syntax validation
-        issues.AddRange(ValidateSyntax(prompt));
-
-        // Length validation
-        issues.AddRange(ValidateLength(prompt, opts));
-
-        // Security validation
-        if (opts.CheckForInjection)
+        try
         {
-            issues.AddRange(ValidateSecurity(prompt));
-        }
+            // Syntax validation
+            issues.AddRange(ValidateSyntax(prompt));
 
-        // Variable validation
-        if (opts.ValidateVariables)
+            // Length validation
+            issues.AddRange(ValidateLength(prompt, opts));
+
+            // Security validation
+            if (opts.CheckForInjection)
+            {
+                issues.AddRange(ValidateSecurity(prompt));
+            }
+
+            // Variable validation
+            if (opts.ValidateVariables)
+            {
+                issues.AddRange(ValidateVariables(prompt));
+            }
+
+            // Best practice validation
+            issues.AddRange(ValidateBestPractices(prompt));
+        }
+        catch (RegexMatchTimeoutException)
         {
-            issues.AddRange(ValidateVariables(prompt));
+            issues.Add(new PromptIssue
+            {
+                Severity = IssueSeverity.Error,
+                Code = "PE099",
+                Message = "Prompt validation timed out while evaluating regular expressions."
+            });
         }
-
-        // Best practice validation
-        issues.AddRange(ValidateBestPractices(prompt));
 
         // Filter by severity
         return issues

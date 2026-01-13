@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -58,9 +59,44 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
         }
 
-        protected override Vector<T> EmbedCore(string text)
+        protected override async Task<Vector<T>> EmbedCoreAsync(string text, CancellationToken cancellationToken = default)
         {
-            return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
+            cancellationToken.ThrowIfCancellationRequested();
+            var requestBody = new
+            {
+                input = new[] { text },
+                model = _modelName
+            };
+
+            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
+            {
+                Content = content
+            };
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                throw new HttpRequestException($"OpenAI API request failed with status code {response.StatusCode}: {errorContent}");
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var result = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(responseJson);
+
+            if (result?.Data == null || result.Data.Count == 0)
+            {
+                throw new InvalidOperationException("OpenAI API returned an empty or invalid response.");
+            }
+
+            var embedding = result.Data[0].Embedding;
+            var values = new T[embedding.Length];
+            for (int i = 0; i < embedding.Length; i++)
+            {
+                values[i] = NumOps.FromDouble(embedding[i]);
+            }
+
+            return new Vector<T>(values);
         }
 
         /// <summary>
@@ -68,7 +104,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         /// </summary>
         /// <param name="texts">The collection of texts to encode.</param>
         /// <returns>A task representing the async operation, with the resulting matrix.</returns>
-        public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        public override async Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
         {
             var textList = texts.ToList();
             if (textList.Count == 0)
@@ -77,11 +113,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             foreach (var text in textList)
                 ValidateText(text);
 
-            return await EmbedBatchCoreAsync(textList);
+            return await EmbedBatchCoreAsync(textList, cancellationToken).ConfigureAwait(false);
         }
 
-        protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
+        protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts, CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var requestBody = new
             {
                 input = texts,
@@ -89,15 +126,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             };
 
             using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            using var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
+            {
+                Content = content
+            };
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
+                var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 throw new HttpRequestException($"OpenAI API request failed with status code {response.StatusCode}: {errorContent}");
             }
 
-            var responseJson = await response.Content.ReadAsStringAsync();
+            var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var result = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(responseJson);
 
             if (result?.Data == null || result.Data.Count != texts.Count)
@@ -116,48 +157,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
 
             return matrix;
-        }
-
-        /// <summary>
-        /// Asynchronously encodes a single text into a vector representation via the OpenAI API.
-        /// </summary>
-        /// <param name="text">The text to encode.</param>
-        /// <returns>A task representing the async operation, with the resulting vector.</returns>
-        public override async Task<Vector<T>> EmbedAsync(string text)
-        {
-            ValidateText(text);
-
-            var requestBody = new
-            {
-                input = new[] { text },
-                model = _modelName
-            };
-
-            using var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
-            using var response = await _httpClient.PostAsync("https://api.openai.com/v1/embeddings", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                throw new HttpRequestException($"OpenAI API request failed with status code {response.StatusCode}: {errorContent}");
-            }
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(responseJson);
-
-            if (result?.Data == null || result.Data.Count == 0)
-            {
-                throw new InvalidOperationException("OpenAI API returned an empty or invalid response.");
-            }
-
-            var embedding = result.Data[0].Embedding;
-            var values = new T[embedding.Length];
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                values[i] = NumOps.FromDouble(embedding[i]);
-            }
-
-            return new Vector<T>(values);
         }
 
         private class OpenAIEmbeddingResponse
