@@ -420,10 +420,24 @@ namespace AiDotNet.NeuralNetworks
         /// <inheritdoc/>
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
-            _vocabSize = reader.ReadInt32();
-            _bucketSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _maxTokens = reader.ReadInt32();
+            int vocabSize = reader.ReadInt32();
+            int bucketSize = reader.ReadInt32();
+            int embeddingDimension = reader.ReadInt32();
+            int maxTokens = reader.ReadInt32();
+
+            if (vocabSize <= 0)
+                throw new InvalidDataException($"Invalid vocab size '{vocabSize}' in FastText serialization.");
+            if (bucketSize <= 0)
+                throw new InvalidDataException($"Invalid bucket size '{bucketSize}' in FastText serialization.");
+            if (embeddingDimension <= 0)
+                throw new InvalidDataException($"Invalid embedding dimension '{embeddingDimension}' in FastText serialization.");
+            if (maxTokens <= 0)
+                throw new InvalidDataException($"Invalid max tokens '{maxTokens}' in FastText serialization.");
+
+            _vocabSize = vocabSize;
+            _bucketSize = bucketSize;
+            _embeddingDimension = embeddingDimension;
+            _maxTokens = maxTokens;
         }
 
         #endregion
