@@ -79,7 +79,7 @@ namespace AiDotNet.NeuralNetworks
             _numHeads = numHeads;
             _feedForwardDim = feedForwardDim;
 
-            InitializeLayers();
+            InitializeLayersCore(false);
         }
 
         #endregion
@@ -96,10 +96,22 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         protected override void InitializeLayers()
         {
+            InitializeLayersCore(true);
+        }
+
+        private void InitializeLayersCore(bool useVirtualValidation)
+        {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);
-                ValidateCustomLayers(Layers);
+                if (useVirtualValidation)
+                {
+                    ValidateCustomLayers(Layers);
+                }
+                else
+                {
+                    ValidateCustomLayersInternal(Layers);
+                }
             }
             else
             {

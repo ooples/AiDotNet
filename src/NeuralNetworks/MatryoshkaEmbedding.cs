@@ -71,7 +71,7 @@ namespace AiDotNet.NeuralNetworks
             _feedForwardDim = feedForwardDim;
             _nestedDimensions = nestedDimensions ?? new[] { 64, 128, 256, 512, 768, 1024, 1536 };
 
-            InitializeLayers();
+            InitializeLayersCore(false);
         }
 
         #endregion
@@ -88,10 +88,22 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         protected override void InitializeLayers()
         {
+            InitializeLayersCore(true);
+        }
+
+        private void InitializeLayersCore(bool useVirtualValidation)
+        {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);
-                ValidateCustomLayers(Layers);
+                if (useVirtualValidation)
+                {
+                    ValidateCustomLayers(Layers);
+                }
+                else
+                {
+                    ValidateCustomLayersInternal(Layers);
+                }
             }
             else
             {

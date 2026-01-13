@@ -115,7 +115,7 @@ namespace AiDotNet.NeuralNetworks
             _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-            InitializeLayers();
+            InitializeLayersCore(false);
         }
 
         #endregion
@@ -140,10 +140,22 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         protected override void InitializeLayers()
         {
+            InitializeLayersCore(true);
+        }
+
+        private void InitializeLayersCore(bool useVirtualValidation)
+        {
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);
-                ValidateCustomLayers(Layers);
+                if (useVirtualValidation)
+                {
+                    ValidateCustomLayers(Layers);
+                }
+                else
+                {
+                    ValidateCustomLayersInternal(Layers);
+                }
             }
             else
             {
