@@ -1,7 +1,5 @@
 #if NET8_0_OR_GREATER
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Tensors.Engines.DirectGpu;
-using AiDotNet.Tensors.Engines.Gpu;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Jobs;
@@ -12,7 +10,7 @@ namespace AiDotNetBenchmarkTests;
 
 [MemoryDiagnoser]
 [SimpleJob(RuntimeMoniker.Net10_0, launchCount: 1, warmupCount: 3, iterationCount: 5)]
-public class TorchSharpComparisonBenchmarks
+public class TorchSharpCpuComparisonBenchmarks
 {
     private static readonly int[] MatrixSizes = [256, 512];
     private static readonly int[] VectorSizes = [100_000, 1_000_000];
@@ -21,12 +19,6 @@ public class TorchSharpComparisonBenchmarks
     private readonly Dictionary<int, Tensor<float>> _aiMatricesB = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsA = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsB = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuMatricesA = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuMatricesB = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuVectorsA = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuVectorsB = new();
-    private readonly Dictionary<int, IGpuBuffer> _aiGpuAddOutputs = new();
-    private readonly Dictionary<int, IGpuBuffer> _aiGpuMultiplyOutputs = new();
 
     private readonly Dictionary<int, TorchTensor> _torchMatricesA = new();
     private readonly Dictionary<int, TorchTensor> _torchMatricesB = new();
@@ -35,7 +27,6 @@ public class TorchSharpComparisonBenchmarks
 
     private Tensor<float>? _aiConvInput;
     private Tensor<float>? _aiConvKernel;
-    private IGpuTensor<float>? _aiGpuConvInput;
     private TorchTensor? _torchConvInput;
     private TorchTensor? _torchConvKernel;
 
@@ -46,38 +37,17 @@ public class TorchSharpComparisonBenchmarks
     private long[]? _torchConvPadding;
     private long[]? _torchConvDilation;
 
-    private DirectGpuTensorEngine? _gpuEngine;
-    private IDirectGpuBackend? _gpuBackend;
-
-    private torch.Device _torchDevice = torch.CUDA;
-    private bool _torchUsesCuda;
+    private torch.Device _torchDevice = torch.CPU;
     private readonly Consumer _consumer = new();
 
     [GlobalSetup]
     public void Setup()
     {
-        AiDotNetEngine.Current = new GpuEngine(AdaptiveThresholds.AlwaysGpu);
-        _gpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        if (_gpuEngine == null || !_gpuEngine.SupportsGpu)
-        {
-            throw new InvalidOperationException("AiDotNet GPU backend is not available. Run CPU comparison benchmarks instead.");
-        }
-
-        _gpuBackend = _gpuEngine.GetBackend();
-        if (_gpuBackend == null)
-        {
-            throw new InvalidOperationException("AiDotNet GPU backend is not available.");
-        }
+        AiDotNetEngine.Current = new CpuEngine();
 
         torch.set_grad_enabled(false);
-        _torchUsesCuda = torch.cuda.is_available();
-        if (!_torchUsesCuda)
-        {
-            throw new InvalidOperationException("TorchSharp CUDA is not available. Run CPU comparison benchmarks instead.");
-        }
-
-        _torchDevice = torch.CUDA;
-        Console.WriteLine("TorchSharp device: CUDA");
+        _torchDevice = torch.CPU;
+        Console.WriteLine("TorchSharp device: CPU");
 
         foreach (var size in MatrixSizes)
         {
@@ -86,8 +56,6 @@ public class TorchSharpComparisonBenchmarks
 
             _aiMatricesA[size] = new Tensor<float>(dataA, new[] { size, size });
             _aiMatricesB[size] = new Tensor<float>(dataB, new[] { size, size });
-            _aiGpuMatricesA[size] = _gpuEngine.UploadToGpu(_aiMatricesA[size], GpuTensorRole.Activation);
-            _aiGpuMatricesB[size] = _gpuEngine.UploadToGpu(_aiMatricesB[size], GpuTensorRole.Activation);
 
             _torchMatricesA[size] = torch.tensor(dataA, new long[] { size, size }, device: _torchDevice);
             _torchMatricesB[size] = torch.tensor(dataB, new long[] { size, size }, device: _torchDevice);
@@ -100,8 +68,6 @@ public class TorchSharpComparisonBenchmarks
 
             _aiVectorsA[size] = new Tensor<float>(dataA, new[] { size });
             _aiVectorsB[size] = new Tensor<float>(dataB, new[] { size });
-            _aiGpuVectorsA[size] = _gpuEngine.UploadToGpu(_aiVectorsA[size], GpuTensorRole.Activation);
-            _aiGpuVectorsB[size] = _gpuEngine.UploadToGpu(_aiVectorsB[size], GpuTensorRole.Activation);
 
             _torchVectorsA[size] = torch.tensor(dataA, new long[] { size }, device: _torchDevice);
             _torchVectorsB[size] = torch.tensor(dataB, new long[] { size }, device: _torchDevice);
@@ -113,16 +79,9 @@ public class TorchSharpComparisonBenchmarks
             throw new InvalidOperationException("Conv2D tensors were not initialized.");
         }
 
-        _aiGpuConvInput = _gpuEngine.UploadToGpu(_aiConvInput, GpuTensorRole.Activation);
         if (_torchConvInput is null || _torchConvKernel is null)
         {
             throw new InvalidOperationException("TorchSharp Conv2D tensors were not initialized.");
-        }
-
-        foreach (var size in VectorSizes)
-        {
-            _aiGpuAddOutputs[size] = _gpuBackend.AllocateBuffer(size);
-            _aiGpuMultiplyOutputs[size] = _gpuBackend.AllocateBuffer(size);
         }
 
         Warmup();
@@ -131,38 +90,6 @@ public class TorchSharpComparisonBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        foreach (var tensor in _aiGpuMatricesA.Values)
-        {
-            tensor.Dispose();
-        }
-
-        foreach (var tensor in _aiGpuMatricesB.Values)
-        {
-            tensor.Dispose();
-        }
-
-        foreach (var tensor in _aiGpuVectorsA.Values)
-        {
-            tensor.Dispose();
-        }
-
-        foreach (var tensor in _aiGpuVectorsB.Values)
-        {
-            tensor.Dispose();
-        }
-
-        foreach (var buffer in _aiGpuAddOutputs.Values)
-        {
-            buffer.Dispose();
-        }
-
-        foreach (var buffer in _aiGpuMultiplyOutputs.Values)
-        {
-            buffer.Dispose();
-        }
-
-        _aiGpuConvInput?.Dispose();
-
         foreach (var tensor in _torchMatricesA.Values)
         {
             tensor.Dispose();
@@ -189,67 +116,51 @@ public class TorchSharpComparisonBenchmarks
 
     private void Warmup()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        var gpuBackend = _gpuBackend ?? throw new InvalidOperationException("GPU backend was not initialized.");
-
-        using var matmul = gpuEngine.MatMulGpuTensors(_aiGpuMatricesA[MatrixSizes[0]], _aiGpuMatricesB[MatrixSizes[0]]);
-        matmul.Synchronize();
+        _ = AiDotNetEngine.Current.TensorMatMul(_aiMatricesA[MatrixSizes[0]], _aiMatricesB[MatrixSizes[0]]);
         using (var result = torch.matmul(_torchMatricesA[MatrixSizes[0]], _torchMatricesB[MatrixSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        using var add = gpuEngine.AddGpu(_aiGpuVectorsA[VectorSizes[0]], _aiGpuVectorsB[VectorSizes[0]]);
-        add.Synchronize();
+        _ = AiDotNetEngine.Current.TensorAdd(_aiVectorsA[VectorSizes[0]], _aiVectorsB[VectorSizes[0]]);
         using (var result = torch.add(_torchVectorsA[VectorSizes[0]], _torchVectorsB[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        using var multiply = gpuEngine.MultiplyGpu(_aiGpuVectorsA[VectorSizes[0]], _aiGpuVectorsB[VectorSizes[0]]);
-        multiply.Synchronize();
+        _ = AiDotNetEngine.Current.TensorMultiply(_aiVectorsA[VectorSizes[0]], _aiVectorsB[VectorSizes[0]]);
         using (var result = torch.mul(_torchVectorsA[VectorSizes[0]], _torchVectorsB[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        using var relu = gpuEngine.ActivationGpu(_aiGpuVectorsA[VectorSizes[0]], FusedActivationType.ReLU);
-        relu.Synchronize();
+        _ = AiDotNetEngine.Current.ReLU(_aiVectorsA[VectorSizes[0]]);
         using (var result = torch.nn.functional.relu(_torchVectorsA[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        using var sigmoid = gpuEngine.ActivationGpu(_aiGpuVectorsA[VectorSizes[0]], FusedActivationType.Sigmoid);
-        sigmoid.Synchronize();
+        _ = AiDotNetEngine.Current.Sigmoid(_aiVectorsA[VectorSizes[0]]);
         using (var result = torch.nn.functional.sigmoid(_torchVectorsA[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        using var sum = gpuEngine.SumAxisGpu(_aiGpuVectorsA[VectorSizes[0]], 0);
-        using var mean = gpuEngine.DivideScalarGpu(sum, VectorSizes[0]);
-        mean.Synchronize();
+        _ = AiDotNetEngine.Current.TensorSum(_aiVectorsA[VectorSizes[0]]);
         using (var result = torch.sum(_torchVectorsA[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
+        _ = AiDotNetEngine.Current.TensorMean(_aiVectorsA[VectorSizes[0]]);
         using (var result = torch.mean(_torchVectorsA[VectorSizes[0]]))
         {
             ConsumeTorchResult(result);
         }
 
-        if (_aiGpuConvInput == null || _aiConvKernel == null)
-        {
-            throw new InvalidOperationException("Conv2D tensors were not initialized.");
-        }
-
-        using var conv = gpuEngine.FusedConv2DGpu(_aiGpuConvInput, _aiConvKernel, null,
-            _convStride, _convStride, _convPadding, _convPadding, _convDilation, _convDilation,
-            FusedActivationType.None);
-        conv.Synchronize();
-
+        var convInput = _aiConvInput ?? throw new InvalidOperationException("Conv2D tensors were not initialized.");
+        var convKernel = _aiConvKernel ?? throw new InvalidOperationException("Conv2D tensors were not initialized.");
+        _ = AiDotNetEngine.Current.Conv2D(convInput, convKernel, _convStride, _convPadding, _convDilation);
         var torchConvInput = _torchConvInput ?? throw new InvalidOperationException("TorchSharp Conv2D input was not initialized.");
         var torchConvKernel = _torchConvKernel ?? throw new InvalidOperationException("TorchSharp Conv2D kernel was not initialized.");
         var torchConvStride = _torchConvStride ?? throw new InvalidOperationException("TorchSharp Conv2D stride was not initialized.");
@@ -260,10 +171,6 @@ public class TorchSharpComparisonBenchmarks
         {
             ConsumeTorchResult(result);
         }
-
-        gpuBackend.Add(_aiGpuVectorsA[VectorSizes[0]].Buffer, _aiGpuVectorsB[VectorSizes[0]].Buffer, _aiGpuAddOutputs[VectorSizes[0]], VectorSizes[0]);
-        gpuBackend.Multiply(_aiGpuVectorsA[VectorSizes[0]].Buffer, _aiGpuVectorsB[VectorSizes[0]].Buffer, _aiGpuMultiplyOutputs[VectorSizes[0]], VectorSizes[0]);
-        gpuBackend.Synchronize();
     }
 
     private void InitializeConv2D()
@@ -295,11 +202,6 @@ public class TorchSharpComparisonBenchmarks
 
     private void ConsumeTorchResult(TorchTensor result)
     {
-        if (_torchUsesCuda)
-        {
-            torch.cuda.synchronize();
-        }
-
         _consumer.Consume(result);
     }
 
@@ -326,11 +228,9 @@ public class TorchSharpComparisonBenchmarks
     [Benchmark]
     [Arguments(256)]
     [Arguments(512)]
-    public void AiDotNet_TensorMatMul_GpuResident(int size)
+    public Tensor<float> AiDotNet_TensorMatMul(int size)
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var result = gpuEngine.MatMulGpuTensors(_aiGpuMatricesA[size], _aiGpuMatricesB[size]);
-        result.Synchronize();
+        return AiDotNetEngine.Current.TensorMatMul(_aiMatricesA[size], _aiMatricesB[size]);
     }
 
     [Benchmark]
@@ -345,21 +245,9 @@ public class TorchSharpComparisonBenchmarks
     [Benchmark]
     [Arguments(100_000)]
     [Arguments(1_000_000)]
-    public void AiDotNet_TensorAdd_GpuResident(int size)
+    public Tensor<float> AiDotNet_TensorAdd(int size)
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var result = gpuEngine.AddGpu(_aiGpuVectorsA[size], _aiGpuVectorsB[size]);
-        result.Synchronize();
-    }
-
-    [Benchmark]
-    [Arguments(100_000)]
-    [Arguments(1_000_000)]
-    public void AiDotNet_TensorAdd_GpuResident_ReusedOutput(int size)
-    {
-        var gpuBackend = _gpuBackend ?? throw new InvalidOperationException("GPU backend was not initialized.");
-        gpuBackend.Add(_aiGpuVectorsA[size].Buffer, _aiGpuVectorsB[size].Buffer, _aiGpuAddOutputs[size], size);
-        gpuBackend.Synchronize();
+        return AiDotNetEngine.Current.TensorAdd(_aiVectorsA[size], _aiVectorsB[size]);
     }
 
     [Benchmark]
@@ -374,21 +262,9 @@ public class TorchSharpComparisonBenchmarks
     [Benchmark]
     [Arguments(100_000)]
     [Arguments(1_000_000)]
-    public void AiDotNet_TensorMultiply_GpuResident(int size)
+    public Tensor<float> AiDotNet_TensorMultiply(int size)
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var result = gpuEngine.MultiplyGpu(_aiGpuVectorsA[size], _aiGpuVectorsB[size]);
-        result.Synchronize();
-    }
-
-    [Benchmark]
-    [Arguments(100_000)]
-    [Arguments(1_000_000)]
-    public void AiDotNet_TensorMultiply_GpuResident_ReusedOutput(int size)
-    {
-        var gpuBackend = _gpuBackend ?? throw new InvalidOperationException("GPU backend was not initialized.");
-        gpuBackend.Multiply(_aiGpuVectorsA[size].Buffer, _aiGpuVectorsB[size].Buffer, _aiGpuMultiplyOutputs[size], size);
-        gpuBackend.Synchronize();
+        return AiDotNetEngine.Current.TensorMultiply(_aiVectorsA[size], _aiVectorsB[size]);
     }
 
     [Benchmark]
@@ -401,11 +277,9 @@ public class TorchSharpComparisonBenchmarks
     }
 
     [Benchmark]
-    public void AiDotNet_ReLU_GpuResident()
+    public Tensor<float> AiDotNet_ReLU()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var result = gpuEngine.ActivationGpu(_aiGpuVectorsA[VectorSizes[1]], FusedActivationType.ReLU);
-        result.Synchronize();
+        return AiDotNetEngine.Current.ReLU(_aiVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
@@ -416,11 +290,9 @@ public class TorchSharpComparisonBenchmarks
     }
 
     [Benchmark]
-    public void AiDotNet_Sigmoid_GpuResident()
+    public Tensor<float> AiDotNet_Sigmoid()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var result = gpuEngine.ActivationGpu(_aiGpuVectorsA[VectorSizes[1]], FusedActivationType.Sigmoid);
-        result.Synchronize();
+        return AiDotNetEngine.Current.Sigmoid(_aiVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
@@ -431,11 +303,9 @@ public class TorchSharpComparisonBenchmarks
     }
 
     [Benchmark]
-    public void AiDotNet_TensorSum_GpuResident()
+    public float AiDotNet_TensorSum()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var sum = gpuEngine.SumAxisGpu(_aiGpuVectorsA[VectorSizes[1]], 0);
-        sum.Synchronize();
+        return AiDotNetEngine.Current.TensorSum(_aiVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
@@ -446,12 +316,9 @@ public class TorchSharpComparisonBenchmarks
     }
 
     [Benchmark]
-    public void AiDotNet_TensorMean_GpuResident()
+    public float AiDotNet_TensorMean()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        using var sum = gpuEngine.SumAxisGpu(_aiGpuVectorsA[VectorSizes[1]], 0);
-        using var mean = gpuEngine.DivideScalarGpu(sum, VectorSizes[1]);
-        mean.Synchronize();
+        return AiDotNetEngine.Current.TensorMean(_aiVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
@@ -462,18 +329,14 @@ public class TorchSharpComparisonBenchmarks
     }
 
     [Benchmark]
-    public void AiDotNet_Conv2D_GpuResident()
+    public Tensor<float> AiDotNet_Conv2D()
     {
-        var gpuEngine = _gpuEngine ?? throw new InvalidOperationException("GPU engine was not initialized.");
-        if (_aiGpuConvInput == null || _aiConvKernel == null)
+        if (_aiConvInput == null || _aiConvKernel == null)
         {
             throw new InvalidOperationException("Conv2D tensors were not initialized.");
         }
 
-        using var result = gpuEngine.FusedConv2DGpu(_aiGpuConvInput, _aiConvKernel, null,
-            _convStride, _convStride, _convPadding, _convPadding, _convDilation, _convDilation,
-            FusedActivationType.None);
-        result.Synchronize();
+        return AiDotNetEngine.Current.Conv2D(_aiConvInput, _aiConvKernel, _convStride, _convPadding, _convDilation);
     }
 
     [Benchmark]

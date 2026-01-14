@@ -5,6 +5,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP.Kernels;
 using AiDotNet.Tensors.Engines.DirectGpu.Sparsity;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -40,6 +42,10 @@ public sealed class HipBackend : IAsyncGpuBackend
     private readonly Dictionary<string, IntPtr> _kernelCache;
     private AmdGpuArchitecture _architecture;
     private bool _disposed;
+    private const int MaxPooledBufferElements = 1_048_576;
+    private const int MaxPooledBuffersPerSize = 4;
+    private readonly GpuBufferPool<HipGpuBuffer> _bufferPool =
+        new GpuBufferPool<HipGpuBuffer>(MaxPooledBuffersPerSize, MaxPooledBufferElements);
     private HipDeviceProperties _deviceProps;
 
     // Additional kernel modules
@@ -559,26 +565,46 @@ public sealed class HipBackend : IAsyncGpuBackend
         IntPtr devicePtr = IntPtr.Zero;
         var size = (UIntPtr)(data.Length * sizeof(float));
 
-        var result = HipNativeBindings.hipMalloc(ref devicePtr, size);
-        HipNativeBindings.CheckError(result, "hipMalloc");
+        if (_bufferPool.TryRent(data.Length, out var pooled) && pooled != null)
+        {
+            GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                var result = HipNativeBindings.hipMemcpy(
+                    pooled.Handle,
+                    handle.AddrOfPinnedObject(),
+                    size,
+                    HipMemcpyKind.HostToDevice);
+                HipNativeBindings.CheckError(result, "hipMemcpy H2D");
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            return pooled;
+        }
+
+        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, size);
+        HipNativeBindings.CheckError(allocResult, "hipMalloc");
 
         // Copy data to device
-        GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+        GCHandle allocHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
         try
         {
-            result = HipNativeBindings.hipMemcpy(
+            var copyResult = HipNativeBindings.hipMemcpy(
                 devicePtr,
-                handle.AddrOfPinnedObject(),
+                allocHandle.AddrOfPinnedObject(),
                 size,
                 HipMemcpyKind.HostToDevice);
-            HipNativeBindings.CheckError(result, "hipMemcpy H2D");
+            HipNativeBindings.CheckError(copyResult, "hipMemcpy H2D");
         }
         finally
         {
-            handle.Free();
+            allocHandle.Free();
         }
 
-        return new HipGpuBuffer(devicePtr, data.Length);
+        return new HipGpuBuffer(devicePtr, data.Length, _bufferPool.Return);
     }
 
     public IGpuBuffer AllocateBuffer(int size)
@@ -586,14 +612,21 @@ public sealed class HipBackend : IAsyncGpuBackend
         IntPtr devicePtr = IntPtr.Zero;
         var sizeBytes = (UIntPtr)(size * sizeof(float));
 
-        var result = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes);
-        HipNativeBindings.CheckError(result, "hipMalloc");
+        if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
+        {
+            var zeroResult = HipNativeBindings.hipMemset(pooled.Handle, 0, sizeBytes);
+            HipNativeBindings.CheckError(zeroResult, "hipMemset");
+            return pooled;
+        }
+
+        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes);
+        HipNativeBindings.CheckError(allocResult, "hipMalloc");
 
         // Zero-initialize
-        result = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes);
-        HipNativeBindings.CheckError(result, "hipMemset");
+        var memsetResult = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes);
+        HipNativeBindings.CheckError(memsetResult, "hipMemset");
 
-        return new HipGpuBuffer(devicePtr, size);
+        return new HipGpuBuffer(devicePtr, size, _bufferPool.Return);
     }
 
     public float[] DownloadBuffer(IGpuBuffer buffer)
@@ -8996,6 +9029,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         // Dispose the default stream wrapper (does not destroy underlying stream)
         _defaultStream?.Dispose();
         _defaultStream = null;
+        _bufferPool.Dispose();
 
         // Unload all kernel modules
         if (_mfmaModule != IntPtr.Zero)
@@ -9645,22 +9679,30 @@ public sealed class HipBackend : IAsyncGpuBackend
 /// <summary>
 /// HIP GPU buffer wrapper implementing IGpuBuffer.
 /// </summary>
-internal sealed class HipGpuBuffer : IGpuBuffer
+internal sealed class HipGpuBuffer : IGpuBuffer, IPoolableGpuBuffer
 {
     public IntPtr Handle { get; }
     public int Size { get; }
     public long SizeInBytes => Size * sizeof(float);
-    private bool _disposed;
+    private readonly Action<HipGpuBuffer>? _returnToPool;
+    private int _poolState;
 
-    public HipGpuBuffer(IntPtr handle, int size)
+    public HipGpuBuffer(IntPtr handle, int size, Action<HipGpuBuffer>? returnToPool = null)
     {
         Handle = handle;
         Size = size;
+        _returnToPool = returnToPool;
     }
 
-    public void Dispose()
+    public void MarkRented()
     {
-        if (_disposed) return;
+        Interlocked.Exchange(ref _poolState, 0);
+    }
+
+    public void Release()
+    {
+        if (Interlocked.Exchange(ref _poolState, 2) == 2)
+            return;
 
         if (Handle != IntPtr.Zero)
         {
@@ -9670,8 +9712,20 @@ internal sealed class HipGpuBuffer : IGpuBuffer
                 System.Diagnostics.Debug.WriteLine($"hipFree warning: {result}");
             }
         }
+    }
 
-        _disposed = true;
+    public void Dispose()
+    {
+        if (_returnToPool == null)
+        {
+            Release();
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _poolState, 1, 0) != 0)
+            return;
+
+        _returnToPool(this);
     }
 }
 

@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.DirectGpu.CUDA.Kernels;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -36,6 +38,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _specializedModule;
     private IntPtr _fp16Module;
     private bool _disposed;
+    private const int MaxPooledBufferElements = 1_048_576;
+    private const int MaxPooledBuffersPerSize = 4;
+    private readonly GpuBufferPool<CudaGpuBuffer> _bufferPool =
+        new GpuBufferPool<CudaGpuBuffer>(MaxPooledBuffersPerSize, MaxPooledBufferElements);
 
     public bool IsAvailable { get; }
     public string BackendName => "CUDA";
@@ -318,11 +324,25 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
 
-        using var _ = PushContext();
         int size = data.Length;
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(data), "Buffer size must be positive.");
         ulong byteSize = (ulong)size * sizeof(float);
+
+        using var _ = PushContext();
+        if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
+        {
+            unsafe
+            {
+                fixed (float* src = data)
+                {
+                    CuBlasNative.CheckCudaResult(
+                        CuBlasNative.cuMemcpyHtoD(pooled.Handle, (IntPtr)src, byteSize),
+                        "cuMemcpyHtoD");
+                }
+            }
+            return pooled;
+        }
 
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc");
 
@@ -344,7 +364,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw;
         }
 
-        return new CudaGpuBuffer(_cudaContext, devicePtr, size);
+        return new CudaGpuBuffer(_cudaContext, devicePtr, size, _bufferPool.Return);
     }
 
     public IGpuBuffer AllocateBuffer(int size)
@@ -356,10 +376,16 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw new ArgumentOutOfRangeException(nameof(size), "Buffer size must be positive.");
 
         using var _ = PushContext();
+        if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
+        {
+            CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(pooled.Handle, 0, (ulong)size), "cuMemsetD32");
+            return pooled;
+        }
+
         ulong byteSize = (ulong)size * sizeof(float);
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc");
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(devicePtr, 0, (ulong)size), "cuMemsetD32");
-        return new CudaGpuBuffer(_cudaContext, devicePtr, size);
+        return new CudaGpuBuffer(_cudaContext, devicePtr, size, _bufferPool.Return);
     }
 
     public IGpuBuffer AllocateByteBuffer(int size)
@@ -7640,6 +7666,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
             return;
 
         _disposed = true;
+        _bufferPool.Dispose();
 
         if (_cublasHandle != IntPtr.Zero)
         {
@@ -7763,25 +7790,36 @@ public sealed class CudaBackend : IAsyncGpuBackend
         Dispose();
     }
 
-    internal sealed class CudaGpuBuffer : IGpuBuffer
+    internal sealed class CudaGpuBuffer : IGpuBuffer, IPoolableGpuBuffer
     {
         private IntPtr _context;
         private IntPtr _devicePtr;
+        private readonly Action<CudaGpuBuffer>? _returnToPool;
+        private int _poolState;
 
         public int Size { get; }
         public long SizeInBytes { get; }
         public IntPtr Handle => _devicePtr;
 
-        public CudaGpuBuffer(IntPtr context, IntPtr devicePtr, int size)
+        public CudaGpuBuffer(IntPtr context, IntPtr devicePtr, int size, Action<CudaGpuBuffer>? returnToPool = null)
         {
             _context = context;
             _devicePtr = devicePtr;
             Size = size;
             SizeInBytes = (long)size * sizeof(float);
+            _returnToPool = returnToPool;
         }
 
-        public void Dispose()
+        public void MarkRented()
         {
+            Interlocked.Exchange(ref _poolState, 0);
+        }
+
+        public void Release()
+        {
+            if (Interlocked.Exchange(ref _poolState, 2) == 2)
+                return;
+
             if (_devicePtr == IntPtr.Zero)
                 return;
 
@@ -7804,9 +7842,23 @@ public sealed class CudaBackend : IAsyncGpuBackend
             GC.SuppressFinalize(this);
         }
 
+        public void Dispose()
+        {
+            if (_returnToPool == null)
+            {
+                Release();
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _poolState, 1, 0) != 0)
+                return;
+
+            _returnToPool(this);
+        }
+
         ~CudaGpuBuffer()
         {
-            Dispose();
+            Release();
         }
     }
 

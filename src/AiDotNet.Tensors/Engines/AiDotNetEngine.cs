@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Gpu;
+
 namespace AiDotNet.Tensors.Engines;
 
 /// <summary>
@@ -144,6 +146,55 @@ public static class AiDotNetEngine
     {
         Current = new CpuEngine();
         Console.WriteLine("[AiDotNet] Reset to CPU engine");
+    }
+
+    /// <summary>
+    /// Begins a GPU execution context for the current engine, if supported.
+    /// </summary>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>A GPU execution context, or null if GPU is not available.</returns>
+    public static GpuExecutionContext? BeginGpuContext(GpuExecutionOptions? options = null)
+    {
+        if (Current is DirectGpuTensorEngine gpuEngine)
+        {
+            return gpuEngine.BeginGpuContext(options);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Executes an action within a GPU execution context for the current engine.
+    /// </summary>
+    /// <param name="action">The action to execute.</param>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>True if executed on GPU, false if GPU is not available.</returns>
+    public static bool WithGpuContext(Action<GpuExecutionContext> action, GpuExecutionOptions? options = null)
+    {
+        if (Current is DirectGpuTensorEngine gpuEngine)
+        {
+            return gpuEngine.WithGpuContext(action, options);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Executes a function within a GPU execution context for the current engine.
+    /// </summary>
+    /// <typeparam name="TResult">The result type.</typeparam>
+    /// <param name="func">The function to execute.</param>
+    /// <param name="fallback">Fallback function if GPU is not available.</param>
+    /// <param name="options">Optional execution options.</param>
+    /// <returns>The function result.</returns>
+    public static TResult WithGpuContext<TResult>(Func<GpuExecutionContext, TResult> func, Func<TResult> fallback, GpuExecutionOptions? options = null)
+    {
+        if (Current is DirectGpuTensorEngine gpuEngine)
+        {
+            return gpuEngine.WithGpuContext(func, fallback, options);
+        }
+
+        return fallback();
     }
 
     /// <summary>

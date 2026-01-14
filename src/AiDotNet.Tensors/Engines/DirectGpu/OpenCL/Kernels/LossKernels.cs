@@ -369,7 +369,7 @@ __kernel void contrastive_loss_gradient(
 // Reduction kernel - sum all elements
 // Used to compute total loss from element-wise losses
 // ---------------------------------------------------------------------------
-__kernel void reduce_sum(
+__kernel void loss_reduce_sum(
     __global const float* input,
     __global float* output,
     const int size,
@@ -401,11 +401,11 @@ __kernel void reduce_sum(
 // Reduction kernel - compute mean
 // NOTE: This kernel outputs partial sums per workgroup. For correct mean:
 // 1. If only 1 workgroup, output is divided by size to give final mean.
-// 2. If multiple workgroups, use reduce_sum first, then divide result by size on host.
-// For simplicity, this kernel outputs partial sums (same as reduce_sum).
+// 2. If multiple workgroups, use loss_reduce_sum first, then divide result by size on host.
+// For simplicity, this kernel outputs partial sums (same as loss_reduce_sum).
 // Host should sum all outputs and divide by size for final mean.
 // ---------------------------------------------------------------------------
-__kernel void reduce_mean(
+__kernel void loss_reduce_mean(
     __global const float* input,
     __global float* output,
     const int size,
@@ -988,7 +988,7 @@ __kernel void elastic_net_gradient(
             // Elastic Net Loss
             "elastic_net_loss", "elastic_net_gradient",
             // Reduction kernels
-            "reduce_sum", "reduce_mean"
+            "loss_reduce_sum", "loss_reduce_mean"
         };
     }
 }

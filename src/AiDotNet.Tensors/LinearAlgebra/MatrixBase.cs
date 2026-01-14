@@ -677,10 +677,19 @@ public abstract class MatrixBase<T>
         int N = other.Columns;
         int K = _cols;
 
-        // Create output array for the recursive algorithm
-        var resultData = new T[M * N];
+        if (MatrixMultiplyHelper.TryGemm(_memory, 0, other._memory, 0, result._memory, 0, M, K, N))
+        {
+            return result;
+        }
+
+        if (MatrixMultiplyHelper.ShouldUseBlocked<T>(M, K, N))
+        {
+            MatrixMultiplyHelper.MultiplyBlocked(_numOps, _memory, other._memory, result._memory, M, K, N, K, N, N);
+            return result;
+        }
 
         // Use cache-oblivious recursive algorithm
+        var resultData = new T[M * N];
         MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), resultData, 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
 
         // Copy result back to the result matrix

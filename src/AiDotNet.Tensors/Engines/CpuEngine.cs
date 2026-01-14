@@ -1413,24 +1413,7 @@ public class CpuEngine : IEngine
                 $"First matrix columns ({a.Columns}) must equal second matrix rows ({b.Rows}).");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Matrix<T>(a.Rows, b.Columns);
-
-        // Standard O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) matrix multiplication
-        for (int i = 0; i < a.Rows; i++)
-        {
-            for (int j = 0; j < b.Columns; j++)
-            {
-                T sum = numOps.Zero;
-                for (int k = 0; k < a.Columns; k++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-
-        return result;
+        return a.Multiply(b);
     }
 
     /// <inheritdoc/>
@@ -3442,6 +3425,11 @@ public class CpuEngine : IEngine
 
         var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
 
+        if (TryConv2DIm2Col(input, kernel, result, stride, padding, dilation, outputHeight, outputWidth, numOps))
+        {
+            return result;
+        }
+
         // Perform convolution
         for (int b = 0; b < batch; b++)
         {
@@ -3482,6 +3470,140 @@ public class CpuEngine : IEngine
         }
 
         return result;
+    }
+    private static bool TryConv2DIm2Col<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> result,
+        int stride,
+        int padding,
+        int dilation,
+        int outputHeight,
+        int outputWidth,
+        INumericOperations<T> numOps)
+    {
+        if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
+        {
+            return false;
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        long colRowsLong = (long)outputHeight * outputWidth;
+        long colColsLong = (long)inChannels * kernelHeight * kernelWidth;
+        if (colRowsLong <= 0 || colColsLong <= 0)
+        {
+            return false;
+        }
+
+        long work = colRowsLong * colColsLong * outChannels;
+        if (work < 1_000_000)
+        {
+            return false;
+        }
+
+        if (colRowsLong > int.MaxValue || colColsLong > int.MaxValue)
+        {
+            return false;
+        }
+
+        long colSizeLong = colRowsLong * colColsLong;
+        if (colSizeLong > int.MaxValue)
+        {
+            return false;
+        }
+
+        int colRows = (int)colRowsLong;
+        int colCols = (int)colColsLong;
+
+        var kernelMatrix = new T[outChannels * colCols];
+        var kernelSpan = kernel.Data.Span;
+        for (int oc = 0; oc < outChannels; oc++)
+        {
+            int baseOffset = oc * colCols;
+            int colIndex = 0;
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                int kernelChannelBase = ((oc * inChannels) + ic) * kernelHeight * kernelWidth;
+                for (int kh = 0; kh < kernelHeight; kh++)
+                {
+                    int kernelRowBase = kernelChannelBase + kh * kernelWidth;
+                    for (int kw = 0; kw < kernelWidth; kw++)
+                    {
+                        kernelMatrix[baseOffset + colIndex] = kernelSpan[kernelRowBase + kw];
+                        colIndex++;
+                    }
+                }
+            }
+        }
+
+        var inputData = input.Data;
+        var resultData = result.Data;
+
+        Action<int> processBatch = b =>
+        {
+            var inputSpan = inputData.Span;
+            var resultSpan = resultData.Span;
+            var colMatrix = new T[colCols * colRows];
+            for (int oh = 0; oh < outputHeight; oh++)
+            {
+                int inBaseH = oh * stride - padding;
+                for (int ow = 0; ow < outputWidth; ow++)
+                {
+                    int inBaseW = ow * stride - padding;
+                    int rowIndex = oh * outputWidth + ow;
+                    int colIndex = 0;
+
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        int inputChannelBase = ((b * inChannels) + ic) * height * width;
+                        for (int kh = 0; kh < kernelHeight; kh++)
+                        {
+                            int ih = inBaseH + kh * dilation;
+                            int inputRowBase = inputChannelBase + ih * width;
+                            for (int kw = 0; kw < kernelWidth; kw++)
+                            {
+                                int iw = inBaseW + kw * dilation;
+                                T value = numOps.Zero;
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    value = inputSpan[inputRowBase + iw];
+                                }
+
+                                colMatrix[colIndex * colRows + rowIndex] = value;
+                                colIndex++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            var outputMatrix = new T[outChannels * colRows];
+            MultiplyMatrixCore(numOps, kernelMatrix, 0, colMatrix, 0, outputMatrix, 0, outChannels, colCols, colRows, allowParallel: batch == 1);
+
+            int outputBatchOffset = b * outChannels * colRows;
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                outputMatrix.AsSpan(oc * colRows, colRows)
+                    .CopyTo(resultSpan.Slice(outputBatchOffset + oc * colRows, colRows));
+            }
+        };
+
+        if (batch > 1)
+        {
+            Parallel.For(0, batch, processBatch);
+            return true;
+        }
+
+        processBatch(0);
+        return true;
     }
 
     #endregion
@@ -4196,6 +4318,49 @@ public class CpuEngine : IEngine
         throw new ArgumentException($"Unsupported TensorMatMul combination: ranks {a.Rank} and {b.Rank}. Supported: 2Dx2D, NDx2D, NDxND (same rank).");
     }
 
+    private static void MultiplyMatrixCore<T>(
+        INumericOperations<T> numOps,
+        ReadOnlyMemory<T> a,
+        int aOffset,
+        ReadOnlyMemory<T> b,
+        int bOffset,
+        Memory<T> c,
+        int cOffset,
+        int m,
+        int k,
+        int n,
+        bool allowParallel)
+    {
+        if (MatrixMultiplyHelper.TryGemm(a, aOffset, b, bOffset, c, cOffset, m, k, n))
+        {
+            return;
+        }
+
+        if (MatrixMultiplyHelper.ShouldUseBlocked<T>(m, k, n))
+        {
+            MatrixMultiplyHelper.MultiplyBlocked(numOps, a, b, c, m, k, n, k, n, n, aOffset, bOffset, cOffset, allowParallel);
+            return;
+        }
+
+        var aSpan = a.Span;
+        var bSpan = b.Span;
+        var cSpan = c.Span;
+
+        for (int i = 0; i < m; i++)
+        {
+            int aRowOffset = aOffset + i * k;
+            int cRowOffset = cOffset + i * n;
+            for (int j = 0; j < n; j++)
+            {
+                T sum = numOps.Zero;
+                for (int kIndex = 0; kIndex < k; kIndex++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
+                }
+                cSpan[cRowOffset + j] = sum;
+            }
+        }
+    }
     /// <summary>
     /// Standard 2D matrix multiplication: [M, N] @ [N, P] = [M, P]
     /// </summary>
@@ -4208,21 +4373,8 @@ public class CpuEngine : IEngine
         if (n != b.Shape[0])
             throw new ArgumentException($"Matrix dimensions incompatible: [{m},{n}] x [{b.Shape[0]},{p}]");
 
-        var result = new Tensor<T>([m, p]);
-
-        Parallel.For(0, m, i =>
-        {
-            for (int j = 0; j < p; j++)
-            {
-                T sum = numOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        });
-
+        var result = new Tensor<T>(new[] { m, p });
+        MultiplyMatrixCore(numOps, a.Data, 0, b.Data, 0, result.Data, 0, m, n, p, allowParallel: true);
         return result;
     }
 
@@ -4259,9 +4411,9 @@ public class CpuEngine : IEngine
         outputShape[aRank - 1] = p;
 
         var result = new Tensor<T>(outputShape);
-        var aData = a.ToArray();
-        var bData = b.ToArray();
-        var resultData = result.ToArray();
+        var aData = a.Data;
+        var bData = b.Data;
+        var resultData = result.Data;
 
         int matrixSizeA = m * n;
         int matrixSizeResult = m * p;
@@ -4271,23 +4423,10 @@ public class CpuEngine : IEngine
             int aOffset = batch * matrixSizeA;
             int resultOffset = batch * matrixSizeResult;
 
-            for (int i = 0; i < m; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    T sum = numOps.Zero;
-                    for (int k = 0; k < n; k++)
-                    {
-                        T aVal = aData[aOffset + i * n + k];
-                        T bVal = bData[k * p + j];
-                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
-                    }
-                    resultData[resultOffset + i * p + j] = sum;
-                }
-            }
+            MultiplyMatrixCore(numOps, aData, aOffset, bData, 0, resultData, resultOffset, m, n, p, allowParallel: false);
         });
 
-        return new Tensor<T>(outputShape, new Vector<T>(resultData));
+        return result;
     }
 
     /// <summary>
@@ -4328,9 +4467,9 @@ public class CpuEngine : IEngine
         outputShape[rank - 1] = p;
 
         var result = new Tensor<T>(outputShape);
-        var aData = a.ToArray();
-        var bData = b.ToArray();
-        var resultData = result.ToArray();
+        var aData = a.Data;
+        var bData = b.Data;
+        var resultData = result.Data;
 
         int matrixSizeA = m * n;
         int matrixSizeB = n * p;
@@ -4342,23 +4481,10 @@ public class CpuEngine : IEngine
             int bOffset = batch * matrixSizeB;
             int resultOffset = batch * matrixSizeResult;
 
-            for (int i = 0; i < m; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    T sum = numOps.Zero;
-                    for (int k = 0; k < n; k++)
-                    {
-                        T aVal = aData[aOffset + i * n + k];
-                        T bVal = bData[bOffset + k * p + j];
-                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
-                    }
-                    resultData[resultOffset + i * p + j] = sum;
-                }
-            }
+            MultiplyMatrixCore(numOps, aData, aOffset, bData, bOffset, resultData, resultOffset, m, n, p, allowParallel: false);
         });
 
-        return new Tensor<T>(outputShape, new Vector<T>(resultData));
+        return result;
     }
 
     /// <inheritdoc/>
@@ -4378,6 +4504,11 @@ public class CpuEngine : IEngine
         int strideH = stride[0], strideW = stride[1];
         int padH = padding[0], padW = padding[1];
         int dilationH = dilation[0], dilationW = dilation[1];
+
+        if (strideH == strideW && padH == padW && dilationH == dilationW)
+        {
+            return Conv2D(input, kernel, strideH, padH, dilationH);
+        }
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
