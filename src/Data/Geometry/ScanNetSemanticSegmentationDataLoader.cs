@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using AiDotNet.Geometry.IO;
 using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.Helpers;
@@ -353,7 +353,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
     {
         var rows = new List<double[]>(pointCount);
         int featureDim = pointCloud.NumFeatures;
-        var data = pointCloud.Points.Data;
+        var data = pointCloud.Points.Data.Span;
 
         bool hasColors = featureDim >= 6;
         bool hasNormals = featureDim >= (hasColors ? 9 : 6);

@@ -706,7 +706,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         int diffusedSize = InputChannels * NumTimeScales;
 
         // Upload eigenvectors to GPU
-        using var eigenvectorsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_eigenvectors.Data));
+        using var eigenvectorsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_eigenvectors.Data.ToArray()));
 
         // Transpose eigenvectors for spectral projection: [numEig, numVertices]
         using var eigenvectorsTransposedBuffer = backend.AllocateBuffer(numEig * numVertices);
@@ -845,8 +845,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // since backward pass won't be called
 
         // Upload weights and biases
-        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
-        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data));
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data.ToArray()));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data.ToArray()));
 
         // Transpose weights for GEMM: [outputChannels, diffusedSize]^T = [diffusedSize, outputChannels]
         using var weightsTransposedBuffer = backend.AllocateBuffer(diffusedSize * OutputChannels);

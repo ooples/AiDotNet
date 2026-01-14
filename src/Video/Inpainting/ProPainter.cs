@@ -207,7 +207,7 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     {
         var predicted = Predict(input);
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -585,7 +585,7 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     /// <summary>
@@ -822,7 +822,7 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 
@@ -833,7 +833,7 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 

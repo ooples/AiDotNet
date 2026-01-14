@@ -397,9 +397,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             spatialSize *= input.Shape[d];
         }
 
-        var inputData = input.Data;
-        var scaleData = scale.Data;
-        var shiftData = shift.Data;
+        var inputData = input.Data.Span;
+        var scaleData = scale.Data.Span;
+        var shiftData = shift.Data.Span;
         var outputData = new T[inputData.Length];
 
         for (int n = 0; n < batch; n++)

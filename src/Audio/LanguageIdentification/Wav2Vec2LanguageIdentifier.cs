@@ -363,7 +363,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var probs = Softmax(modelOutput.Data);
+        var probs = Softmax(modelOutput.Data.ToArray());
         return new Tensor<T>(probs, modelOutput.Shape);
     }
 
@@ -540,7 +540,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             output = ForwardNative(preprocessed);
         }
 
-        return output.Data;
+        return output.Data.ToArray();
     }
 
     private Tensor<T> ForwardNative(Tensor<T> input)

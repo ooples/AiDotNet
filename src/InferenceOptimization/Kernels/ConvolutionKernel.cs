@@ -50,8 +50,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
             if (inputs.Length >= 3 && inputs[2] != null && inputs[2].Data.Length >= 2)
             {
-                stride = Math.Max(1, (int)inputs[2].Data[0]);
-                padding = Math.Max(0, (int)inputs[2].Data[1]);
+                stride = Math.Max(1, (int)inputs[2].Data.Span[0]);
+                padding = Math.Max(0, (int)inputs[2].Data.Span[1]);
             }
 
             // Determine convolution type based on kernel shape
@@ -134,9 +134,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int kernelH, int kernelW, int stride, int padding,
             int outHeight, int outWidth)
         {
-            var inputData = input.Data;
-            var kernelData = kernel.Data;
-            var outputData = output.Data;
+            var inputData = input.Data.Span;
+            var kernelData = kernel.Data.Span;
+            var outputData = output.Data.Span;
 
             for (int oh = 0; oh < outHeight; oh++)
             {
@@ -238,9 +238,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int inHeight, int inWidth, int kernelH, int kernelW,
             int stride, int padding, int outHeight, int outWidth)
         {
-            var inputData = input.Data;
-            var kernelData = kernel.Data;
-            var outputData = output.Data;
+            var inputData = input.Data.Span;
+            var kernelData = kernel.Data.Span;
+            var outputData = output.Data.Span;
 
             for (int oh = 0; oh < outHeight; oh++)
             {
@@ -344,9 +344,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
             int outHeight, int outWidth)
         {
             int inChannelStart = group * inChannelsPerGroup;
-            var inputData = input.Data;
-            var kernelData = kernel.Data;
-            var outputData = output.Data;
+            var inputData = input.Data.Span;
+            var kernelData = kernel.Data.Span;
+            var outputData = output.Data.Span;
 
             for (int oh = 0; oh < outHeight; oh++)
             {

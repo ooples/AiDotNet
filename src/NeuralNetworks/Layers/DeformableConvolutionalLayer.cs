@@ -447,13 +447,13 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         {
             for (int c = 0; c < channels; c++)
             {
-                T biasVal = bias.Data[c];
+                T biasVal = bias.Data.Span[c];
                 for (int h = 0; h < height; h++)
                 {
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        output.Data[idx] = NumOps.Add(output.Data[idx], biasVal);
+                        output.Data.Span[idx] = NumOps.Add(output.Data.Span[idx], biasVal);
                     }
                 }
             }
@@ -576,9 +576,9 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             // _lastMask is already sigmoid output, so grad = gradMask * mask * (1 - mask)
             for (int i = 0; i < gradMask.Length; i++)
             {
-                T m = _lastMask.Data[i];
+                T m = _lastMask.Data.Span[i];
                 T oneMinusM = NumOps.Subtract(NumOps.One, m);
-                gradMask.Data[i] = NumOps.Multiply(NumOps.Multiply(gradMask.Data[i], m), oneMinusM);
+                gradMask.Data.Span[i] = NumOps.Multiply(NumOps.Multiply(gradMask.Data.Span[i], m), oneMinusM);
             }
         }
 
@@ -599,11 +599,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         var totalInputGrad = new Tensor<T>(input4D.Shape);
         for (int i = 0; i < totalInputGrad.Length; i++)
         {
-            totalInputGrad.Data[i] = gradInputFromDeform.Data[i];
-            totalInputGrad.Data[i] = NumOps.Add(totalInputGrad.Data[i], gradInputFromOffset.Data[i]);
+            totalInputGrad.Data.Span[i] = gradInputFromDeform.Data.Span[i];
+            totalInputGrad.Data.Span[i] = NumOps.Add(totalInputGrad.Data.Span[i], gradInputFromOffset.Data.Span[i]);
             if (gradInputFromMask != null)
             {
-                totalInputGrad.Data[i] = NumOps.Add(totalInputGrad.Data[i], gradInputFromMask.Data[i]);
+                totalInputGrad.Data.Span[i] = NumOps.Add(totalInputGrad.Data.Span[i], gradInputFromMask.Data.Span[i]);
             }
         }
 
@@ -628,11 +628,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                     for (int w = 0; w < outW; w++)
                     {
                         int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
-                        sum = NumOps.Add(sum, gradOutput.Data[idx]);
+                        sum = NumOps.Add(sum, gradOutput.Data.Span[idx]);
                     }
                 }
             }
-            _biasGradients!.Data[c] = sum;
+            _biasGradients!.Data.Span[c] = sum;
         }
     }
 
@@ -664,7 +664,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         // Copy to weight gradient tensor
         for (int i = 0; i < weightGrad.Length; i++)
         {
-            weightGrad.Data[i] = computedWeightGrad.Data[i];
+            weightGrad.Data.Span[i] = computedWeightGrad.Data.Span[i];
         }
 
         // Compute bias gradients (sum over batch and spatial)
@@ -683,11 +683,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                     for (int w = 0; w < outW; w++)
                     {
                         int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
-                        sum = NumOps.Add(sum, gradOutput.Data[idx]);
+                        sum = NumOps.Add(sum, gradOutput.Data.Span[idx]);
                     }
                 }
             }
-            biasGrad.Data[c] = sum;
+            biasGrad.Data.Span[c] = sum;
         }
 
         return gradInput;
@@ -739,7 +739,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         int inChannelsPerGroup = inChannels / _groups;
         var weightsFlat = new float[outChannels * inChannelsPerGroup * kernelH * kernelW];
         for (int i = 0; i < _weights.Length; i++)
-            weightsFlat[i] = NumOps.ToFloat(_weights.Data[i]);
+            weightsFlat[i] = NumOps.ToFloat(_weights.Data.Span[i]);
         var weightsBuffer = backend.AllocateBuffer(weightsFlat);
 
         // Allocate gradient buffers
@@ -832,7 +832,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             int offsetWeightSize = offsetChannels * inChannels * kernelH * kernelW;
             var offsetWeightsFlat = new float[offsetWeightSize];
             for (int i = 0; i < _offsetWeights.Length; i++)
-                offsetWeightsFlat[i] = NumOps.ToFloat(_offsetWeights.Data[i]);
+                offsetWeightsFlat[i] = NumOps.ToFloat(_offsetWeights.Data.Span[i]);
             offsetWeightsBuffer = backend.AllocateBuffer(offsetWeightsFlat);
 
             int offsetWeightGradSize = offsetChannels * inChannels * kernelH * kernelW;
@@ -876,7 +876,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                 int maskWeightSize = maskChannels * inChannels * kernelH * kernelW;
                 var maskWeightsFlat = new float[maskWeightSize];
                 for (int i = 0; i < _maskWeights.Length; i++)
-                    maskWeightsFlat[i] = NumOps.ToFloat(_maskWeights.Data[i]);
+                    maskWeightsFlat[i] = NumOps.ToFloat(_maskWeights.Data.Span[i]);
                 maskWeightsBuffer = backend.AllocateBuffer(maskWeightsFlat);
 
                 int maskWeightGradSize = maskChannels * inChannels * kernelH * kernelW;
@@ -932,13 +932,13 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             _offsetBiasGradients = new Tensor<T>(_offsetBias.Shape);
 
             for (int i = 0; i < weightGradSize; i++)
-                _weightGradients.Data[i] = NumOps.FromFloat(weightsGradFlat[i]);
+                _weightGradients.Data.Span[i] = NumOps.FromFloat(weightsGradFlat[i]);
             for (int i = 0; i < biasGradSize; i++)
-                _biasGradients.Data[i] = NumOps.FromFloat(biasGradFlat[i]);
+                _biasGradients.Data.Span[i] = NumOps.FromFloat(biasGradFlat[i]);
             for (int i = 0; i < offsetWeightGradSize; i++)
-                _offsetWeightGradients.Data[i] = NumOps.FromFloat(offsetWeightsGradFlat[i]);
+                _offsetWeightGradients.Data.Span[i] = NumOps.FromFloat(offsetWeightsGradFlat[i]);
             for (int i = 0; i < offsetBiasGradSize; i++)
-                _offsetBiasGradients.Data[i] = NumOps.FromFloat(offsetBiasGradFlat[i]);
+                _offsetBiasGradients.Data.Span[i] = NumOps.FromFloat(offsetBiasGradFlat[i]);
 
             // Download mask gradients if using modulation
             if (_useModulation && gradMaskWeightsBuffer != null && gradMaskBiasBuffer != null && _maskWeights != null && _maskBias != null)
@@ -955,9 +955,9 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                 _maskBiasGradients = new Tensor<T>(_maskBias.Shape);
 
                 for (int i = 0; i < maskWeightGradSize; i++)
-                    _maskWeightGradients.Data[i] = NumOps.FromFloat(maskWeightsGradFlat[i]);
+                    _maskWeightGradients.Data.Span[i] = NumOps.FromFloat(maskWeightsGradFlat[i]);
                 for (int i = 0; i < maskBiasGradSize; i++)
-                    _maskBiasGradients.Data[i] = NumOps.FromFloat(maskBiasGradFlat[i]);
+                    _maskBiasGradients.Data.Span[i] = NumOps.FromFloat(maskBiasGradFlat[i]);
             }
 
             // Store GPU gradient tensors for GPU-resident training (UpdateParametersGpu)
@@ -1033,7 +1033,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
-            weights.Data[i] = NumOps.FromDouble(random.NextDouble() * 2 * std - std);
+            weights.Data.Span[i] = NumOps.FromDouble(random.NextDouble() * 2 * std - std);
         }
 
         return weights;
@@ -1146,23 +1146,23 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         // Main conv weights and bias
         for (int i = 0; i < _weights.Length; i++)
-            allParams.Add(_weights.Data[i]);
+            allParams.Add(_weights.Data.Span[i]);
         for (int i = 0; i < _bias.Length; i++)
-            allParams.Add(_bias.Data[i]);
+            allParams.Add(_bias.Data.Span[i]);
 
         // Offset weights and bias
         for (int i = 0; i < _offsetWeights.Length; i++)
-            allParams.Add(_offsetWeights.Data[i]);
+            allParams.Add(_offsetWeights.Data.Span[i]);
         for (int i = 0; i < _offsetBias.Length; i++)
-            allParams.Add(_offsetBias.Data[i]);
+            allParams.Add(_offsetBias.Data.Span[i]);
 
         // Mask weights and bias (if using modulation)
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
             for (int i = 0; i < _maskWeights.Length; i++)
-                allParams.Add(_maskWeights.Data[i]);
+                allParams.Add(_maskWeights.Data.Span[i]);
             for (int i = 0; i < _maskBias.Length; i++)
-                allParams.Add(_maskBias.Data[i]);
+                allParams.Add(_maskBias.Data.Span[i]);
         }
 
         return new Vector<T>([.. allParams]);
@@ -1175,27 +1175,27 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         // Main conv weights
         for (int i = 0; i < _weights.Length; i++)
-            _weights.Data[i] = parameters[offset++];
+            _weights.Data.Span[i] = parameters[offset++];
 
         // Main conv bias
         for (int i = 0; i < _bias.Length; i++)
-            _bias.Data[i] = parameters[offset++];
+            _bias.Data.Span[i] = parameters[offset++];
 
         // Offset weights
         for (int i = 0; i < _offsetWeights.Length; i++)
-            _offsetWeights.Data[i] = parameters[offset++];
+            _offsetWeights.Data.Span[i] = parameters[offset++];
 
         // Offset bias
         for (int i = 0; i < _offsetBias.Length; i++)
-            _offsetBias.Data[i] = parameters[offset++];
+            _offsetBias.Data.Span[i] = parameters[offset++];
 
         // Mask weights and bias
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
             for (int i = 0; i < _maskWeights.Length; i++)
-                _maskWeights.Data[i] = parameters[offset++];
+                _maskWeights.Data.Span[i] = parameters[offset++];
             for (int i = 0; i < _maskBias.Length; i++)
-                _maskBias.Data[i] = parameters[offset++];
+                _maskBias.Data.Span[i] = parameters[offset++];
         }
 
         // Invalidate GPU cache after parameter update
@@ -1218,8 +1218,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         {
             for (int i = 0; i < _weights.Length; i++)
             {
-                _weights.Data[i] = NumOps.Subtract(_weights.Data[i],
-                    NumOps.Multiply(learningRate, _weightGradients.Data[i]));
+                _weights.Data.Span[i] = NumOps.Subtract(_weights.Data.Span[i],
+                    NumOps.Multiply(learningRate, _weightGradients.Data.Span[i]));
             }
         }
 
@@ -1227,8 +1227,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         {
             for (int i = 0; i < _bias.Length; i++)
             {
-                _bias.Data[i] = NumOps.Subtract(_bias.Data[i],
-                    NumOps.Multiply(learningRate, _biasGradients.Data[i]));
+                _bias.Data.Span[i] = NumOps.Subtract(_bias.Data.Span[i],
+                    NumOps.Multiply(learningRate, _biasGradients.Data.Span[i]));
             }
         }
 
@@ -1237,8 +1237,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         {
             for (int i = 0; i < _offsetWeights.Length; i++)
             {
-                _offsetWeights.Data[i] = NumOps.Subtract(_offsetWeights.Data[i],
-                    NumOps.Multiply(learningRate, _offsetWeightGradients.Data[i]));
+                _offsetWeights.Data.Span[i] = NumOps.Subtract(_offsetWeights.Data.Span[i],
+                    NumOps.Multiply(learningRate, _offsetWeightGradients.Data.Span[i]));
             }
         }
 
@@ -1246,8 +1246,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         {
             for (int i = 0; i < _offsetBias.Length; i++)
             {
-                _offsetBias.Data[i] = NumOps.Subtract(_offsetBias.Data[i],
-                    NumOps.Multiply(learningRate, _offsetBiasGradients.Data[i]));
+                _offsetBias.Data.Span[i] = NumOps.Subtract(_offsetBias.Data.Span[i],
+                    NumOps.Multiply(learningRate, _offsetBiasGradients.Data.Span[i]));
             }
         }
 
@@ -1258,8 +1258,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             {
                 for (int i = 0; i < _maskWeights.Length; i++)
                 {
-                    _maskWeights.Data[i] = NumOps.Subtract(_maskWeights.Data[i],
-                        NumOps.Multiply(learningRate, _maskWeightGradients.Data[i]));
+                    _maskWeights.Data.Span[i] = NumOps.Subtract(_maskWeights.Data.Span[i],
+                        NumOps.Multiply(learningRate, _maskWeightGradients.Data.Span[i]));
                 }
             }
 
@@ -1267,8 +1267,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             {
                 for (int i = 0; i < _maskBias.Length; i++)
                 {
-                    _maskBias.Data[i] = NumOps.Subtract(_maskBias.Data[i],
-                        NumOps.Multiply(learningRate, _maskBiasGradients.Data[i]));
+                    _maskBias.Data.Span[i] = NumOps.Subtract(_maskBias.Data.Span[i],
+                        NumOps.Multiply(learningRate, _maskBiasGradients.Data.Span[i]));
                 }
             }
         }
@@ -1293,25 +1293,25 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         if (_weightGradients != null)
         {
             for (int i = 0; i < _weightGradients.Length; i++)
-                allGrads.Add(_weightGradients.Data[i]);
+                allGrads.Add(_weightGradients.Data.Span[i]);
         }
 
         if (_biasGradients != null)
         {
             for (int i = 0; i < _biasGradients.Length; i++)
-                allGrads.Add(_biasGradients.Data[i]);
+                allGrads.Add(_biasGradients.Data.Span[i]);
         }
 
         if (_offsetWeightGradients != null)
         {
             for (int i = 0; i < _offsetWeightGradients.Length; i++)
-                allGrads.Add(_offsetWeightGradients.Data[i]);
+                allGrads.Add(_offsetWeightGradients.Data.Span[i]);
         }
 
         if (_offsetBiasGradients != null)
         {
             for (int i = 0; i < _offsetBiasGradients.Length; i++)
-                allGrads.Add(_offsetBiasGradients.Data[i]);
+                allGrads.Add(_offsetBiasGradients.Data.Span[i]);
         }
 
         if (_useModulation)
@@ -1319,13 +1319,13 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             if (_maskWeightGradients != null)
             {
                 for (int i = 0; i < _maskWeightGradients.Length; i++)
-                    allGrads.Add(_maskWeightGradients.Data[i]);
+                    allGrads.Add(_maskWeightGradients.Data.Span[i]);
             }
 
             if (_maskBiasGradients != null)
             {
                 for (int i = 0; i < _maskBiasGradients.Length; i++)
-                    allGrads.Add(_maskBiasGradients.Data[i]);
+                    allGrads.Add(_maskBiasGradients.Data.Span[i]);
             }
         }
 

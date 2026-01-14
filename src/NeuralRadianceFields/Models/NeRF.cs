@@ -648,9 +648,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[gradient.Length];
         for (int i = 0; i < gradient.Length; i++)
         {
-            double rawVal = numOps.ToDouble(raw.Data[i]);
+            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
             double sig = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data[i]);
+            double grad = numOps.ToDouble(gradient.Data.Span[i]);
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
@@ -663,9 +663,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[gradient.Length];
         for (int i = 0; i < gradient.Length; i++)
         {
-            double rawVal = numOps.ToDouble(raw.Data[i]);
+            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
             double sigmoid = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data[i]);
+            double grad = numOps.ToDouble(gradient.Data.Span[i]);
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
@@ -683,7 +683,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[left.Length];
         for (int i = 0; i < data.Length; i++)
         {
-            data[i] = numOps.Add(left.Data[i], right.Data[i]);
+            data[i] = numOps.Add(left.Data.Span[i], right.Data.Span[i]);
         }
 
         return new Tensor<T>(data, left.Shape);
@@ -794,8 +794,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
                 for (int d = 0; d < 3; d++)
                 {
-                    var origin = rayOrigins.Data[r * 3 + d];
-                    var dir = rayDirections.Data[r * 3 + d];
+                    var origin = rayOrigins.Data.Span[r * 3 + d];
+                    var dir = rayDirections.Data.Span[r * 3 + d];
                     positions[(r * numSamples + s) * 3 + d] = numOps.Add(origin, numOps.Multiply(tValue, dir));
                     directions[(r * numSamples + s) * 3 + d] = dir;
                 }
@@ -828,8 +828,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 var tValue = numOps.FromDouble(t);
                 for (int d = 0; d < 3; d++)
                 {
-                    var origin = rayOrigins.Data[r * 3 + d];
-                    var dir = rayDirections.Data[r * 3 + d];
+                    var origin = rayOrigins.Data.Span[r * 3 + d];
+                    var dir = rayDirections.Data.Span[r * 3 + d];
                     positions[(r * numSamples + s) * 3 + d] = numOps.Add(origin, numOps.Multiply(tValue, dir));
                     directions[(r * numSamples + s) * 3 + d] = dir;
                 }
@@ -851,8 +851,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     {
         var colors = new T[numRays * 3];
         var numOps = NumOps;
-        var rgbData = rgb.Data;
-        var densityData = density.Data;
+        var rgbData = rgb.Data.Span;
+        var densityData = density.Data.Span;
 
         for (int r = 0; r < numRays; r++)
         {
@@ -924,7 +924,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         double[] sampleTs)
     {
         var weights = new double[numRays * numSamples];
-        var densityData = density.Data;
+        var densityData = density.Data.Span;
         var numOps = NumOps;
 
         for (int r = 0; r < numRays; r++)
@@ -1072,8 +1072,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             for (int j = 0; j < 3; j++)
             {
-                positions[i * 3 + j] = input.Data[i * 6 + j];
-                directions[i * 3 + j] = input.Data[i * 6 + 3 + j];
+                positions[i * 3 + j] = input.Data.Span[i * 6 + j];
+                directions[i * 3 + j] = input.Data.Span[i * 6 + 3 + j];
             }
         }
 
@@ -1086,10 +1086,10 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var output = new T[numPoints * 4];
         for (int i = 0; i < numPoints; i++)
         {
-            output[i * 4] = rgb.Data[i * 3];
-            output[i * 4 + 1] = rgb.Data[i * 3 + 1];
-            output[i * 4 + 2] = rgb.Data[i * 3 + 2];
-            output[i * 4 + 3] = density.Data[i];
+            output[i * 4] = rgb.Data.Span[i * 3];
+            output[i * 4 + 1] = rgb.Data.Span[i * 3 + 1];
+            output[i * 4 + 2] = rgb.Data.Span[i * 3 + 2];
+            output[i * 4 + 3] = density.Data.Span[i];
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
@@ -1122,10 +1122,10 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         for (int i = 0; i < numPoints; i++)
         {
             int baseIdx = i * 4;
-            rgbGrad[i * 3] = outputGradient.Data[baseIdx];
-            rgbGrad[i * 3 + 1] = outputGradient.Data[baseIdx + 1];
-            rgbGrad[i * 3 + 2] = outputGradient.Data[baseIdx + 2];
-            densityGrad[i] = outputGradient.Data[baseIdx + 3];
+            rgbGrad[i * 3] = outputGradient.Data.Span[baseIdx];
+            rgbGrad[i * 3 + 1] = outputGradient.Data.Span[baseIdx + 1];
+            rgbGrad[i * 3 + 2] = outputGradient.Data.Span[baseIdx + 2];
+            densityGrad[i] = outputGradient.Data.Span[baseIdx + 3];
         }
 
         var rgbGradTensor = new Tensor<T>(rgbGrad, [numPoints, 3]);
@@ -1149,11 +1149,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             int dirBase = i * dirDim;
             for (int f = 0; f < _hiddenDim; f++)
             {
-                gradFeatures[featureBase + f] = gradColor.Data[colorBase + f];
+                gradFeatures[featureBase + f] = gradColor.Data.Span[colorBase + f];
             }
             for (int d = 0; d < dirDim; d++)
             {
-                gradDirEncoded[dirBase + d] = gradColor.Data[colorBase + _hiddenDim + d];
+                gradDirEncoded[dirBase + d] = gradColor.Data.Span[colorBase + _hiddenDim + d];
             }
         }
 
@@ -1182,11 +1182,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
                     int posBase = n * posDim;
                     for (int h = 0; h < _hiddenDim; h++)
                     {
-                        gradHidden[hiddenBase + h] = gradConcat.Data[concatBase + h];
+                        gradHidden[hiddenBase + h] = gradConcat.Data.Span[concatBase + h];
                     }
                     for (int p = 0; p < posDim; p++)
                     {
-                        gradSkip[posBase + p] = gradConcat.Data[concatBase + _hiddenDim + p];
+                        gradSkip[posBase + p] = gradConcat.Data.Span[concatBase + _hiddenDim + p];
                     }
                 }
 
@@ -1205,7 +1205,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         for (int j = 0; j < posEncodingGrad.Length; j++)
         {
-            posEncodingGrad[j] = numOps.Add(posEncodingGrad[j], grad.Data[j]);
+            posEncodingGrad[j] = numOps.Add(posEncodingGrad[j], grad.Data.Span[j]);
         }
 
         if (_lastPositions == null || _lastDirections == null)
@@ -1226,8 +1226,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             int dirBase = i * 3;
             for (int d = 0; d < 3; d++)
             {
-                inputGrad[baseIdx + d] = posGrad.Data[posBase + d];
-                inputGrad[baseIdx + 3 + d] = dirGrad.Data[dirBase + d];
+                inputGrad[baseIdx + d] = posGrad.Data.Span[posBase + d];
+                inputGrad[baseIdx + 3 + d] = dirGrad.Data.Span[dirBase + d];
             }
         }
 

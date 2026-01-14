@@ -790,7 +790,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Weights shape is [oh, ow, oc, kh, kw, ic] -> need [oh, ow, oc, ic, kh, kw] for backend
         var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-        float[] weightsData = DirectGpuEngine.ToFloatArray<T>(weightsPermuted.Data);
+        float[] weightsData = DirectGpuEngine.ToFloatArray<T>(weightsPermuted.Data.ToArray());
         using var weightsBuffer = backend.AllocateBuffer(weightsData);
 
         // Step 1: Compute input gradient

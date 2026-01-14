@@ -916,7 +916,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
             var aggregated = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
-            var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data);
+            var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer = backend.AllocateBuffer(biasData);
             // BiasAdd expects [M, N] input and [N] bias, but we have [batch*nodes, outputFeatures]
             backend.BiasAdd(aggregated.Buffer, biasBuffer, aggregated.Buffer, batchSize * numNodes, outputFeatures);
@@ -963,7 +963,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
             var matmulResult = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
-            var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data);
+            var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer2 = backend.AllocateBuffer(biasData2);
             backend.BiasAdd(matmulResult.Buffer, biasBuffer2, matmulResult.Buffer, batchSize * numNodes, outputFeatures);
             output = matmulResult;

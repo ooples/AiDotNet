@@ -714,7 +714,7 @@ public class WeightLoader
             return null;
         }
 
-        return ParseTensorData(data.Data, data.Shape, data.DType);
+        return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
     }
 
     private class SafeTensorInfo

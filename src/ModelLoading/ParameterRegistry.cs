@@ -302,7 +302,7 @@ public class ParameterRegistry<T>
         // Copy new weights
         for (int i = 0; i < weightsLen; i++)
         {
-            newParams[i] = tensor.Data[i];
+            newParams[i] = tensor.Data.Span[i];
         }
 
         // Copy existing biases
@@ -344,7 +344,7 @@ public class ParameterRegistry<T>
         // Copy new biases
         for (int i = 0; i < biasLen; i++)
         {
-            newParams[weightsLen + i] = tensor.Data[i];
+            newParams[weightsLen + i] = tensor.Data.Span[i];
         }
 
         layer.SetParameters(newParams);

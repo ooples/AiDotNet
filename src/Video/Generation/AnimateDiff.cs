@@ -303,8 +303,8 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < minLen; i++)
         {
-            double orig = NumOps.ToDouble(originalFeatures.Data[i]);
-            double motion = NumOps.ToDouble(motionFeatures.Data[i]);
+            double orig = NumOps.ToDouble(originalFeatures.Data.Span[i]);
+            double motion = NumOps.ToDouble(motionFeatures.Data.Span[i]);
             double blended = inverseFactor * orig + blendFactor * motion;
             resultData[i] = NumOps.FromDouble(blended);
         }
@@ -340,7 +340,7 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);

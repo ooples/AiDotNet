@@ -374,7 +374,7 @@ public class ClipImagePreprocessorTests
     {
         for (int i = 0; i < tensor.Data.Length; i++)
         {
-            tensor.Data[i] = value;
+            tensor.Data.Span[i] = value;
         }
     }
 
@@ -383,7 +383,7 @@ public class ClipImagePreprocessorTests
         var random = new Random(seed);
         for (int i = 0; i < tensor.Data.Length; i++)
         {
-            tensor.Data[i] = (float)(random.NextDouble() * 255);
+            tensor.Data.Span[i] = (float)(random.NextDouble() * 255);
         }
     }
 

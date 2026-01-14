@@ -669,7 +669,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         // Create ONNX input tensor with shape [batch, channels, height, width]
@@ -925,14 +925,14 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < output.Length; i++)
         {
-            double o = NumOps.ToDouble(output.Data[i]);
-            double t = NumOps.ToDouble(target.Data[i]);
+            double o = NumOps.ToDouble(output.Data.Span[i]);
+            double t = NumOps.ToDouble(target.Data.Span[i]);
 
             // BCE gradient: (output - target) / (output * (1 - output))
             double oClipped = Math.Max(epsilon, Math.Min(o, 1.0 - epsilon));
             double grad = (o - t) / (oClipped * (1.0 - oClipped) + epsilon);
 
-            gradient.Data[i] = NumOps.FromDouble(grad);
+            gradient.Data.Span[i] = NumOps.FromDouble(grad);
         }
 
         return gradient;
@@ -947,14 +947,14 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < generated.Length; i++)
         {
-            T diff = NumOps.Subtract(generated.Data[i], target.Data[i]);
+            T diff = NumOps.Subtract(generated.Data.Span[i], target.Data.Span[i]);
             // L1 gradient is sign(diff)
             if (NumOps.GreaterThan(diff, NumOps.Zero))
-                gradient.Data[i] = NumOps.FromDouble(_l1Lambda / generated.Length);
+                gradient.Data.Span[i] = NumOps.FromDouble(_l1Lambda / generated.Length);
             else if (NumOps.LessThan(diff, NumOps.Zero))
-                gradient.Data[i] = NumOps.FromDouble(-_l1Lambda / generated.Length);
+                gradient.Data.Span[i] = NumOps.FromDouble(-_l1Lambda / generated.Length);
             else
-                gradient.Data[i] = NumOps.Zero;
+                gradient.Data.Span[i] = NumOps.Zero;
         }
 
         return gradient;
@@ -969,7 +969,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < grad1.Length; i++)
         {
-            combined.Data[i] = NumOps.Add(grad1.Data[i], grad2.Data[i]);
+            combined.Data.Span[i] = NumOps.Add(grad1.Data.Span[i], grad2.Data.Span[i]);
         }
 
         return combined;

@@ -458,7 +458,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data[idx]) / 255.0 - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) / 255.0 - mean) / std);
                     }
                 }
             }

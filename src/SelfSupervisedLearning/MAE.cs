@@ -433,7 +433,7 @@ public class MAE<T> : SSLMethodBase<T>
                             var sourceIdx = reconIdx * patchDim + pd;
                             if (sourceIdx < decoderOutputGrad.Length)
                             {
-                                gradSum = NumOps.Add(gradSum, decoderOutputGrad.Data[sourceIdx]);
+                                gradSum = NumOps.Add(gradSum, decoderOutputGrad.Data.Span[sourceIdx]);
                             }
                         }
                         encoderGrad[gradIdx] = NumOps.Multiply(gradSum, gradScale);
@@ -444,7 +444,7 @@ public class MAE<T> : SSLMethodBase<T>
                         if (reconIdx < decoderOutputGrad.Length)
                         {
                             encoderGrad[gradIdx] = NumOps.Multiply(
-                                decoderOutputGrad.Data[reconIdx], gradScale);
+                                decoderOutputGrad.Data.Span[reconIdx], gradScale);
                         }
                     }
                 }
@@ -488,7 +488,7 @@ public class MAE<T> : SSLMethodBase<T>
                         if (idx < reconGrad.Length)
                         {
                             meanMaskedGrad = NumOps.Add(meanMaskedGrad,
-                                NumOps.Abs(reconGrad.Data[idx]));
+                                NumOps.Abs(reconGrad.Data.Span[idx]));
                         }
                     }
                     maskedCount++;

@@ -530,7 +530,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         var predicted = Predict(input);
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -575,7 +575,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         var inputData = new float[image.Length];
         for (int i = 0; i < image.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(image.Data[i]);
+            inputData[i] = Convert.ToSingle(image.Data.Span[i]);
         }
 
         // Create ONNX input tensor
@@ -1009,7 +1009,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 
@@ -1022,13 +1022,13 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     private void BackwardPass(Tensor<T> gradient)

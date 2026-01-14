@@ -202,7 +202,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -419,7 +419,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         var normalized = new Tensor<T>(image.Shape);
         for (int i = 0; i < image.Data.Length; i++)
         {
-            normalized.Data[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data[i]) / 255.0);
+            normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);
         }
         return normalized;
     }

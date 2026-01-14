@@ -393,7 +393,7 @@ public class SSLAugmentationPolicies<T>
             // For 2D tensors, apply scaling transform
             for (int i = 0; i < image.Length; i++)
             {
-                result[i] = NumOps.Multiply(image.Data[i], NumOps.FromDouble(scale));
+                result[i] = NumOps.Multiply(image.Data.Span[i], NumOps.FromDouble(scale));
             }
         }
 
@@ -423,7 +423,7 @@ public class SSLAugmentationPolicies<T>
                             // Flip horizontally: map w to (width - 1 - w)
                             var srcIdx = b * channels * height * width + c * height * width + h * width + (width - 1 - w);
                             var dstIdx = b * channels * height * width + c * height * width + h * width + w;
-                            result[dstIdx] = image.Data[srcIdx];
+                            result[dstIdx] = image.Data.Span[srcIdx];
                         }
                     }
                 }
@@ -432,7 +432,7 @@ public class SSLAugmentationPolicies<T>
         else
         {
             // For 2D tensors, just copy (no spatial dimension to flip)
-            Array.Copy(image.Data, result, image.Length);
+            Array.Copy(image.Data.ToArray(), result, image.Length);
         }
 
         return new Tensor<T>(result, image.Shape);
@@ -449,7 +449,7 @@ public class SSLAugmentationPolicies<T>
 
         for (int i = 0; i < image.Length; i++)
         {
-            var val = NumOps.ToDouble(image.Data[i]);
+            var val = NumOps.ToDouble(image.Data.Span[i]);
             val = (val - 0.5) * contrast + 0.5;  // Contrast
             val = val * brightness;               // Brightness
             val = Math.Max(0, Math.Min(1, val)); // Clamp
@@ -511,7 +511,7 @@ public class SSLAugmentationPolicies<T>
         else
         {
             // For 2D tensors, just copy (no channel dimension)
-            Array.Copy(image.Data, result, image.Length);
+            Array.Copy(image.Data.ToArray(), result, image.Length);
         }
 
         return new Tensor<T>(result, image.Shape);
@@ -600,7 +600,7 @@ public class SSLAugmentationPolicies<T>
         {
             // For 2D tensors, just copy (no spatial dimension to blur)
             var result = new T[image.Length];
-            Array.Copy(image.Data, result, image.Length);
+            Array.Copy(image.Data.ToArray(), result, image.Length);
             return new Tensor<T>(result, image.Shape);
         }
     }
@@ -611,7 +611,7 @@ public class SSLAugmentationPolicies<T>
 
         for (int i = 0; i < image.Length; i++)
         {
-            var val = NumOps.ToDouble(image.Data[i]);
+            var val = NumOps.ToDouble(image.Data.Span[i]);
             if (val > threshold)
             {
                 val = 1.0 - val;  // Invert values above threshold

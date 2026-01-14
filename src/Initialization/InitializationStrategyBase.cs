@@ -70,7 +70,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         for (int i = 0; i < weights.Length; i++)
         {
             var value = Random.NextDouble() * 2 * limit - limit;
-            weights.Data[i] = NumOps.FromDouble(value);
+            weights.Data.Span[i] = NumOps.FromDouble(value);
         }
     }
 
@@ -95,7 +95,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         for (int i = 0; i < weights.Length; i++)
         {
             var value = SampleGaussian(0, stddev);
-            weights.Data[i] = NumOps.FromDouble(value);
+            weights.Data.Span[i] = NumOps.FromDouble(value);
         }
     }
 
@@ -120,7 +120,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         for (int i = 0; i < weights.Length; i++)
         {
             var value = Random.NextDouble() * 2 * limit - limit;
-            weights.Data[i] = NumOps.FromDouble(value);
+            weights.Data.Span[i] = NumOps.FromDouble(value);
         }
     }
 
@@ -144,7 +144,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         for (int i = 0; i < weights.Length; i++)
         {
             var value = SampleGaussian(0, stddev);
-            weights.Data[i] = NumOps.FromDouble(value);
+            weights.Data.Span[i] = NumOps.FromDouble(value);
         }
     }
 
@@ -157,7 +157,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         var zero = NumOps.Zero;
         for (int i = 0; i < biases.Length; i++)
         {
-            biases.Data[i] = zero;
+            biases.Data.Span[i] = zero;
         }
     }
 

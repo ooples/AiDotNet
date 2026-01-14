@@ -58,11 +58,11 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Choose strategy based on matrix size
             if (m * n * k < MinParallelSize * MinParallelSize)
             {
-                GemmBlocked(a.Data, b.Data, result.Data, m, n, k);
+                GemmBlocked(a.Data.ToArray(), b.Data.ToArray(), result.Data.ToArray(), m, n, k);
             }
             else
             {
-                GemmParallel(a.Data, b.Data, result.Data, m, n, k);
+                GemmParallel(a.Data.ToArray(), b.Data.ToArray(), result.Data.ToArray(), m, n, k);
             }
 
             return result;
@@ -162,11 +162,11 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
             Parallel.For(0, m, i =>
             {
-                var rowA = a.Data.AsSpan(i * k, k);
+                var rowA = a.Data.Span.Slice(i * k, k);
                 for (int j = 0; j < n; j++)
                 {
-                    var rowB = b.Data.AsSpan(j * k, k);
-                    result.Data[i * n + j] = SimdKernels.DotProduct(rowA, rowB);
+                    var rowB = b.Data.Span.Slice(j * k, k);
+                    result.Data.Span[i * n + j] = SimdKernels.DotProduct(rowA, rowB);
                 }
             });
 

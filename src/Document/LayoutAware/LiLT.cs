@@ -243,7 +243,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -374,7 +374,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
             for (int c = 0; c < numClasses; c++)
             {
-                double conf = NumOps.ToDouble(layoutOutput.Data[offset + c]);
+                double conf = NumOps.ToDouble(layoutOutput.Data.Span[offset + c]);
                 if (conf > maxConf)
                 {
                     maxConf = conf;
@@ -475,10 +475,10 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     private Vector<T> ExtractBoundingBox(Tensor<T> output, int detectionIndex, int numValues, int imageWidth, int imageHeight)
     {
         int bboxOffset = detectionIndex * numValues + numValues - 4;
-        double b0 = NumOps.ToDouble(output.Data[bboxOffset]);
-        double b1 = NumOps.ToDouble(output.Data[bboxOffset + 1]);
-        double b2 = NumOps.ToDouble(output.Data[bboxOffset + 2]);
-        double b3 = NumOps.ToDouble(output.Data[bboxOffset + 3]);
+        double b0 = NumOps.ToDouble(output.Data.Span[bboxOffset]);
+        double b1 = NumOps.ToDouble(output.Data.Span[bboxOffset + 1]);
+        double b2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 2]);
+        double b3 = NumOps.ToDouble(output.Data.Span[bboxOffset + 3]);
 
         bool looksNormalized = b0 >= -0.5 && b0 <= 1.5 &&
                                b1 >= -0.5 && b1 <= 1.5 &&
@@ -738,7 +738,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
         for (int v = 0; v < vocabSize; v++)
         {
-            double val = NumOps.ToDouble(logits.Data[offset + v]);
+            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
             if (val > maxVal)
             {
                 maxVal = val;
@@ -749,7 +749,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         double sumExp = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double val = NumOps.ToDouble(logits.Data[offset + v]);
+            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
             sumExp += Math.Exp(val - maxVal);
         }
 
@@ -762,7 +762,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         double maxVal = double.MinValue;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             if (scaled > maxVal)
             {
                 maxVal = scaled;
@@ -772,7 +772,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         double sumExp = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             sumExp += Math.Exp(scaled - maxVal);
         }
 
@@ -786,7 +786,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         double cumulative = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             double expVal = Math.Exp(scaled - maxVal);
             cumulative += expVal;
             if (cumulative >= roll)
@@ -902,7 +902,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data[idx]) - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
                     }
                 }
             }

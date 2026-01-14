@@ -298,7 +298,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -503,7 +503,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int startIdx = position * vocabSize;
         for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
         {
-            double val = NumOps.ToDouble(logits.Data[startIdx + i]);
+            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
             if (val > maxVal) maxVal = val;
         }
 
@@ -511,13 +511,13 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         double sumExp = 0;
         for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
         {
-            double val = NumOps.ToDouble(logits.Data[startIdx + i]);
+            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
             sumExp += Math.Exp(val - maxVal);
         }
 
         for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
         {
-            double val = NumOps.ToDouble(logits.Data[startIdx + i]);
+            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
             probs[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
         }
 
@@ -655,8 +655,8 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }

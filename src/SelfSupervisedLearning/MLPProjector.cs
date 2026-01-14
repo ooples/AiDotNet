@@ -635,7 +635,7 @@ public class MLPProjector<T> : IProjectorHead<T>
 
         for (int i = 0; i < size; i++)
         {
-            result[i] = NumOps.GreaterThan(input.Data[i], NumOps.Zero) ? input.Data[i] : NumOps.Zero;
+            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
         }
 
         return new Tensor<T>(result, input.Shape);
@@ -648,7 +648,7 @@ public class MLPProjector<T> : IProjectorHead<T>
 
         for (int i = 0; i < size; i++)
         {
-            result[i] = NumOps.GreaterThan(input.Data[i], NumOps.Zero) ? outputGrad.Data[i] : NumOps.Zero;
+            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? outputGrad.Data.Span[i] : NumOps.Zero;
         }
 
         return new Tensor<T>(result, outputGrad.Shape);
@@ -658,7 +658,7 @@ public class MLPProjector<T> : IProjectorHead<T>
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            list.Add(tensor.Data[i]);
+            list.Add(tensor.Data.Span[i]);
         }
     }
 

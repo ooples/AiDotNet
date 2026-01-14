@@ -250,14 +250,14 @@ public class AudioProcessor<T>
 
         for (int i = 0; i < dbSpectrogram.Data.Length; i++)
         {
-            double db = NumOps.ToDouble(dbSpectrogram.Data[i]);
+            double db = NumOps.ToDouble(dbSpectrogram.Data.Span[i]);
 
             // Clamp to [minDb, maxDb]
             db = Math.Max(_minDb, Math.Min(_maxDb, db));
 
             // Normalize to [0, 1]
             double norm = (db - _minDb) / range;
-            normalized.Data[i] = NumOps.FromDouble(norm);
+            normalized.Data.Span[i] = NumOps.FromDouble(norm);
         }
 
         return normalized;
@@ -275,14 +275,14 @@ public class AudioProcessor<T>
 
         for (int i = 0; i < normalizedSpectrogram.Data.Length; i++)
         {
-            double norm = NumOps.ToDouble(normalizedSpectrogram.Data[i]);
+            double norm = NumOps.ToDouble(normalizedSpectrogram.Data.Span[i]);
 
             // Clamp to [0, 1]
             norm = Math.Max(0, Math.Min(1, norm));
 
             // Denormalize to dB
             double db = norm * range + _minDb;
-            denormalized.Data[i] = NumOps.FromDouble(db);
+            denormalized.Data.Span[i] = NumOps.FromDouble(db);
         }
 
         return denormalized;
@@ -298,9 +298,9 @@ public class AudioProcessor<T>
 
         for (int i = 0; i < power.Data.Length; i++)
         {
-            double powerVal = NumOps.ToDouble(power.Data[i]);
+            double powerVal = NumOps.ToDouble(power.Data.Span[i]);
             double dbVal = 10.0 * Math.Log10(powerVal + epsilon);
-            db.Data[i] = NumOps.FromDouble(dbVal);
+            db.Data.Span[i] = NumOps.FromDouble(dbVal);
         }
 
         return db;
@@ -315,9 +315,9 @@ public class AudioProcessor<T>
 
         for (int i = 0; i < db.Data.Length; i++)
         {
-            double dbVal = NumOps.ToDouble(db.Data[i]);
+            double dbVal = NumOps.ToDouble(db.Data.Span[i]);
             double powerVal = Math.Pow(10.0, dbVal / 10.0);
-            power.Data[i] = NumOps.FromDouble(powerVal);
+            power.Data.Span[i] = NumOps.FromDouble(powerVal);
         }
 
         return power;
@@ -403,12 +403,12 @@ public class AudioProcessor<T>
         T pad = padValue;
 
         int copyLength = Math.Min(audio.Data.Length, targetLength);
-        Array.Copy(audio.Data, result.Data, copyLength);
+        Array.Copy(audio.Data.ToArray(), result.Data.ToArray(), copyLength);
 
         // Pad if needed
         for (int i = copyLength; i < targetLength; i++)
         {
-            result.Data[i] = pad;
+            result.Data.Span[i] = pad;
         }
 
         return result;
@@ -426,7 +426,7 @@ public class AudioProcessor<T>
         double maxAbs = 0;
         for (int i = 0; i < audio.Data.Length; i++)
         {
-            double absVal = Math.Abs(NumOps.ToDouble(audio.Data[i]));
+            double absVal = Math.Abs(NumOps.ToDouble(audio.Data.Span[i]));
             if (absVal > maxAbs)
             {
                 maxAbs = absVal;
@@ -442,8 +442,8 @@ public class AudioProcessor<T>
 
         for (int i = 0; i < audio.Data.Length; i++)
         {
-            double scaled = NumOps.ToDouble(audio.Data[i]) * scale;
-            result.Data[i] = NumOps.FromDouble(scaled);
+            double scaled = NumOps.ToDouble(audio.Data.Span[i]) * scale;
+            result.Data.Span[i] = NumOps.FromDouble(scaled);
         }
 
         return result;
@@ -498,16 +498,16 @@ public class AudioProcessor<T>
                 double xFrac = srcX - x0;
 
                 // Bilinear interpolation
-                double v00 = NumOps.ToDouble(spectrogram.Data[y0 * srcWidth + x0]);
-                double v01 = NumOps.ToDouble(spectrogram.Data[y0 * srcWidth + x1]);
-                double v10 = NumOps.ToDouble(spectrogram.Data[y1 * srcWidth + x0]);
-                double v11 = NumOps.ToDouble(spectrogram.Data[y1 * srcWidth + x1]);
+                double v00 = NumOps.ToDouble(spectrogram.Data.Span[y0 * srcWidth + x0]);
+                double v01 = NumOps.ToDouble(spectrogram.Data.Span[y0 * srcWidth + x1]);
+                double v10 = NumOps.ToDouble(spectrogram.Data.Span[y1 * srcWidth + x0]);
+                double v11 = NumOps.ToDouble(spectrogram.Data.Span[y1 * srcWidth + x1]);
 
                 double v0 = v00 * (1 - xFrac) + v01 * xFrac;
                 double v1 = v10 * (1 - xFrac) + v11 * xFrac;
                 double value = v0 * (1 - yFrac) + v1 * yFrac;
 
-                resized.Data[y * targetWidth + x] = NumOps.FromDouble(value);
+                resized.Data.Span[y * targetWidth + x] = NumOps.FromDouble(value);
             }
         }
 

@@ -987,7 +987,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 
         for (int i = 0; i < totalElements; i++)
         {
-            result.Data[i] = NumOps.Multiply(outputGradient.Data[i], derivative.Data[i]);
+            result.Data.Span[i] = NumOps.Multiply(outputGradient.Data.Span[i], derivative.Data.Span[i]);
         }
 
         return result;
@@ -1021,14 +1021,14 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             for (int i = 0; i < InputFeatures; i++)
             {
                 var oct = _weights[o, i];
-                weightTensor.Data[wIdx++] = oct.Scalar;
-                weightTensor.Data[wIdx++] = oct.E1;
-                weightTensor.Data[wIdx++] = oct.E2;
-                weightTensor.Data[wIdx++] = oct.E3;
-                weightTensor.Data[wIdx++] = oct.E4;
-                weightTensor.Data[wIdx++] = oct.E5;
-                weightTensor.Data[wIdx++] = oct.E6;
-                weightTensor.Data[wIdx++] = oct.E7;
+                weightTensor.Data.Span[wIdx++] = oct.Scalar;
+                weightTensor.Data.Span[wIdx++] = oct.E1;
+                weightTensor.Data.Span[wIdx++] = oct.E2;
+                weightTensor.Data.Span[wIdx++] = oct.E3;
+                weightTensor.Data.Span[wIdx++] = oct.E4;
+                weightTensor.Data.Span[wIdx++] = oct.E5;
+                weightTensor.Data.Span[wIdx++] = oct.E6;
+                weightTensor.Data.Span[wIdx++] = oct.E7;
             }
         }
 
@@ -1036,14 +1036,14 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         for (int o = 0; o < OutputFeatures; o++)
         {
             var oct = _biases[o];
-            biasTensor.Data[bIdx++] = oct.Scalar;
-            biasTensor.Data[bIdx++] = oct.E1;
-            biasTensor.Data[bIdx++] = oct.E2;
-            biasTensor.Data[bIdx++] = oct.E3;
-            biasTensor.Data[bIdx++] = oct.E4;
-            biasTensor.Data[bIdx++] = oct.E5;
-            biasTensor.Data[bIdx++] = oct.E6;
-            biasTensor.Data[bIdx++] = oct.E7;
+            biasTensor.Data.Span[bIdx++] = oct.Scalar;
+            biasTensor.Data.Span[bIdx++] = oct.E1;
+            biasTensor.Data.Span[bIdx++] = oct.E2;
+            biasTensor.Data.Span[bIdx++] = oct.E3;
+            biasTensor.Data.Span[bIdx++] = oct.E4;
+            biasTensor.Data.Span[bIdx++] = oct.E5;
+            biasTensor.Data.Span[bIdx++] = oct.E6;
+            biasTensor.Data.Span[bIdx++] = oct.E7;
         }
 
         // Ensure GPU weight tensors exist
@@ -1067,10 +1067,10 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             for (int i = 0; i < InputFeatures; i++)
             {
                 _weights[o, i] = new Octonion<T>(
-                    updatedWeights.Data[wIdx], updatedWeights.Data[wIdx + 1],
-                    updatedWeights.Data[wIdx + 2], updatedWeights.Data[wIdx + 3],
-                    updatedWeights.Data[wIdx + 4], updatedWeights.Data[wIdx + 5],
-                    updatedWeights.Data[wIdx + 6], updatedWeights.Data[wIdx + 7]);
+                    updatedWeights.Data.Span[wIdx], updatedWeights.Data.Span[wIdx + 1],
+                    updatedWeights.Data.Span[wIdx + 2], updatedWeights.Data.Span[wIdx + 3],
+                    updatedWeights.Data.Span[wIdx + 4], updatedWeights.Data.Span[wIdx + 5],
+                    updatedWeights.Data.Span[wIdx + 6], updatedWeights.Data.Span[wIdx + 7]);
                 wIdx += 8;
             }
         }
@@ -1079,10 +1079,10 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         for (int o = 0; o < OutputFeatures; o++)
         {
             _biases[o] = new Octonion<T>(
-                updatedBiases.Data[bIdx], updatedBiases.Data[bIdx + 1],
-                updatedBiases.Data[bIdx + 2], updatedBiases.Data[bIdx + 3],
-                updatedBiases.Data[bIdx + 4], updatedBiases.Data[bIdx + 5],
-                updatedBiases.Data[bIdx + 6], updatedBiases.Data[bIdx + 7]);
+                updatedBiases.Data.Span[bIdx], updatedBiases.Data.Span[bIdx + 1],
+                updatedBiases.Data.Span[bIdx + 2], updatedBiases.Data.Span[bIdx + 3],
+                updatedBiases.Data.Span[bIdx + 4], updatedBiases.Data.Span[bIdx + 5],
+                updatedBiases.Data.Span[bIdx + 6], updatedBiases.Data.Span[bIdx + 7]);
             bIdx += 8;
         }
     }

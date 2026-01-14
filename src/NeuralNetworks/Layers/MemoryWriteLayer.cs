@@ -559,11 +559,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int memoryDim = memoryShape[1];
 
         // Upload weights to GPU
-        float[] queryWeightData = DirectGpuEngine.ToFloatArray<T>(_queryWeights.Data);
-        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data);
-        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data);
-        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data);
-        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data);
+        float[] queryWeightData = DirectGpuEngine.ToFloatArray<T>(_queryWeights.Data.ToArray());
+        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data.ToArray());
+        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data.ToArray());
+        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data.ToArray());
+        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data.ToArray());
 
         using var queryWeightsBuffer = backend.AllocateBuffer(queryWeightData);
         using var keyWeightsBuffer = backend.AllocateBuffer(keyWeightData);

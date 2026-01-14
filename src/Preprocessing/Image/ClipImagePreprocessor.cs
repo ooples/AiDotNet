@@ -512,12 +512,12 @@ public class ClipImagePreprocessor<T>
     /// </summary>
     private T FindMax(Tensor<T> tensor)
     {
-        T max = tensor.Data[0];
+        T max = tensor.Data.Span[0];
         for (int i = 1; i < tensor.Data.Length; i++)
         {
-            if (_numOps.ToDouble(tensor.Data[i]) > _numOps.ToDouble(max))
+            if (_numOps.ToDouble(tensor.Data.Span[i]) > _numOps.ToDouble(max))
             {
-                max = tensor.Data[i];
+                max = tensor.Data.Span[i];
             }
         }
         return max;

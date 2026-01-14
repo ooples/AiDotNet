@@ -302,7 +302,7 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         T loss = NumOps.Zero;
         for (int i = 0; i < expectedOutput.Length; i++)
         {
-            T diff = NumOps.Subtract(prediction.Data[i], expectedOutput.Data[i]);
+            T diff = NumOps.Subtract(prediction.Data.Span[i], expectedOutput.Data.Span[i]);
             loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
         }
         loss = NumOps.Divide(loss, NumOps.FromDouble(expectedOutput.Length));
@@ -313,8 +313,8 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
         for (int i = 0; i < expectedOutput.Length; i++)
         {
-            T diff = NumOps.Subtract(prediction.Data[i], expectedOutput.Data[i]);
-            gradient.Data[i] = NumOps.Multiply(diff, scale);
+            T diff = NumOps.Subtract(prediction.Data.Span[i], expectedOutput.Data.Span[i]);
+            gradient.Data.Span[i] = NumOps.Multiply(diff, scale);
         }
 
         // Backpropagate
@@ -705,7 +705,7 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         tensor.Transform((v, _) => NumOps.FromDouble(Convert.ToDouble(v) * scale));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
@@ -766,14 +766,14 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        Array.Copy(tensor.Data, result.Data, result.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), result.Data.Length);
         return result;
     }
 

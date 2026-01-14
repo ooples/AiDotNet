@@ -351,6 +351,34 @@ public sealed class DirectGpuEngine : IDisposable
     }
 
     /// <summary>
+    /// Converts a Memory&lt;T&gt; to a float array for GPU operations.
+    /// </summary>
+    public static float[] ToFloatArray<T>(Memory<T> data)
+    {
+        if (typeof(T) == typeof(float))
+            return (float[])(object)data.ToArray();
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new float[data.Length];
+        numOps.ToFloatSpan(data.Span, new Span<float>(result));
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a ReadOnlyMemory&lt;T&gt; to a float array for GPU operations.
+    /// </summary>
+    public static float[] ToFloatArray<T>(ReadOnlyMemory<T> data)
+    {
+        if (typeof(T) == typeof(float))
+            return (float[])(object)data.ToArray();
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new float[data.Length];
+        numOps.ToFloatSpan(data.Span, new Span<float>(result));
+        return result;
+    }
+
+    /// <summary>
     /// Converts a float array back to the generic type.
     /// Uses vectorized span-based conversion via IVectorizedOperations.FromFloatSpan.
     /// </summary>

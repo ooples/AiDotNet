@@ -986,8 +986,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         int numPoints = positions.Shape[0];
         var rgb = new T[numPoints * 3];
         var density = new T[numPoints];
-        var posData = positions.Data;
-        var dirData = viewingDirections.Data;
+        var posData = positions.Data.Span;
+        var dirData = viewingDirections.Data.Span;
         EnsureSpatialIndex();
         var spatialIndex = _spatialIndex;
 
@@ -1560,8 +1560,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         double far = NumOps.ToDouble(farBound);
         double step = numSamples > 1 ? (far - near) / (numSamples - 1) : 0.0;
 
-        var originData = rayOrigins.Data;
-        var dirData = rayDirections.Data;
+        var originData = rayOrigins.Data.Span;
+        var dirData = rayDirections.Data.Span;
 
         for (int r = 0; r < numRays; r++)
         {
@@ -1598,8 +1598,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         T farBound)
     {
         var colors = new T[numRays * 3];
-        var rgbData = rgb.Data;
-        var densityData = density.Data;
+        var rgbData = rgb.Data.Span;
+        var densityData = density.Data.Span;
 
         double near = NumOps.ToDouble(nearBound);
         double far = NumOps.ToDouble(farBound);
@@ -1662,12 +1662,12 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             int baseIdx = i * 6;
             int posIdx = i * 3;
-            positions[posIdx] = input.Data[baseIdx];
-            positions[posIdx + 1] = input.Data[baseIdx + 1];
-            positions[posIdx + 2] = input.Data[baseIdx + 2];
-            directions[posIdx] = input.Data[baseIdx + 3];
-            directions[posIdx + 1] = input.Data[baseIdx + 4];
-            directions[posIdx + 2] = input.Data[baseIdx + 5];
+            positions[posIdx] = input.Data.Span[baseIdx];
+            positions[posIdx + 1] = input.Data.Span[baseIdx + 1];
+            positions[posIdx + 2] = input.Data.Span[baseIdx + 2];
+            directions[posIdx] = input.Data.Span[baseIdx + 3];
+            directions[posIdx + 1] = input.Data.Span[baseIdx + 4];
+            directions[posIdx + 2] = input.Data.Span[baseIdx + 5];
         }
 
         var posTensor = new Tensor<T>(positions, [numPoints, 3]);
@@ -1685,10 +1685,10 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             int outIdx = i * 4;
             int rgbIdx = i * 3;
-            output[outIdx] = rgb.Data[rgbIdx];
-            output[outIdx + 1] = rgb.Data[rgbIdx + 1];
-            output[outIdx + 2] = rgb.Data[rgbIdx + 2];
-            output[outIdx + 3] = density.Data[i];
+            output[outIdx] = rgb.Data.Span[rgbIdx];
+            output[outIdx + 1] = rgb.Data.Span[rgbIdx + 1];
+            output[outIdx + 2] = rgb.Data.Span[rgbIdx + 2];
+            output[outIdx + 3] = density.Data.Span[i];
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
@@ -2007,7 +2007,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         imageHeight = expectedOutput.Shape[0];
         imageWidth = expectedOutput.Shape[1];
 
-        var data = input.Data;
+        var data = input.Data.Span;
         cameraPosition = new Vector<T>(3)
         {
             [0] = data[0],
@@ -2063,8 +2063,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var gradR = new double[pixelCount];
         var gradG = new double[pixelCount];
         var gradB = new double[pixelCount];
-        var predData = prediction.Data;
-        var gradData = lossGradient.Data;
+        var predData = prediction.Data.Span;
+        var gradData = lossGradient.Data.Span;
 
         for (int i = 0; i < pixelCount; i++)
         {
@@ -2432,9 +2432,9 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         int numPoints = positions.Shape[0];
-        var posData = positions.Data;
-        var dirData = directions.Data;
-        var gradData = outputGradient.Data;
+        var posData = positions.Data.Span;
+        var dirData = directions.Data.Span;
+        var gradData = outputGradient.Data.Span;
 
         for (int i = 0; i < numPoints; i++)
         {

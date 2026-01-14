@@ -113,7 +113,7 @@ public class NeuralNetworkModelsIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data[i]) > Tolerance)
+            if (Math.Abs(output.Data.Span[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -446,7 +446,7 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(output1.Shape, output2.Shape);
         for (int i = 0; i < output1.Length; i++)
         {
-            var diff = Math.Abs(output1.Data[i] - output2.Data[i]);
+            var diff = Math.Abs(output1.Data.Span[i] - output2.Data.Span[i]);
             Assert.True(diff <= Tolerance, $"Outputs diverged more than {Tolerance} at index {i}: diff={diff}");
         }
     }

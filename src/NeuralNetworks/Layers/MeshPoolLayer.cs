@@ -409,7 +409,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         int numToKeep = Math.Min(TargetEdges, numEdges);
 
         // Upload importance weights to GPU
-        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_importanceWeights.Data));
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_importanceWeights.Data.ToArray()));
 
         // Compute importance scores on GPU: scores = input @ weights
         // [numEdges, InputChannels] @ [InputChannels, 1] -> [numEdges, 1]

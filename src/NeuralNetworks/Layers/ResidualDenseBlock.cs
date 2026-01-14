@@ -690,7 +690,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    result.Data[c * spatialSize + hw] = a.Data[c * spatialSize + hw];
+                    result.Data.Span[c * spatialSize + hw] = a.Data.Span[c * spatialSize + hw];
                 }
             }
 
@@ -699,7 +699,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    result.Data[(channelsA + c) * spatialSize + hw] = b.Data[c * spatialSize + hw];
+                    result.Data.Span[(channelsA + c) * spatialSize + hw] = b.Data.Span[c * spatialSize + hw];
                 }
             }
 
@@ -726,7 +726,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                     {
                         int srcIdx = n * channelsA * spatialSize + c * spatialSize + hw;
                         int dstIdx = n * totalChannels * spatialSize + c * spatialSize + hw;
-                        result.Data[dstIdx] = a.Data[srcIdx];
+                        result.Data.Span[dstIdx] = a.Data.Span[srcIdx];
                     }
                 }
 
@@ -737,7 +737,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                     {
                         int srcIdx = n * channelsB * spatialSize + c * spatialSize + hw;
                         int dstIdx = n * totalChannels * spatialSize + (channelsA + c) * spatialSize + hw;
-                        result.Data[dstIdx] = b.Data[srcIdx];
+                        result.Data.Span[dstIdx] = b.Data.Span[srcIdx];
                     }
                 }
             }
@@ -764,7 +764,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    first.Data[c * spatialSize + hw] = grad.Data[c * spatialSize + hw];
+                    first.Data.Span[c * spatialSize + hw] = grad.Data.Span[c * spatialSize + hw];
                 }
             }
 
@@ -772,7 +772,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    second.Data[c * spatialSize + hw] = grad.Data[(firstChannels + c) * spatialSize + hw];
+                    second.Data.Span[c * spatialSize + hw] = grad.Data.Span[(firstChannels + c) * spatialSize + hw];
                 }
             }
 
@@ -797,7 +797,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                     {
                         int srcIdx = n * totalChannels * spatialSize + c * spatialSize + hw;
                         int dstIdx = n * firstChannels * spatialSize + c * spatialSize + hw;
-                        first.Data[dstIdx] = grad.Data[srcIdx];
+                        first.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                     }
                 }
 
@@ -807,7 +807,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                     {
                         int srcIdx = n * totalChannels * spatialSize + (firstChannels + c) * spatialSize + hw;
                         int dstIdx = n * secondChannels * spatialSize + c * spatialSize + hw;
-                        second.Data[dstIdx] = grad.Data[srcIdx];
+                        second.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                     }
                 }
             }
@@ -824,7 +824,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
-            output.Data[i] = _activation.Activate(input.Data[i]);
+            output.Data.Span[i] = _activation.Activate(input.Data.Span[i]);
         }
         return output;
     }
@@ -837,9 +837,9 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(gradient.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            output.Data[i] = NumOps.Multiply(
-                gradient.Data[i],
-                _activation.Derivative(activationOutput.Data[i]));
+            output.Data.Span[i] = NumOps.Multiply(
+                gradient.Data.Span[i],
+                _activation.Derivative(activationOutput.Data.Span[i]));
         }
         return output;
     }
@@ -853,9 +853,9 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleT = NumOps.FromDouble(scale);
         for (int i = 0; i < a.Length; i++)
         {
-            output.Data[i] = NumOps.Add(
-                NumOps.Multiply(a.Data[i], scaleT),
-                b.Data[i]);
+            output.Data.Span[i] = NumOps.Add(
+                NumOps.Multiply(a.Data.Span[i], scaleT),
+                b.Data.Span[i]);
         }
         return output;
     }
@@ -869,7 +869,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleT = NumOps.FromDouble(scale);
         for (int i = 0; i < gradient.Length; i++)
         {
-            output.Data[i] = NumOps.Multiply(gradient.Data[i], scaleT);
+            output.Data.Span[i] = NumOps.Multiply(gradient.Data.Span[i], scaleT);
         }
         return output;
     }
@@ -882,7 +882,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {
-            output.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+            output.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
         return output;
     }
@@ -1037,7 +1037,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleTensor = new Tensor<T>(node.Value.Shape);
         for (int i = 0; i < scaleTensor.Length; i++)
         {
-            scaleTensor.Data[i] = scaleValue;
+            scaleTensor.Data.Span[i] = scaleValue;
         }
 
         var scaleNode = TensorOperations<T>.Constant(scaleTensor, name);

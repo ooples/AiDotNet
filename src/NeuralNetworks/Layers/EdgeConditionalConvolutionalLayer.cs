@@ -441,15 +441,15 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         int numEdges = normalizedEdge.Shape[1];
 
         // Upload edge network weights and biases
-        using var w1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights1.Data));
-        using var w2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights2.Data));
-        using var b1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias1.Data));
-        using var b2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias2.Data));
-        using var selfBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
-        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data));
+        using var w1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights1.Data.ToArray()));
+        using var w2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkWeights2.Data.ToArray()));
+        using var b1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias1.Data.ToArray()));
+        using var b2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_edgeNetworkBias2.Data.ToArray()));
+        using var selfBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data.ToArray()));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray()));
 
         // Upload edge features: [batch, numEdges, edgeFeatures]
-        using var edgeBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedEdge.Data));
+        using var edgeBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedEdge.Data.ToArray()));
 
         // ===== Edge Network Layer 1: [batch*numEdges, edgeFeatures] @ [edgeFeatures, hiddenDim] =====
         // Uses fused GemmBiasRelu for optimal GPU performance

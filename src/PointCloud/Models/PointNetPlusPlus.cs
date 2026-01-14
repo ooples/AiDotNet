@@ -327,7 +327,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
             // Capture global features after max pooling
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
             {
-                _globalFeatures = new Vector<T>(x.Data);
+                _globalFeatures = new Vector<T>(x.Data.ToArray());
             }
         }
 
@@ -389,7 +389,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     public Vector<T> ClassifyPointCloud(Tensor<T> pointCloud)
     {
         var output = Predict(pointCloud);
-        return new Vector<T>(output.Data);
+        return new Vector<T>(output.Data.ToArray());
     }
 
     public Tensor<T> SegmentPointCloud(Tensor<T> pointCloud)
@@ -449,9 +449,9 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
             throw new ArgumentException("Centroid features must have shape [M, F].", nameof(centroidFeatures));
         }
 
-        var pointData = pointCloud.Data;
-        var centroidPosData = centroidPositions.Data;
-        var centroidFeatureData = centroidFeatures.Data;
+        var pointData = pointCloud.Data.Span;
+        var centroidPosData = centroidPositions.Data.Span;
+        var centroidFeatureData = centroidFeatures.Data.Span;
         var output = new T[numPoints * featureDim];
 
         for (int i = 0; i < numPoints; i++)
@@ -1183,7 +1183,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
                 int srcBase = c * branchChannels;
                 for (int ch = 0; ch < branchChannels; ch++)
                 {
-                    combined[dstBase + ch] = branchOutput.Data[srcBase + ch];
+                    combined[dstBase + ch] = branchOutput.Data.Span[srcBase + ch];
                 }
             }
 
@@ -1232,7 +1232,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
                     int maxIdx = branch.MaxIndices[c * branchChannels + ch];
                     int gradIdx = (c * maxNeighbors + maxIdx) * branchChannels + ch;
                     int srcIdx = c * _outputChannels + channelOffset + ch;
-                    branchGradient[gradIdx] = outputGradient.Data[srcIdx];
+                    branchGradient[gradIdx] = outputGradient.Data.Span[srcIdx];
                 }
             }
 
@@ -1242,7 +1242,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
                 gradTensor = branch.MlpLayers[i].Backward(gradTensor);
             }
 
-            var gradData = gradTensor.Data;
+            var gradData = gradTensor.Data.Span;
             for (int c = 0; c < numCentroids; c++)
             {
                 int centroidIdx = _centroidIndices[c];
@@ -1414,7 +1414,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
     {
         int numPoints = input.Shape[0];
         var positions = new double[numPoints * 3];
-        var data = input.Data;
+        var data = input.Data.Span;
 
         for (int i = 0; i < numPoints; i++)
         {
@@ -1429,7 +1429,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
 
     private Tensor<T> BuildCentroidPositions(Tensor<T> input, int[] centroidIndices)
     {
-        var data = input.Data;
+        var data = input.Data.Span;
         var centroidData = new T[centroidIndices.Length * 3];
         for (int i = 0; i < centroidIndices.Length; i++)
         {
@@ -1471,7 +1471,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         int outChannels = branch.OutputChannels;
         var output = new T[numCentroids * outChannels];
         var maxIndices = new int[numCentroids * outChannels];
-        var data = features.Data;
+        var data = features.Data.Span;
         var numOps = NumOps;
 
         for (int c = 0; c < numCentroids; c++)
@@ -1511,7 +1511,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
     {
         int numCentroids = centroidIndices.Length;
         var grouped = new T[numCentroids * maxNeighbors * _inputChannels];
-        var data = input.Data;
+        var data = input.Data.Span;
         var numOps = NumOps;
 
         for (int c = 0; c < numCentroids; c++)

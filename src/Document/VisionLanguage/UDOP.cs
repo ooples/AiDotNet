@@ -430,7 +430,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
         for (int i = 0; i < numClasses; i++)
         {
-            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data[i])));
+            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data.Span[i])));
         }
 
         return predictions.OrderByDescending(p => p.Score).Take(k).ToList();
@@ -444,20 +444,20 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         double maxVal = double.MinValue;
         for (int i = 0; i < length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
             if (val > maxVal) maxVal = val;
         }
 
         double sumExp = 0;
         for (int i = 0; i < length; i++)
         {
-            sumExp += Math.Exp(NumOps.ToDouble(input.Data[i]) - maxVal);
+            sumExp += Math.Exp(NumOps.ToDouble(input.Data.Span[i]) - maxVal);
         }
 
         for (int i = 0; i < length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
-            output.Data[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
+            output.Data.Span[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
         }
 
         return output;
@@ -535,7 +535,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data[idx]) - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
                     }
                 }
             }

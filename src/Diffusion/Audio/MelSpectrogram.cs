@@ -293,11 +293,11 @@ public class MelSpectrogram<T>
                 T sum = NumOps.Zero;
                 for (int f = 0; f < numFreqs; f++)
                 {
-                    var power = powerSpec.Data[frame * numFreqs + f];
-                    var filter = _melFilterbank.Data[mel * filterFreqs + f];
+                    var power = powerSpec.Data.Span[frame * numFreqs + f];
+                    var filter = _melFilterbank.Data.Span[mel * filterFreqs + f];
                     sum = NumOps.Add(sum, NumOps.Multiply(power, filter));
                 }
-                melSpec.Data[frame * nMels + mel] = sum;
+                melSpec.Data.Span[frame * nMels + mel] = sum;
             }
         }
 
@@ -320,7 +320,7 @@ public class MelSpectrogram<T>
         for (int i = 0; i < power.Data.Length; i++)
         {
             // dB = 10 * log10(power / ref + epsilon)
-            var ratio = NumOps.Add(NumOps.Divide(power.Data[i], refValue), epsilon);
+            var ratio = NumOps.Add(NumOps.Divide(power.Data.Span[i], refValue), epsilon);
             var logVal = NumOps.FromDouble(Math.Log10(NumOps.ToDouble(ratio)));
             var dbVal = NumOps.Multiply(factor, logVal);
 
@@ -330,7 +330,7 @@ public class MelSpectrogram<T>
                 dbVal = minDbT;
             }
 
-            db.Data[i] = dbVal;
+            db.Data.Span[i] = dbVal;
         }
 
         return db;
@@ -350,9 +350,9 @@ public class MelSpectrogram<T>
         for (int i = 0; i < db.Data.Length; i++)
         {
             // power = ref * 10^(dB / 10)
-            var exponent = NumOps.Divide(db.Data[i], divisor);
+            var exponent = NumOps.Divide(db.Data.Span[i], divisor);
             var factor = NumOps.FromDouble(Math.Pow(10.0, NumOps.ToDouble(exponent)));
-            power.Data[i] = NumOps.Multiply(refValue, factor);
+            power.Data.Span[i] = NumOps.Multiply(refValue, factor);
         }
 
         return power;
@@ -394,7 +394,7 @@ public class MelSpectrogram<T>
             T sum = NumOps.Zero;
             for (int mel = 0; mel < nMels; mel++)
             {
-                var filter = _melFilterbank.Data[mel * numFreqs + f];
+                var filter = _melFilterbank.Data.Span[mel * numFreqs + f];
                 sum = NumOps.Add(sum, NumOps.Multiply(filter, filter));
             }
             filterNorm[f] = NumOps.Add(sum, NumOps.FromDouble(1e-8));
@@ -408,14 +408,14 @@ public class MelSpectrogram<T>
                 T sum = NumOps.Zero;
                 for (int mel = 0; mel < nMels; mel++)
                 {
-                    var melVal = linearMel.Data[frame * nMels + mel];
-                    var filter = _melFilterbank.Data[mel * numFreqs + f];
+                    var melVal = linearMel.Data.Span[frame * nMels + mel];
+                    var filter = _melFilterbank.Data.Span[mel * numFreqs + f];
                     sum = NumOps.Add(sum, NumOps.Multiply(melVal, filter));
                 }
                 var normalized = NumOps.Divide(sum, filterNorm[f]);
 
                 // Take square root to go from power to magnitude
-                magnitude.Data[frame * numFreqs + f] = NumOps.FromDouble(
+                magnitude.Data.Span[frame * numFreqs + f] = NumOps.FromDouble(
                     Math.Sqrt(Math.Max(0, NumOps.ToDouble(normalized))));
             }
         }
@@ -467,7 +467,7 @@ public class MelSpectrogram<T>
                 if (f >= 0 && f < numFreqs && centerBin != leftBin)
                 {
                     double weight = (double)(f - leftBin) / (centerBin - leftBin);
-                    filterbank.Data[mel * numFreqs + f] = NumOps.FromDouble(weight);
+                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.FromDouble(weight);
                 }
             }
 
@@ -477,7 +477,7 @@ public class MelSpectrogram<T>
                 if (f >= 0 && f < numFreqs && rightBin != centerBin)
                 {
                     double weight = (double)(rightBin - f) / (rightBin - centerBin);
-                    filterbank.Data[mel * numFreqs + f] = NumOps.FromDouble(weight);
+                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.FromDouble(weight);
                 }
             }
         }
@@ -488,15 +488,15 @@ public class MelSpectrogram<T>
             T sum = NumOps.Zero;
             for (int f = 0; f < numFreqs; f++)
             {
-                sum = NumOps.Add(sum, filterbank.Data[mel * numFreqs + f]);
+                sum = NumOps.Add(sum, filterbank.Data.Span[mel * numFreqs + f]);
             }
 
             if (NumOps.ToDouble(sum) > 1e-8)
             {
                 for (int f = 0; f < numFreqs; f++)
                 {
-                    filterbank.Data[mel * numFreqs + f] = NumOps.Divide(
-                        filterbank.Data[mel * numFreqs + f], sum);
+                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.Divide(
+                        filterbank.Data.Span[mel * numFreqs + f], sum);
                 }
             }
         }
@@ -537,7 +537,7 @@ public class MelSpectrogram<T>
     public Tensor<T> GetFilterbank()
     {
         var copy = new Tensor<T>(_melFilterbank.Shape);
-        Array.Copy(_melFilterbank.Data, copy.Data, _melFilterbank.Data.Length);
+        Array.Copy(_melFilterbank.Data.ToArray(), copy.Data.ToArray(), _melFilterbank.Data.Length);
         return copy;
     }
 

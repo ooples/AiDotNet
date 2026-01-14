@@ -453,7 +453,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         double timestepScale = 0.0;
         for (int i = 0; i < timestepEmbed.Length; i++)
         {
-            timestepScale += NumOps.ToDouble(timestepEmbed.Data[i]);
+            timestepScale += NumOps.ToDouble(timestepEmbed.Data.Span[i]);
         }
         timestepScale = 1.0 + timestepScale / timestepEmbed.Length;
 
@@ -461,9 +461,9 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         int textLen = textEmbedding.Length;
         for (int i = 0; i < input.Length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
-            double textMod = textLen > 0 ? NumOps.ToDouble(textEmbedding.Data[i % textLen]) : 0.0;
-            result.Data[i] = NumOps.FromDouble(val * timestepScale + textMod * 0.1);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
+            double textMod = textLen > 0 ? NumOps.ToDouble(textEmbedding.Data.Span[i % textLen]) : 0.0;
+            result.Data.Span[i] = NumOps.FromDouble(val * timestepScale + textMod * 0.1);
         }
 
         return result;
@@ -577,8 +577,8 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         // μ̃_t = posteriorMeanCoef1 * x_0 + posteriorMeanCoef2 * x_t
         for (int i = 0; i < noisyLatent.Length; i++)
         {
-            double xt = NumOps.ToDouble(noisyLatent.Data[i]);
-            double eps = NumOps.ToDouble(noisePrediction.Data[i]);
+            double xt = NumOps.ToDouble(noisyLatent.Data.Span[i]);
+            double eps = NumOps.ToDouble(noisePrediction.Data.Span[i]);
 
             // Predict x_0
             double x0 = (xt - sqrtOneMinusAlphaBar * eps) / Math.Max(sqrtAlphaBar, 1e-20);
@@ -632,7 +632,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);

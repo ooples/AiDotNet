@@ -28,18 +28,18 @@ public class GeometryDataIntegrationTests
 
         var faceNormals = mesh.ComputeFaceNormals();
         Assert.Equal(new[] { 1, 3 }, faceNormals.Shape);
-        Assert.Equal(0.0, faceNormals.Data[0], 6);
-        Assert.Equal(0.0, faceNormals.Data[1], 6);
-        Assert.Equal(1.0, faceNormals.Data[2], 6);
+        Assert.Equal(0.0, faceNormals.Data.Span[0], 6);
+        Assert.Equal(0.0, faceNormals.Data.Span[1], 6);
+        Assert.Equal(1.0, faceNormals.Data.Span[2], 6);
 
         var vertexNormals = mesh.ComputeVertexNormals();
         Assert.Equal(new[] { 3, 3 }, vertexNormals.Shape);
         for (int i = 0; i < 3; i++)
         {
             int offset = i * 3;
-            Assert.Equal(0.0, vertexNormals.Data[offset], 6);
-            Assert.Equal(0.0, vertexNormals.Data[offset + 1], 6);
-            Assert.Equal(1.0, vertexNormals.Data[offset + 2], 6);
+            Assert.Equal(0.0, vertexNormals.Data.Span[offset], 6);
+            Assert.Equal(0.0, vertexNormals.Data.Span[offset + 1], 6);
+            Assert.Equal(1.0, vertexNormals.Data.Span[offset + 2], 6);
         }
     }
 
@@ -87,7 +87,7 @@ public class GeometryDataIntegrationTests
         Assert.Equal(2, cloud.NumPoints);
         Assert.Equal(3, cloud.NumFeatures);
 
-        var points = cloud.Points.Data;
+        var points = cloud.Points.Data.Span;
         Assert.Equal(0.5, points[0], 6);
         Assert.Equal(0.5, points[1], 6);
         Assert.Equal(0.5, points[2], 6);

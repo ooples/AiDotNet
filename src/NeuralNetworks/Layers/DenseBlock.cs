@@ -420,7 +420,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = c * spatialSize + hw;
                     int dstIdx = c * spatialSize + hw;
-                    result.Data[dstIdx] = a.Data[srcIdx];
+                    result.Data.Span[dstIdx] = a.Data.Span[srcIdx];
                 }
             }
 
@@ -431,7 +431,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = c * spatialSize + hw;
                     int dstIdx = (channelsA + c) * spatialSize + hw;
-                    result.Data[dstIdx] = b.Data[srcIdx];
+                    result.Data.Span[dstIdx] = b.Data.Span[srcIdx];
                 }
             }
 
@@ -458,7 +458,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = n * (channelsA4D * spatialSize4D) + c * spatialSize4D + hw;
                     int dstIdx = n * (totalChannels4D * spatialSize4D) + c * spatialSize4D + hw;
-                    result4D.Data[dstIdx] = a.Data[srcIdx];
+                    result4D.Data.Span[dstIdx] = a.Data.Span[srcIdx];
                 }
             }
 
@@ -469,7 +469,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = n * (channelsB4D * spatialSize4D) + c * spatialSize4D + hw;
                     int dstIdx = n * (totalChannels4D * spatialSize4D) + (channelsA4D + c) * spatialSize4D + hw;
-                    result4D.Data[dstIdx] = b.Data[srcIdx];
+                    result4D.Data.Span[dstIdx] = b.Data.Span[srcIdx];
                 }
             }
         }
@@ -499,7 +499,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = c * spatialSize + hw;
                     int dstIdx = c * spatialSize + hw;
-                    first.Data[dstIdx] = grad.Data[srcIdx];
+                    first.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                 }
             }
 
@@ -509,7 +509,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = (firstChannels + c) * spatialSize + hw;
                     int dstIdx = c * spatialSize + hw;
-                    second.Data[dstIdx] = grad.Data[srcIdx];
+                    second.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                 }
             }
 
@@ -535,7 +535,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = n * (totalChannels4D * spatialSize4D) + c * spatialSize4D + hw;
                     int dstIdx = n * (firstChannels * spatialSize4D) + c * spatialSize4D + hw;
-                    first4D.Data[dstIdx] = grad.Data[srcIdx];
+                    first4D.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                 }
             }
 
@@ -545,7 +545,7 @@ public class DenseBlock<T> : LayerBase<T>
                 {
                     int srcIdx = n * (totalChannels4D * spatialSize4D) + (firstChannels + c) * spatialSize4D + hw;
                     int dstIdx = n * (secondChannels * spatialSize4D) + c * spatialSize4D + hw;
-                    second4D.Data[dstIdx] = grad.Data[srcIdx];
+                    second4D.Data.Span[dstIdx] = grad.Data.Span[srcIdx];
                 }
             }
         }

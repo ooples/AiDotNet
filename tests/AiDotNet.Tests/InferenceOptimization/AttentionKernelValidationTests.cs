@@ -23,7 +23,7 @@ public class AttentionKernelValidationTests
         Assert.Equal(expected.Shape, actual.Shape);
         for (int i = 0; i < expected.Data.Length; i++)
         {
-            Assert.Equal(expected.Data[i], actual.Data[i], 5);
+            Assert.Equal(expected.Data.Span[i], actual.Data.Span[i], 5);
         }
     }
 
@@ -43,10 +43,10 @@ public class AttentionKernelValidationTests
         var actual = kernel.Execute(q, k, v, mask);
 
         // With token 1 masked out, both rows should match v0.
-        Assert.Equal(1f, actual.Data[0], 5);
-        Assert.Equal(2f, actual.Data[1], 5);
-        Assert.Equal(1f, actual.Data[2], 5);
-        Assert.Equal(2f, actual.Data[3], 5);
+        Assert.Equal(1f, actual.Data.Span[0], 5);
+        Assert.Equal(2f, actual.Data.Span[1], 5);
+        Assert.Equal(1f, actual.Data.Span[2], 5);
+        Assert.Equal(2f, actual.Data.Span[3], 5);
     }
 
     private static Tensor<float> NaiveAttention(Tensor<float> q, Tensor<float> k, Tensor<float> v)
@@ -63,7 +63,7 @@ public class AttentionKernelValidationTests
                 float dot = 0f;
                 for (int t = 0; t < d; t++)
                 {
-                    dot += q.Data[i * d + t] * k.Data[j * d + t];
+                    dot += q.Data.Span[i * d + t] * k.Data.Span[j * d + t];
                 }
 
                 scores[i * seq + j] = dot * scale;
@@ -100,10 +100,10 @@ public class AttentionKernelValidationTests
                 float sum = 0f;
                 for (int t = 0; t < seq; t++)
                 {
-                    sum += scores[i * seq + t] * v.Data[t * dV + j];
+                    sum += scores[i * seq + t] * v.Data.Span[t * dV + j];
                 }
 
-                result.Data[i * dV + j] = sum;
+                result.Data.Span[i * dV + j] = sum;
             }
         }
 
@@ -114,7 +114,7 @@ public class AttentionKernelValidationTests
     {
         var t = new Tensor<float>(shape);
         Assert.Equal(t.Data.Length, data.Length);
-        Array.Copy(data, t.Data, data.Length);
+        data.AsSpan().CopyTo(t.Data.Span);
         return t;
     }
 }

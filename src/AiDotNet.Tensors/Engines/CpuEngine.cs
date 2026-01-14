@@ -5309,11 +5309,11 @@ public class CpuEngine : IEngine
         }
 
         var result = new Tensor<T>([batch, outChannels, outputHeight, outputWidth]);
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
-        var outputData = result.Data;
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
+        var outputData = result.ToArray();
 
         // Parallel over batch * outChannels for maximum parallelism
         Parallel.For(0, batch * outChannels, idx =>
@@ -5475,11 +5475,11 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradInput = new Tensor<T>(inputShape);
-        var gradInputData = gradInput.Data;
-        var gradOutputData = gradOutput.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradInputData = gradInput.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         // Use a lock array to avoid race conditions during atomic adds
         var locks = new object[batch * inChannels * height * width];
@@ -5642,11 +5642,11 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradKernel = new Tensor<T>(kernelShape);
-        var gradKernelData = gradKernel.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradKernelData = gradKernel.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         // Use locks for atomic operations on kernel gradients
         var locks = new object[outChannels * inChannels * kernelHeight * kernelWidth];
@@ -5763,12 +5763,12 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradOffset = new Tensor<T>(offset.Shape);
-        var gradOffsetData = gradOffset.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradOffsetData = gradOffset.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -6076,11 +6076,11 @@ public class CpuEngine : IEngine
 
         // Mask shape: [batch, kernel_h*kernel_w, out_h, out_w]
         var gradMask = new Tensor<T>([batch, numKernelPositions, outputHeight, outputWidth]);
-        var gradMaskData = gradMask.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
+        var gradMaskData = gradMask.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -6170,9 +6170,9 @@ public class CpuEngine : IEngine
         if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: inputShape has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradInput = new Tensor<T>(inputShape);
-        var gradInputData = gradInput.Data;
-        var gradOutputData = gradOutput.Data;
-        var gridData = grid.Data;
+        var gradInputData = gradInput.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var gridData = grid.ToArray();
 
         // Use locks for atomic addition - NHWC layout
         var locks = new object[batch * height * width * channels];
@@ -6241,10 +6241,10 @@ public class CpuEngine : IEngine
         if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: input has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradGrid = new Tensor<T>(grid.Shape);
-        var gradGridData = gradGrid.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var gridData = grid.Data;
+        var gradGridData = gradGrid.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gridData = grid.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -15015,10 +15015,10 @@ public class CpuEngine : IEngine
             if (typeof(T) == typeof(float))
             {
                 // Cast arrays directly (boxing avoids generic constraint issues)
-                var inputArray = (float[])(object)input.Data;
-                var weightsArray = (float[])(object)weights.Data;
-                var biasArray = bias != null ? (float[])(object)bias.Data : null;
-                var outputArray = (float[])(object)result.Data;
+                var inputArray = (float[])(object)input.ToArray();
+                var weightsArray = (float[])(object)weights.ToArray();
+                var biasArray = bias != null ? (float[])(object)bias.ToArray() : null;
+                var outputArray = (float[])(object)result.ToArray();
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
@@ -15030,10 +15030,10 @@ public class CpuEngine : IEngine
             // Use optimized fused operations for double type
             if (typeof(T) == typeof(double))
             {
-                var inputArray = (double[])(object)input.Data;
-                var weightsArray = (double[])(object)weights.Data;
-                var biasArray = bias != null ? (double[])(object)bias.Data : null;
-                var outputArray = (double[])(object)result.Data;
+                var inputArray = (double[])(object)input.ToArray();
+                var weightsArray = (double[])(object)weights.ToArray();
+                var biasArray = bias != null ? (double[])(object)bias.ToArray() : null;
+                var outputArray = (double[])(object)result.ToArray();
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,

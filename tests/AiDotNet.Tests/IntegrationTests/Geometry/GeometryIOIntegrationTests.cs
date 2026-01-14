@@ -56,11 +56,11 @@ public class GeometryIOIntegrationTests
             Assert.NotNull(loaded.VertexUVs);
             Assert.NotNull(loaded.VertexColors);
 
-            Assert.Equal(0.0, loaded.Vertices.Data[0], 6);
-            Assert.Equal(1.0, loaded.Vertices.Data[3], 6);
-            Assert.Equal(1.0, loaded.VertexNormals.Data[2], 6);
-            Assert.Equal(1.0, loaded.VertexUVs.Data[2], 6);
-            Assert.Equal(1.0, loaded.VertexColors.Data[0], 6);
+            Assert.Equal(0.0, loaded.Vertices.Data.Span[0], 6);
+            Assert.Equal(1.0, loaded.Vertices.Data.Span[3], 6);
+            Assert.Equal(1.0, loaded.VertexNormals.Data.Span[2], 6);
+            Assert.Equal(1.0, loaded.VertexUVs.Data.Span[2], 6);
+            Assert.Equal(1.0, loaded.VertexColors.Data.Span[0], 6);
         }
         finally
         {
@@ -88,9 +88,9 @@ public class GeometryIOIntegrationTests
 
             Assert.Equal(3, loaded.NumPoints);
             Assert.Equal(6, loaded.NumFeatures);
-            Assert.Equal(1.0, loaded.Points.Data[3], 6);
-            Assert.Equal(1.0, loaded.Points.Data[10], 6);
-            Assert.Equal(1.0, loaded.Points.Data[17], 6);
+            Assert.Equal(1.0, loaded.Points.Data.Span[3], 6);
+            Assert.Equal(1.0, loaded.Points.Data.Span[10], 6);
+            Assert.Equal(1.0, loaded.Points.Data.Span[17], 6);
         }
         finally
         {
@@ -144,9 +144,9 @@ public class GeometryIOIntegrationTests
             Assert.NotNull(loaded.VertexColors);
             Assert.NotNull(loaded.FaceNormals);
 
-            Assert.Equal(255.0, loaded.VertexColors.Data[0], 6);
-            Assert.Equal(1.0, loaded.VertexUVs.Data[2], 6);
-            Assert.Equal(1.0, loaded.FaceNormals.Data[2], 6);
+            Assert.Equal(255.0, loaded.VertexColors.Data.Span[0], 6);
+            Assert.Equal(1.0, loaded.VertexUVs.Data.Span[2], 6);
+            Assert.Equal(1.0, loaded.FaceNormals.Data.Span[2], 6);
         }
         finally
         {
@@ -173,8 +173,8 @@ public class GeometryIOIntegrationTests
 
             Assert.Equal(2, loaded.NumPoints);
             Assert.Equal(12, loaded.NumFeatures);
-            Assert.Equal(255.0, loaded.Points.Data[3], 6);
-            Assert.Equal(1.0, loaded.Points.Data[22], 6);
+            Assert.Equal(255.0, loaded.Points.Data.Span[3], 6);
+            Assert.Equal(1.0, loaded.Points.Data.Span[22], 6);
         }
         finally
         {
@@ -205,7 +205,7 @@ public class GeometryIOIntegrationTests
             Assert.Equal(4, loaded.NumVertices);
             Assert.Equal(2, loaded.NumFaces);
             Assert.NotNull(loaded.FaceNormals);
-            Assert.Equal(1.0, loaded.Vertices.Data[3], 6);
+            Assert.Equal(1.0, loaded.Vertices.Data.Span[3], 6);
         }
         finally
         {
@@ -239,7 +239,7 @@ public class GeometryIOIntegrationTests
             Assert.Equal(3, loaded.NumVertices);
             Assert.Equal(1, loaded.NumFaces);
             Assert.NotNull(loaded.FaceNormals);
-            Assert.Equal(1.0, loaded.FaceNormals.Data[2], 6);
+            Assert.Equal(1.0, loaded.FaceNormals.Data.Span[2], 6);
         }
         finally
         {

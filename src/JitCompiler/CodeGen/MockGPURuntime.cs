@@ -88,12 +88,12 @@ public class MockGPURuntime : IGPURuntime
             for (int i = 0; i < count; i++)
             {
                 double value = typeof(T) == typeof(float)
-                    ? BitConverter.ToSingle(mock.Data, i * elementSize)
+                    ? BitConverter.ToSingle(mock.Data.ToArray(), i * elementSize)
                     : typeof(T) == typeof(double)
-                        ? BitConverter.ToDouble(mock.Data, i * elementSize)
+                        ? BitConverter.ToDouble(mock.Data.ToArray(), i * elementSize)
                         : typeof(T) == typeof(int)
-                            ? BitConverter.ToInt32(mock.Data, i * elementSize)
-                            : BitConverter.ToDouble(mock.Data, i * elementSize);
+                            ? BitConverter.ToInt32(mock.Data.ToArray(), i * elementSize)
+                            : BitConverter.ToDouble(mock.Data.ToArray(), i * elementSize);
                 destination[i] = numOps.FromDouble(value);
             }
         }

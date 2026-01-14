@@ -568,11 +568,11 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             }
 
             // Upload weights to GPU
-            using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weights.Data));
+            using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(weights.Data.ToArray()));
 
             // Normalize adjacency matrix (precompute on CPU, upload once)
             var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
-            using var adjBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedAdj.Data));
+            using var adjBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(normalizedAdj.Data.ToArray()));
 
             // GPU-native processing: For all batches at once
             // If inFeatures == inputFeatures, use input directly; otherwise extract columns on GPU
@@ -660,8 +660,8 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             int inFeatures = _metadata.NodeTypeFeatures[nodeType];
 
             // Upload weights and bias
-            using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(selfWeights.Data));
-            using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(bias.Data));
+            using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(selfWeights.Data.ToArray()));
+            using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(bias.Data.ToArray()));
 
             // Create a broadcast mask [numNodes, outputFeatures] where mask[n, :] = 1.0 if node n is of this type
             var nodeMaskData = new float[numNodes * _outputFeatures];

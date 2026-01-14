@@ -266,7 +266,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         int outputSize = ColumnCount * CellsPerColumn;
 
         // Convert cell states to float array and upload to GPU
-        var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data);
+        var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data.ToArray());
         using var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 

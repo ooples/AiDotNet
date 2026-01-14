@@ -959,8 +959,8 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             for (int i = 0; i < InputFeatures; i++)
             {
-                weightTensor.Data[o * InputFeatures + i] = _weights[o, i];
-                biasTensor.Data[o * InputFeatures + i] = _biases[o, i];
+                weightTensor.Data.Span[o * InputFeatures + i] = _weights[o, i];
+                biasTensor.Data.Span[o * InputFeatures + i] = _biases[o, i];
             }
         }
 
@@ -982,8 +982,8 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             for (int i = 0; i < InputFeatures; i++)
             {
-                _weights[o, i] = updatedWeights.Data[o * InputFeatures + i];
-                _biases[o, i] = updatedBiases.Data[o * InputFeatures + i];
+                _weights[o, i] = updatedWeights.Data.Span[o * InputFeatures + i];
+                _biases[o, i] = updatedBiases.Data.Span[o * InputFeatures + i];
             }
         }
     }

@@ -155,10 +155,10 @@ public class RVM<T> : NeuralNetworkBase<T>
         var foreground = new Tensor<T>([1, 3, h, w]);
 
         // First channel is alpha
-        Array.Copy(output.Data, 0, alpha.Data, 0, h * w);
+        Array.Copy(output.Data.ToArray(), 0, alpha.Data.ToArray(), 0, h * w);
 
         // Remaining 3 channels are foreground RGB
-        Array.Copy(output.Data, h * w, foreground.Data, 0, 3 * h * w);
+        Array.Copy(output.Data.ToArray(), h * w, foreground.Data.ToArray(), 0, 3 * h * w);
 
         return (alpha, foreground);
     }
@@ -249,9 +249,9 @@ public class RVM<T> : NeuralNetworkBase<T>
             // Blend with previous state for temporal smoothing
             for (int i = 0; i < Math.Min(result.Length, _hiddenState.Length); i++)
             {
-                double curr = Convert.ToDouble(result.Data[i]);
-                double prev = Convert.ToDouble(_hiddenState.Data[i]);
-                result.Data[i] = NumOps.FromDouble(curr * 0.9 + prev * 0.1);
+                double curr = Convert.ToDouble(result.Data.Span[i]);
+                double prev = Convert.ToDouble(_hiddenState.Data.Span[i]);
+                result.Data.Span[i] = NumOps.FromDouble(curr * 0.9 + prev * 0.1);
             }
         }
 
@@ -259,7 +259,7 @@ public class RVM<T> : NeuralNetworkBase<T>
 
         // Update hidden state for next frame
         _hiddenState = new Tensor<T>(result.Shape);
-        Array.Copy(result.Data, _hiddenState.Data, result.Length);
+        Array.Copy(result.Data.ToArray(), _hiddenState.Data.ToArray(), result.Length);
 
         return result;
     }
@@ -269,7 +269,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data[i]);
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };

@@ -325,7 +325,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                     : c * pixelsPerChannel;
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    gradImg1.Data[dstOffset + i] = gradient.Data[srcOffset + i];
+                    gradImg1.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
                 }
             }
 
@@ -340,7 +340,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                     : c * pixelsPerChannel;
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    gradWarped2.Data[dstOffset + i] = gradient.Data[srcOffset + i];
+                    gradWarped2.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
                 }
             }
 
@@ -355,7 +355,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                     : c * pixelsPerChannel;
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    gradFlow.Data[dstOffset + i] = gradient.Data[srcOffset + i];
+                    gradFlow.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
                 }
             }
         }
@@ -397,8 +397,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         ? b * 2 * height * width + 1 * height * width + h * width + w
                         : 1 * height * width + h * width + w;
 
-                    gradFlow.Data[flowIdxX] = NumOps.Multiply(gradGrid.Data[gridIdxX], scaleW);
-                    gradFlow.Data[flowIdxY] = NumOps.Multiply(gradGrid.Data[gridIdxY], scaleH);
+                    gradFlow.Data.Span[flowIdxX] = NumOps.Multiply(gradGrid.Data.Span[gridIdxX], scaleW);
+                    gradFlow.Data.Span[flowIdxY] = NumOps.Multiply(gradGrid.Data.Span[gridIdxY], scaleH);
                 }
             }
         }
@@ -411,7 +411,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var result = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {
-            result.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
         return result;
     }
@@ -427,7 +427,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         for (int i = 0; i < target.Length; i++)
         {
-            target.Data[i] = NumOps.Add(target.Data[i], upsampled.Data[i]);
+            target.Data.Span[i] = NumOps.Add(target.Data.Span[i], upsampled.Data.Span[i]);
         }
     }
 
@@ -484,7 +484,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         int outIdx = hasBatch
                             ? b * channels * targetH * targetW + c * targetH * targetW + h * targetW + w
                             : c * targetH * targetW + h * targetW + w;
-                        output.Data[outIdx] = value;
+                        output.Data.Span[outIdx] = value;
                     }
                 }
             }
@@ -498,7 +498,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int idx = hasBatch
             ? b * channels * height * width + c * height * width + h * width + w
             : c * height * width + h * width + w;
-        return grad.Data[idx];
+        return grad.Data.Span[idx];
     }
 
     private Tensor<T> DownsampleFlowGradient(Tensor<T> gradFlow, bool hasBatch)
@@ -532,14 +532,14 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                                 int idx = hasBatch
                                     ? b * 2 * height * width + c * height * width + ih * width + iw
                                     : c * height * width + ih * width + iw;
-                                sum = NumOps.Add(sum, gradFlow.Data[idx]);
+                                sum = NumOps.Add(sum, gradFlow.Data.Span[idx]);
                             }
                         }
                         int outIdx = hasBatch
                             ? b * 2 * newH * newW + c * newH * newW + h * newW + w
                             : c * newH * newW + h * newW + w;
                         // Scale flow gradient by 0.5 for each dimension (consistent with flow scaling)
-                        output.Data[outIdx] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
+                        output.Data.Span[outIdx] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
                     }
                 }
             }
@@ -571,7 +571,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 int dstOffset = hasBatch ? b * 2 * channels * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    output.Data[dstOffset + i] = gradFrame1.Data[srcOffset + i];
+                    output.Data.Span[dstOffset + i] = gradFrame1.Data.Span[srcOffset + i];
                 }
             }
             // Copy frame2 gradients
@@ -583,7 +583,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                     : (channels + c) * pixelsPerChannel;
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    output.Data[dstOffset + i] = gradFrame2.Data[srcOffset + i];
+                    output.Data.Span[dstOffset + i] = gradFrame2.Data.Span[srcOffset + i];
                 }
             }
         }
@@ -608,8 +608,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int pixelsPerChannel = height * width;
         var inputData = input.Data.ToArray();
 
-        var frame1Data = frame1.Data;
-        var frame2Data = frame2.Data;
+        var frame1Data = frame1.Data.Span;
+        var frame2Data = frame2.Data.Span;
         for (int b = 0; b < batch; b++)
         {
             int batchOffset = b * 2 * channels * pixelsPerChannel;
@@ -676,13 +676,13 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                                 int idx = hasBatch
                                     ? b * channels * height * width + c * height * width + ih * width + iw
                                     : c * height * width + ih * width + iw;
-                                sum = NumOps.Add(sum, input.Data[idx]);
+                                sum = NumOps.Add(sum, input.Data.Span[idx]);
                             }
                         }
                         int outIdx = hasBatch
                             ? b * channels * newH * newW + c * newH * newW + h * newW + w
                             : c * newH * newW + h * newW + w;
-                        output.Data[outIdx] = NumOps.Divide(sum, NumOps.FromDouble(4.0));
+                        output.Data.Span[outIdx] = NumOps.Divide(sum, NumOps.FromDouble(4.0));
                     }
                 }
             }
@@ -746,7 +746,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         int outIdx = hasBatch
                             ? b * 2 * targetH * targetW + c * targetH * targetW + h * targetW + w
                             : c * targetH * targetW + h * targetW + w;
-                        output.Data[outIdx] = value;
+                        output.Data.Span[outIdx] = value;
                     }
                 }
             }
@@ -760,7 +760,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int idx = hasBatch
             ? b * 2 * height * width + c * height * width + h * width + w
             : c * height * width + h * width + w;
-        return flow.Data[idx];
+        return flow.Data.Span[idx];
     }
 
     /// <summary>
@@ -805,8 +805,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         ? b * 2 * height * width + 1 * height * width + h * width + w
                         : 1 * height * width + h * width + w;
 
-                    T dx = flow.Data[flowIdxX];
-                    T dy = flow.Data[flowIdxY];
+                    T dx = flow.Data.Span[flowIdxX];
+                    T dy = flow.Data.Span[flowIdxY];
 
                     // Source coordinates (pixel space)
                     T srcX = NumOps.Add(NumOps.FromDouble(w), dx);
@@ -818,8 +818,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
                     // Store in grid
                     int gridIdx = b * height * width * 2 + h * width * 2 + w * 2;
-                    grid.Data[gridIdx] = gridX;
-                    grid.Data[gridIdx + 1] = gridY;
+                    grid.Data.Span[gridIdx] = gridX;
+                    grid.Data.Span[gridIdx + 1] = gridY;
                 }
             }
         }
@@ -828,7 +828,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var image4D = image;
         if (!hasBatch)
         {
-            image4D = new Tensor<T>(new[] { 1, channels, height, width }, new Vector<T>(image.Data));
+            image4D = new Tensor<T>(new[] { 1, channels, height, width }, new Vector<T>(image.Data.ToArray()));
         }
 
         // Use IEngine.GridSample for hardware-accelerated bilinear sampling
@@ -837,7 +837,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Remove batch dimension if input didn't have it
         if (!hasBatch && warped.Rank == 4)
         {
-            warped = new Tensor<T>(new[] { channels, height, width }, new Vector<T>(warped.Data));
+            warped = new Tensor<T>(new[] { channels, height, width }, new Vector<T>(warped.Data.ToArray()));
         }
 
         return (warped, grid);
@@ -866,8 +866,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         ? b * 2 * height * width + 1 * height * width + h * width + w
                         : 1 * height * width + h * width + w;
 
-                    double dx = NumOps.ToDouble(flow.Data[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data[flowIdxY]);
+                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
+                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
 
                     double srcX = w + dx;
                     double srcY = h + dy;
@@ -879,7 +879,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         int outIdx = hasBatch
                             ? b * channels * height * width + c * height * width + h * width + w
                             : c * height * width + h * width + w;
-                        output.Data[outIdx] = value;
+                        output.Data.Span[outIdx] = value;
                     }
                 }
             }
@@ -926,7 +926,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int idx = hasBatch
             ? b * channels * height * width + c * height * width + h * width + w
             : c * height * width + h * width + w;
-        return image.Data[idx];
+        return image.Data.Span[idx];
     }
 
     private Tensor<T> ConcatenateForModule(Tensor<T> img1, Tensor<T> warped2, Tensor<T> flow, bool hasBatch)
@@ -944,10 +944,10 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         int pixelsPerChannel = height * width;
 
-        var outputData = output.Data;
-        var img1Data = img1.Data;
-        var warped2Data = warped2.Data;
-        var flowData = flow.Data;
+        var outputData = output.Data.Span;
+        var img1Data = img1.Data.Span;
+        var warped2Data = warped2.Data.Span;
+        var flowData = flow.Data.Span;
 
         for (int b = 0; b < batch; b++)
         {
@@ -1013,7 +1013,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                         ? b * residual.Shape[1] * pixelsPerChannel + c * pixelsPerChannel + i
                         : c * pixelsPerChannel + i;
 
-                    output.Data[flowIdx] = NumOps.Add(flow.Data[flowIdx], residual.Data[residualIdx]);
+                    output.Data.Span[flowIdx] = NumOps.Add(flow.Data.Span[flowIdx], residual.Data.Span[residualIdx]);
                 }
             }
         }

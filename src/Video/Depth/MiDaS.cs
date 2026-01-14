@@ -181,7 +181,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < depthMap.Length; i++)
         {
-            double val = Convert.ToDouble(depthMap.Data[i]);
+            double val = Convert.ToDouble(depthMap.Data.Span[i]);
             if (val < minVal) minVal = val;
             if (val > maxVal) maxVal = val;
         }
@@ -213,7 +213,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);

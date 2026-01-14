@@ -578,7 +578,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data[idx]) - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
                     }
                 }
             }

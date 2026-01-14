@@ -120,7 +120,7 @@ public sealed class TriangleMeshData<T>
         var maxY = NumOps.MinValue;
         var maxZ = NumOps.MinValue;
 
-        var data = Vertices.Data;
+        var data = Vertices.Data.Span;
         for (int i = 0; i < NumVertices; i++)
         {
             int offset = i * 3;
@@ -151,8 +151,8 @@ public sealed class TriangleMeshData<T>
         }
 
         var normals = new T[NumFaces * 3];
-        var vertices = Vertices.Data;
-        var faces = Faces.Data;
+        var vertices = Vertices.Data.Span;
+        var faces = Faces.Data.Span;
 
         for (int f = 0; f < NumFaces; f++)
         {
@@ -226,14 +226,14 @@ public sealed class TriangleMeshData<T>
 
         var faceNormals = FaceNormals ?? ComputeFaceNormals();
         var normals = new T[NumVertices * 3];
-        var faces = Faces.Data;
+        var faces = Faces.Data.Span;
 
         for (int f = 0; f < NumFaces; f++)
         {
             int faceOffset = f * 3;
-            var nx = faceNormals.Data[faceOffset];
-            var ny = faceNormals.Data[faceOffset + 1];
-            var nz = faceNormals.Data[faceOffset + 2];
+            var nx = faceNormals.Data.Span[faceOffset];
+            var ny = faceNormals.Data.Span[faceOffset + 1];
+            var nz = faceNormals.Data.Span[faceOffset + 2];
 
             int i0 = faces[faceOffset];
             int i1 = faces[faceOffset + 1];
@@ -309,10 +309,10 @@ public sealed class TriangleMeshData<T>
         int featureDim = colorDim + normalDim + uvDim;
 
         var data = new T[NumVertices * (3 + featureDim)];
-        var vertices = Vertices.Data;
-        var colors = colorsTensor?.Data;
-        var uv = VertexUVs?.Data;
-        var normalData = normals?.Data;
+        var vertices = Vertices.Data.Span;
+        var colors = colorsTensor != null ? colorsTensor.Data.Span : default;
+        var uv = VertexUVs != null ? VertexUVs.Data.Span : default;
+        var normalData = normals != null ? normals.Data.Span : default;
 
         for (int v = 0; v < NumVertices; v++)
         {
@@ -324,7 +324,7 @@ public sealed class TriangleMeshData<T>
             data[dstOffset + 2] = vertices[srcOffset + 2];
 
             int featureOffset = dstOffset + 3;
-            if (includeColors && colors != null)
+            if (includeColors && colors.Length > 0)
             {
                 int colorOffset = v * colorDim;
                 for (int c = 0; c < colorDim; c++)
@@ -334,7 +334,7 @@ public sealed class TriangleMeshData<T>
                 featureOffset += colorDim;
             }
 
-            if (includeNormals && normalData != null)
+            if (includeNormals && normalData.Length > 0)
             {
                 int normalOffset = v * 3;
                 data[featureOffset] = normalData[normalOffset];
@@ -343,7 +343,7 @@ public sealed class TriangleMeshData<T>
                 featureOffset += 3;
             }
 
-            if (includeUVs && uv != null)
+            if (includeUVs && uv.Length > 0)
             {
                 int uvOffset = v * 2;
                 data[featureOffset] = uv[uvOffset];
@@ -389,7 +389,7 @@ public sealed class TriangleMeshData<T>
 
     private static void ValidateFaceIndices(Tensor<int> faces, int numVertices)
     {
-        var data = faces.Data;
+        var data = faces.Data.Span;
         for (int i = 0; i < data.Length; i++)
         {
             int index = data[i];

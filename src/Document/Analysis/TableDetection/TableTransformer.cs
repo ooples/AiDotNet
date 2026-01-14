@@ -259,7 +259,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            _objectQueries.Data[i] = NumOps.FromDouble(randStdNormal * scale);
+            _objectQueries.Data.Span[i] = NumOps.FromDouble(randStdNormal * scale);
         }
     }
 
@@ -937,7 +937,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         double maxValue = double.NegativeInfinity;
         for (int i = 0; i < image.Data.Length; i++)
         {
-            double value = NumOps.ToDouble(image.Data[i]);
+            double value = NumOps.ToDouble(image.Data.Span[i]);
             if (value < minValue) minValue = value;
             if (value > maxValue) maxValue = value;
         }
@@ -962,8 +962,8 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }

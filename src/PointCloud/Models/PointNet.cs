@@ -268,7 +268,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
             {
                 // Convert tensor to vector for global features
-                _globalFeatures = new Vector<T>(x.Data);
+                _globalFeatures = new Vector<T>(x.Data.ToArray());
             }
         }
 
@@ -339,7 +339,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         var output = Predict(pointCloud);
 
         // Output should be [1, numClasses], convert to vector
-        return new Vector<T>(output.Data);
+        return new Vector<T>(output.Data.ToArray());
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

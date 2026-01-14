@@ -58,13 +58,13 @@ public abstract class TensorBase<T>
     public int Rank => Shape.Length;
 
     /// <summary>
-    /// Gets a copy of the underlying data as an array for compatibility.
+    /// Gets the underlying data as a Memory&lt;T&gt; for zero-copy access.
     /// </summary>
     /// <remarks>
-    /// <para><b>Deprecation Note:</b> This property creates a copy of the data.
-    /// For zero-copy access, use AsSpan() instead. For writing, use AsWritableSpan().</para>
+    /// <para><b>For Beginners:</b> This provides direct access to the tensor's data without copying.
+    /// Use .Span for indexed access or iteration. Use this for async operations.</para>
     /// </remarks>
-    internal T[] Data => _data.ToArray();
+    internal Memory<T> Data => _data.AsWritableMemory();
 
     /// <summary>
     /// Creates a new array containing a copy of the tensor's elements in flattened order.

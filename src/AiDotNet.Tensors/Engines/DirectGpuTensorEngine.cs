@@ -938,7 +938,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     Tensor<T> IEngine.TensorMultiplyScalar<T>(Tensor<T> tensor, T scalar)
     {
-        var result = TryRunScalar(tensor.Data, scalar, static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
+        var result = TryRunScalar(tensor.ToArray(), scalar, static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorMultiplyScalar(tensor, scalar);
     }
 
@@ -948,43 +948,43 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (scalarValue == 0)
             return base.TensorDivideScalar(tensor, scalar);
 
-        var result = TryRunScalar(tensor.Data, scalar, static (backend, input, output, value, size) => backend.Scale(input, output, 1.0f / value, size));
+        var result = TryRunScalar(tensor.ToArray(), scalar, static (backend, input, output, value, size) => backend.Scale(input, output, 1.0f / value, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorDivideScalar(tensor, scalar);
     }
 
     Tensor<T> IEngine.TensorAbs<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Abs(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Abs(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorAbs(tensor);
     }
 
     Tensor<T> IEngine.TensorExp<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Exp(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Exp(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorExp(tensor);
     }
 
     Tensor<T> IEngine.TensorLog<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Log(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Log(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorLog(tensor);
     }
 
     Tensor<T> IEngine.TensorSqrt<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Sqrt(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Sqrt(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorSqrt(tensor);
     }
 
     Tensor<T> IEngine.TensorNegate<T>(Tensor<T> tensor)
     {
-        var result = TryRunScalar(tensor.Data, FromFloatScalar<T>(-1.0f), static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
+        var result = TryRunScalar(tensor.ToArray(), FromFloatScalar<T>(-1.0f), static (backend, input, output, value, size) => backend.Scale(input, output, value, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorNegate(tensor);
     }
 
     Tensor<T> IEngine.TensorPower<T>(Tensor<T> tensor, T exponent)
     {
-        var result = TryRunScalar(tensor.Data, exponent, static (backend, input, output, value, size) => backend.Power(input, output, value, size));
+        var result = TryRunScalar(tensor.ToArray(), exponent, static (backend, input, output, value, size) => backend.Power(input, output, value, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.TensorPower(tensor, exponent);
     }
 
@@ -1008,25 +1008,25 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
     Tensor<T> IEngine.Tanh<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Tanh(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Tanh(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.Tanh(tensor);
     }
 
     Tensor<T> IEngine.Sigmoid<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Sigmoid(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Sigmoid(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.Sigmoid(tensor);
     }
 
     Tensor<T> IEngine.ReLU<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Relu(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Relu(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.ReLU(tensor);
     }
 
     Tensor<T> IEngine.GELU<T>(Tensor<T> tensor)
     {
-        var result = TryRunUnary(tensor.Data, static (backend, input, output, size) => backend.Gelu(input, output, size));
+        var result = TryRunUnary(tensor.ToArray(), static (backend, input, output, size) => backend.Gelu(input, output, size));
         return result != null ? new Tensor<T>(result, tensor.Shape) : base.GELU(tensor);
     }
 
@@ -1035,7 +1035,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             return base.TensorSum(tensor);
 
-        using var bufferA = GetOrAllocateBuffer(backend, tensor.Data);
+        using var bufferA = GetOrAllocateBuffer(backend, tensor.ToArray());
         backend.Synchronize();
         float sum = backend.Sum(bufferA.Buffer, tensor.Length);
         return FromFloatScalar<T>(sum);
@@ -1046,7 +1046,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             return base.TensorMaxValue(tensor);
 
-        using var bufferA = GetOrAllocateBuffer(backend, tensor.Data);
+        using var bufferA = GetOrAllocateBuffer(backend, tensor.ToArray());
         backend.Synchronize();
         float max = backend.Max(bufferA.Buffer, tensor.Length);
         return FromFloatScalar<T>(max);
@@ -1072,10 +1072,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputFeatures = weights.Shape[1];
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         // Auto-cache weights and biases so they stay on GPU for subsequent calls
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases) : default;
 
         try
         {
@@ -1184,10 +1184,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputFeatures = weights.Shape[1];
 
         // Upload input to GPU (activations are not cached persistently)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         // Auto-cache weights and biases so they stay on GPU for subsequent calls
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases) : default;
 
         // Execute the fused kernel and get result buffer
         var resultBuffer = ExecuteFusedLinearKernel(backend, inputBuffer.Buffer, weightsBuffer.Buffer,
@@ -1228,8 +1228,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Input is already on GPU - use its buffer directly
         // Auto-cache weights and biases so they stay on GPU for subsequent calls
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default;
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases) : default;
 
         // Execute the fused kernel and get result buffer
         var resultBuffer = ExecuteFusedLinearKernel(backend, input.Buffer, weightsBuffer.Buffer,
@@ -1394,7 +1394,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             throw new InvalidOperationException("No GPU backend available for UploadToGpu");
 
         // Convert tensor data to float and allocate GPU buffer
-        float[] floatData = DirectGpuEngine.ToFloatArray(tensor.Data);
+        float[] floatData = DirectGpuEngine.ToFloatArray(tensor.ToArray());
         var buffer = backend.AllocateBuffer(floatData);
 
         // Return GPU tensor that owns the buffer
@@ -1451,7 +1451,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 $"GetOrCacheWeightsGpu only supports Weight, Bias, Statistics, AttentionCache, or Constant roles. " +
                 $"Got: {role}. Use UploadToGpu for other tensor types.", nameof(role))
         };
-        var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.Data, persistentRole);
+        var ownedBuffer = GetOrCacheWeightBuffer(backend, tensor.ToArray(), persistentRole);
 
         // Propagate ownership: if cache owns buffer, GpuTensor shouldn't dispose;
         // if we own buffer (race condition fallback), GpuTensor should take ownership
@@ -1973,8 +1973,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             return base.FusedConv2D(input, kernel, bias, strideH, strideW, padH, padW, dilationH, dilationW, activation);
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         using var outputBuffer = AllocateOutputBuffer(backend, batch * outChannels * outHeight * outWidth);
 
         try
@@ -1999,7 +1999,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 backend.DownloadBuffer(outputBuffer.Buffer, outputFloat);
 
                 // Get bias data (check cache first)
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 float[] biasFloat = new float[bias.Length];
                 backend.DownloadBuffer(biasBuffer.Buffer, biasFloat);
 
@@ -2111,7 +2111,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputSize = batch * outChannels * outHeight * outWidth;
 
         // Input is already on GPU - use its buffer directly
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -2128,7 +2128,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (bias != null)
             {
                 int spatialSize = outHeight * outWidth;
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, outChannels, spatialSize);
             }
 
@@ -2194,8 +2194,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             return base.FusedConv3D(input, kernel, bias, strideD, strideH, strideW, padD, padH, padW, dilationD, dilationH, dilationW, activation);
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         using var outputBuffer = AllocateOutputBuffer(backend, batch * outChannels * outDepth * outHeight * outWidth);
 
         try
@@ -2219,7 +2219,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 float[] outputFloat = new float[outputSize];
                 backend.DownloadBuffer(outputBuffer.Buffer, outputFloat);
 
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 float[] biasFloat = new float[bias.Length];
                 backend.DownloadBuffer(biasBuffer.Buffer, biasFloat);
 
@@ -2335,7 +2335,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int spatialSize = outDepth * outHeight * outWidth;
 
         // Use cache-aware buffer allocation
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -2352,7 +2352,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             // Add bias if present (Conv2DBiasAdd works for any spatial size)
             if (bias != null)
             {
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, outChannels, spatialSize);
             }
 
@@ -2412,8 +2412,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             return base.FusedConvTranspose2D(input, kernel, bias, strideH, strideW, padH, padW, outputPadH, outputPadW, activation);
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         using var outputBuffer = AllocateOutputBuffer(backend, batch * outChannels * outHeight * outWidth);
 
         try
@@ -2436,7 +2436,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 float[] outputFloat = new float[outputSize];
                 backend.DownloadBuffer(outputBuffer.Buffer, outputFloat);
 
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 float[] biasFloat = new float[bias.Length];
                 backend.DownloadBuffer(biasBuffer.Buffer, biasFloat);
 
@@ -2542,7 +2542,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputSize = batch * outChannels * outHeight * outWidth;
 
         // Input is already on GPU - use its buffer directly
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -2559,7 +2559,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (bias != null)
             {
                 int spatialSize = outHeight * outWidth;
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, outChannels, spatialSize);
             }
 
@@ -2607,7 +2607,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.MaxPool2D(input, poolSize, stride, padding);
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
 
         try
@@ -2656,7 +2656,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
         using var indicesBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
 
@@ -2742,7 +2742,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             }
         }
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
         using var indicesBuffer = backend.AllocateBuffer(indicesFlat);
         using var gradInputBuffer = AllocateOutputBuffer(backend, batch * channels * inHeight * inWidth);
 
@@ -2795,7 +2795,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.AvgPool2D(input, poolSize, stride, padding);
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
 
         try
@@ -2844,7 +2844,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.AvgPool2D(input, poolSize, stride);
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
 
         try
@@ -2889,7 +2889,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outHeight = gradOutput.Shape[2];
         int outWidth = gradOutput.Shape[3];
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
         using var gradInputBuffer = AllocateOutputBuffer(backend, batch * channels * inHeight * inWidth);
 
         try
@@ -2948,8 +2948,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (outHeight <= 0 || outWidth <= 0)
             return base.DepthwiseConv2D(input, kernel, stride, padding);
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outHeight * outWidth);
 
         try
@@ -3021,7 +3021,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputSize = batch * channels * outHeight * outWidth;
 
         // Input is already on GPU - use its buffer directly
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -3037,7 +3037,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (bias != null)
             {
                 int spatialSize = outHeight * outWidth;
-                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 // Depthwise output has same channels as input - use Conv2DBiasAdd pattern
                 backend.Conv2DBiasAdd(outputBuffer, biasBuffer.Buffer, batch, channels, spatialSize);
             }
@@ -3097,8 +3097,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outputSize = batch * outChannels * outHeight * outWidth;
 
         // Use cache-aware buffer allocation for weights/bias (persistent tensors)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
         using var outputBuffer = AllocateOutputBuffer(backend, outputSize);
 
         try
@@ -3108,7 +3108,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             OwnedBuffer? biasOwned = null;
             if (bias != null)
             {
-                biasOwned = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+                biasOwned = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
                 biasGpuBuffer = biasOwned.Value.Buffer;
             }
 
@@ -3171,8 +3171,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int inputSize = batch * inChannels * inHeight * inWidth;
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
         using var gradInputBuffer = AllocateOutputBuffer(backend, inputSize);
 
         try
@@ -3226,8 +3226,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int weightsSize = outHeight * outWidth * outChannels * inChannels * kernelH * kernelW;
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var gradWeightsBuffer = AllocateOutputBuffer(backend, weightsSize);
 
         try
@@ -3268,7 +3268,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int outHeight = gradOutput.Shape[2];
         int outWidth = gradOutput.Shape[3];
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
         using var gradBiasBuffer = AllocateOutputBuffer(backend, outChannels);
 
         try
@@ -3333,8 +3333,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int outputSize = batch * outChannels * outHeight * outWidth;
 
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default(OwnedBuffer?);
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases) : default(OwnedBuffer?);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -3410,14 +3410,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int outputSize = batch * outChannels * outHeight * outWidth;
 
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, outputSize);
 
         try
         {
-            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : null;
+            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.ToArray()) : null;
             try
             {
                 backend.DeformableConv2D(
@@ -3483,14 +3483,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int inputSize = batch * inChannels * inHeight * inWidth;
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
         using var gradInputBuffer = AllocateOutputBuffer(backend, inputSize);
 
         try
         {
-            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : null;
+            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.ToArray()) : null;
             try
             {
                 backend.DeformableConv2DBackwardInput(
@@ -3555,14 +3555,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int kernelSize = kernelShape[0] * kernelShape[1] * kernelShape[2] * kernelShape[3];
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
         using var gradWeightsBuffer = AllocateOutputBuffer(backend, kernelSize);
 
         try
         {
-            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : null;
+            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.ToArray()) : null;
             try
             {
                 backend.DeformableConv2DBackwardWeights(
@@ -3627,15 +3627,15 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int offsetSize = batch * offsetChannels * outHeight * outWidth;
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
         using var gradOffsetBuffer = AllocateOutputBuffer(backend, offsetSize);
 
         try
         {
-            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : null;
+            OwnedBuffer? maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.ToArray()) : null;
             try
             {
                 backend.DeformableConv2DBackwardOffset(
@@ -3705,10 +3705,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int maskSize = batch * maskChannels * outHeight * outWidth;
 
-        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
+        using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
         using var gradMaskBuffer = AllocateOutputBuffer(backend, maskSize);
 
         try
@@ -3791,10 +3791,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         int outputSize = batch * outChannels * outHeight * outWidth;
 
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
-        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.Data);
-        using var maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.Data) : default(OwnedBuffer?);
-        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases) : default(OwnedBuffer?);
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
+        using var offsetsBuffer = GetOrAllocateBuffer(backend, offsets.ToArray());
+        using var maskBuffer = mask != null ? GetOrAllocateBuffer(backend, mask.ToArray()) : default(OwnedBuffer?);
+        using var biasBuffer = bias != null ? GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases) : default(OwnedBuffer?);
         var outputBuffer = backend.AllocateBuffer(outputSize);
 
         try
@@ -3857,14 +3857,14 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int features = input.Shape[1];
 
         // Use cache-aware buffer allocation (OwnedBuffer auto-disposes only if we allocated)
-        using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+        using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batchSize * features);
         using var saveMeanBuffer = AllocateOutputBuffer(backend, features);
         using var saveVarBuffer = AllocateOutputBuffer(backend, features);
         using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
         using var betaBuffer = GetOrCacheWeightBuffer(backend, beta.ToArray(), PersistentTensorRole.Biases);
-        using var runningMeanBuffer = GetOrCacheWeightBuffer(backend, runningMean.Data, PersistentTensorRole.NormalizationParams);
-        using var runningVarBuffer = GetOrCacheWeightBuffer(backend, runningVar.Data, PersistentTensorRole.NormalizationParams);
+        using var runningMeanBuffer = GetOrCacheWeightBuffer(backend, runningMean.ToArray(), PersistentTensorRole.NormalizationParams);
+        using var runningVarBuffer = GetOrCacheWeightBuffer(backend, runningVar.ToArray(), PersistentTensorRole.NormalizationParams);
 
         try
         {
@@ -3938,9 +3938,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         float scaleFloat = (float)(scale ?? (1.0 / Math.Sqrt(headDim)));
 
         // Use cache-aware buffer allocation (especially important for KV cache)
-        using var queryBuffer = GetOrAllocateBuffer(backend, query.Data);
-        using var keyBuffer = GetOrAllocateBuffer(backend, key.Data);
-        using var valueBuffer = GetOrAllocateBuffer(backend, value.Data);
+        using var queryBuffer = GetOrAllocateBuffer(backend, query.ToArray());
+        using var keyBuffer = GetOrAllocateBuffer(backend, key.ToArray());
+        using var valueBuffer = GetOrAllocateBuffer(backend, value.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * heads * seqQ * headDim);
         using var statsBuffer = AllocateOutputBuffer(backend, batch * heads * seqQ);
 
@@ -4002,12 +4002,12 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int seqK = key.Shape[2];
 
         // Use cache-aware buffer allocation
-        using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var queryBuffer = GetOrAllocateBuffer(backend, query.Data);
-        using var keyBuffer = GetOrAllocateBuffer(backend, key.Data);
-        using var valueBuffer = GetOrAllocateBuffer(backend, value.Data);
-        using var outputBuffer = GetOrAllocateBuffer(backend, output.Data);
-        using var statsBuffer = GetOrAllocateBuffer(backend, softmaxStats.Data);
+        using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var queryBuffer = GetOrAllocateBuffer(backend, query.ToArray());
+        using var keyBuffer = GetOrAllocateBuffer(backend, key.ToArray());
+        using var valueBuffer = GetOrAllocateBuffer(backend, value.ToArray());
+        using var outputBuffer = GetOrAllocateBuffer(backend, output.ToArray());
+        using var statsBuffer = GetOrAllocateBuffer(backend, softmaxStats.ToArray());
         using var gradQBuffer = AllocateOutputBuffer(backend, batch * heads * seqQ * headDim);
         using var gradKBuffer = AllocateOutputBuffer(backend, batch * heads * seqK * headDim);
         using var gradVBuffer = AllocateOutputBuffer(backend, batch * heads * seqK * headDim);
@@ -4073,9 +4073,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         float scaleFloat = (float)(scale ?? (1.0 / Math.Sqrt(headDim)));
 
         // Use cache-aware buffer allocation (especially important for KV cache)
-        using var queryBuffer = GetOrAllocateBuffer(backend, query.Data);
-        using var keyBuffer = GetOrAllocateBuffer(backend, key.Data);
-        using var valueBuffer = GetOrAllocateBuffer(backend, value.Data);
+        using var queryBuffer = GetOrAllocateBuffer(backend, query.ToArray());
+        using var keyBuffer = GetOrAllocateBuffer(backend, key.ToArray());
+        using var valueBuffer = GetOrAllocateBuffer(backend, value.ToArray());
         using var outputBuffer = AllocateOutputBuffer(backend, batch * numQHeads * seqQ * headDim);
         using var attnWeightsBuffer = AllocateOutputBuffer(backend, batch * numQHeads * seqQ * seqK);
 
@@ -4136,11 +4136,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int seqK = key.Shape[2];
 
         // Use cache-aware buffer allocation
-        using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-        using var queryBuffer = GetOrAllocateBuffer(backend, query.Data);
-        using var keyBuffer = GetOrAllocateBuffer(backend, key.Data);
-        using var valueBuffer = GetOrAllocateBuffer(backend, value.Data);
-        using var attnWeightsBuffer = GetOrAllocateBuffer(backend, attentionWeights.Data);
+        using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+        using var queryBuffer = GetOrAllocateBuffer(backend, query.ToArray());
+        using var keyBuffer = GetOrAllocateBuffer(backend, key.ToArray());
+        using var valueBuffer = GetOrAllocateBuffer(backend, value.ToArray());
+        using var attnWeightsBuffer = GetOrAllocateBuffer(backend, attentionWeights.ToArray());
         using var gradQBuffer = AllocateOutputBuffer(backend, batch * numQHeads * seqQ * headDim);
         using var gradKBuffer = AllocateOutputBuffer(backend, batch * numKVHeads * seqK * headDim);
         using var gradVBuffer = AllocateOutputBuffer(backend, batch * numKVHeads * seqK * headDim);
@@ -4409,7 +4409,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             throw new ArgumentException($"Input last dimension {lastDim} doesn't match weight input dimension {inputDim}");
 
         // Upload weights
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
 
         // Execute MatMul
         var resultBuffer = backend.MatMul(input.Buffer, weightsBuffer.Buffer, flatBatch, outputDim, inputDim);
@@ -4486,7 +4486,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             totalElements *= dim;
 
         // Upload bias
-        using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+        using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
 
         // Allocate output
         var outputBuffer = backend.AllocateBuffer(totalElements);
@@ -4640,7 +4640,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             return;
 
         // Use the tensor's data array as the cache key
-        object key = tensor.Data;
+        object key = tensor.ToArray();
 
         // Check if already registered
         if (_persistentBufferCache.ContainsKey(key))
@@ -4649,7 +4649,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         try
         {
             // Convert tensor data to float and upload to GPU
-            float[] floatData = DirectGpuEngine.ToFloatArray(tensor.Data);
+            float[] floatData = DirectGpuEngine.ToFloatArray(tensor.ToArray());
             IGpuBuffer gpuBuffer = backend.AllocateBuffer(floatData);
             backend.Synchronize();
 
@@ -4670,7 +4670,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     {
         base.UnregisterPersistentTensor(tensor);
 
-        object key = tensor.Data;
+        object key = tensor.ToArray();
 
         if (_persistentBufferCache.TryRemove(key, out var entry))
         {
@@ -4690,7 +4690,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             return;
 
-        object key = tensor.Data;
+        object key = tensor.ToArray();
 
         if (!_persistentBufferCache.TryGetValue(key, out var entry))
             return;
@@ -4701,7 +4701,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             entry.Buffer.Dispose();
 
             // Upload new data
-            float[] floatData = DirectGpuEngine.ToFloatArray(tensor.Data);
+            float[] floatData = DirectGpuEngine.ToFloatArray(tensor.ToArray());
             IGpuBuffer newBuffer = backend.AllocateBuffer(floatData);
             backend.Synchronize();
 
@@ -4763,8 +4763,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         try
         {
             // Use cache-aware buffer allocation for inputs
-            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
-            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.ToArray());
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.ToArray());
             using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
@@ -4805,8 +4805,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         try
         {
             // Use cache-aware buffer allocation for inputs
-            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
-            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.ToArray());
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.ToArray());
             using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
@@ -4849,8 +4849,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         try
         {
             // Use cache-aware buffer allocation for inputs
-            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
-            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.ToArray());
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.ToArray());
             using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
@@ -4893,8 +4893,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         try
         {
             // Use cache-aware buffer allocation for inputs
-            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.Data);
-            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.Data);
+            using var inputRealBuffer = GetOrAllocateBuffer(backend, inputReal.ToArray());
+            using var inputImagBuffer = GetOrAllocateBuffer(backend, inputImag.ToArray());
             using var outputRealBuffer = AllocateOutputBuffer(backend, inputReal.Length);
             using var outputImagBuffer = AllocateOutputBuffer(backend, inputImag.Length);
 
@@ -4936,7 +4936,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             // For STFT, we need to process frame by frame
             // First, handle centering by padding the input
-            T[] inputData = input.Data;
+            T[] inputData = input.ToArray();
             if (center)
             {
                 int padAmount = nFft / 2;
@@ -4958,7 +4958,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             float[] inputFloat = DirectGpuEngine.ToFloatArray(inputData);
 
             // Use cache-aware allocation for window (likely persistent)
-            using var windowBuffer = GetOrAllocateBuffer(backend, window.Data);
+            using var windowBuffer = GetOrAllocateBuffer(backend, window.ToArray());
             // Allocate working buffers
             using var frameBuffer = AllocateOutputBuffer(backend, nFft);
             using var windowedBuffer = AllocateOutputBuffer(backend, nFft);
@@ -5038,9 +5038,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int numFrames = magnitude.Shape[^2];
             int numFreqs = magnitude.Shape[^1];
 
-            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
-            float[] phaseFloat = DirectGpuEngine.ToFloatArray(phase.Data);
-            float[] windowFloat = DirectGpuEngine.ToFloatArray(window.Data);
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.ToArray());
+            float[] phaseFloat = DirectGpuEngine.ToFloatArray(phase.ToArray());
+            float[] windowFloat = DirectGpuEngine.ToFloatArray(window.ToArray());
 
             // Reconstruct full spectrum (mirror for negative frequencies)
             int outputSamples = (numFrames - 1) * hopLength + nFft;
@@ -5048,7 +5048,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             float[] windowSum = new float[outputSamples];
 
             // Use cache-aware allocation for window (likely persistent)
-            using var windowBuffer = GetOrAllocateBuffer(backend, window.Data);
+            using var windowBuffer = GetOrAllocateBuffer(backend, window.ToArray());
             // Allocate working buffers
             using var outputRealBuffer = AllocateOutputBuffer(backend, nFft);
             using var outputImagBuffer = AllocateOutputBuffer(backend, nFft);
@@ -5163,8 +5163,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             // Create Mel filterbank
             var filterbank = ((IEngine)this).CreateMelFilterbank<T>(nMels, nFft, sampleRate, fMin, fMax);
 
-            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
-            float[] filterbankFloat = DirectGpuEngine.ToFloatArray(filterbank.Data);
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.ToArray());
+            float[] filterbankFloat = DirectGpuEngine.ToFloatArray(filterbank.ToArray());
 
             // Compute power spectrum (magnitude squared)
             float[] powerSpec = new float[magnitudeFloat.Length];
@@ -5174,7 +5174,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             }
 
             // Use cache-aware allocation for filterbank (likely persistent)
-            using var filterbankBuffer = GetOrAllocateBuffer(backend, filterbank.Data);
+            using var filterbankBuffer = GetOrAllocateBuffer(backend, filterbank.ToArray());
             // Allocate working buffers
             using var powerBuffer = backend.AllocateBuffer(powerSpec);
             using var melBuffer = AllocateOutputBuffer(backend, numFrames * nMels);
@@ -5237,7 +5237,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int numFrames = magnitude.Shape[^2];
             int numFreqs = magnitude.Shape[^1];
 
-            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.Data);
+            float[] magnitudeFloat = DirectGpuEngine.ToFloatArray(magnitude.ToArray());
 
             // Initialize with random phase
             var random = new Random(42);
@@ -5259,7 +5259,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 // Re-analyze to get new phase
                 ((IEngine)this).STFT(reconstructed, nFft, hopLength, window, center: true, out var _, out var newPhaseTensor);
 
-                float[] newPhase = DirectGpuEngine.ToFloatArray(newPhaseTensor.Data);
+                float[] newPhase = DirectGpuEngine.ToFloatArray(newPhaseTensor.ToArray());
 
                 // Apply momentum
                 if (iter > 0 && momentumF > 0)
@@ -5339,7 +5339,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int features = input.Shape[rank - 1];
                 int outerSize = input.Length / features;
 
-                using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+                using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
                 using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
 
                 backend.Softmax(inputBuffer.Buffer, outputBuffer.Buffer, outerSize, features);
@@ -5367,7 +5367,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int features = permutedInput.Shape[rank - 1];
                 int outerSize = permutedInput.Length / features;
 
-                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.Data);
+                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.ToArray());
                 using var outputBuffer = AllocateOutputBuffer(backend, permutedInput.Length);
 
                 backend.Softmax(inputBuffer.Buffer, outputBuffer.Buffer, outerSize, features);
@@ -5414,8 +5414,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int features = output.Shape[rank - 1];
                 int outerSize = output.Length / features;
 
-                using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-                using var outputBuffer = GetOrAllocateBuffer(backend, output.Data);
+                using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+                using var outputBuffer = GetOrAllocateBuffer(backend, output.ToArray());
                 using var gradInputBuffer = AllocateOutputBuffer(backend, output.Length);
 
                 backend.SoftmaxBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, outerSize, features);
@@ -5443,8 +5443,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int features = permutedOutput.Shape[rank - 1];
                 int outerSize = permutedOutput.Length / features;
 
-                using var gradOutBuffer = GetOrAllocateBuffer(backend, permutedGradOutput.Data);
-                using var outputBuffer = GetOrAllocateBuffer(backend, permutedOutput.Data);
+                using var gradOutBuffer = GetOrAllocateBuffer(backend, permutedGradOutput.ToArray());
+                using var outputBuffer = GetOrAllocateBuffer(backend, permutedOutput.ToArray());
                 using var gradInputBuffer = AllocateOutputBuffer(backend, permutedOutput.Length);
 
                 backend.SoftmaxBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, outerSize, features);
@@ -5490,7 +5490,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int capsuleDim = tensor.Shape[rank - 1];
                 int numCapsules = tensor.Length / capsuleDim;
 
-                using var inputBuffer = GetOrAllocateBuffer(backend, tensor.Data);
+                using var inputBuffer = GetOrAllocateBuffer(backend, tensor.ToArray());
                 using var outputBuffer = AllocateOutputBuffer(backend, tensor.Length);
 
                 backend.Squash(inputBuffer.Buffer, outputBuffer.Buffer, numCapsules, capsuleDim, 1e-8f);
@@ -5516,7 +5516,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int capsuleDim = permutedInput.Shape[rank - 1];
                 int numCapsules = permutedInput.Length / capsuleDim;
 
-                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.Data);
+                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.ToArray());
                 using var outputBuffer = AllocateOutputBuffer(backend, permutedInput.Length);
 
                 backend.Squash(inputBuffer.Buffer, outputBuffer.Buffer, numCapsules, capsuleDim, 1e-8f);
@@ -5561,8 +5561,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int capsuleDim = input.Shape[rank - 1];
                 int numCapsules = input.Length / capsuleDim;
 
-                using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-                using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+                using var gradOutputBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+                using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
                 using var gradInputBuffer = AllocateOutputBuffer(backend, input.Length);
 
                 backend.SquashBackward(gradOutputBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, numCapsules, capsuleDim, 1e-8f);
@@ -5589,8 +5589,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 int capsuleDim = permutedInput.Shape[rank - 1];
                 int numCapsules = permutedInput.Length / capsuleDim;
 
-                using var gradOutputBuffer = GetOrAllocateBuffer(backend, permutedGradOutput.Data);
-                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.Data);
+                using var gradOutputBuffer = GetOrAllocateBuffer(backend, permutedGradOutput.ToArray());
+                using var inputBuffer = GetOrAllocateBuffer(backend, permutedInput.ToArray());
                 using var gradInputBuffer = AllocateOutputBuffer(backend, permutedInput.Length);
 
                 backend.SquashBackward(gradOutputBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, numCapsules, capsuleDim, 1e-8f);
@@ -6008,7 +6008,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (batchSize * normalizedSize != input.Length)
                 return base.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
             using var betaBuffer = GetOrCacheWeightBuffer(backend, beta.ToArray(), PersistentTensorRole.Biases);
             using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
@@ -6048,11 +6048,11 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (batchSize * normalizedSize != input.Length)
                 return base.LayerNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
-            using var saveMeanBuffer = GetOrAllocateBuffer(backend, mean.Data);
-            using var saveVarBuffer = GetOrAllocateBuffer(backend, variance.Data);
+            using var saveMeanBuffer = GetOrAllocateBuffer(backend, mean.ToArray());
+            using var saveVarBuffer = GetOrAllocateBuffer(backend, variance.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, input.Length);
             using var gradGammaBuffer = AllocateOutputBuffer(backend, normalizedSize);
             using var gradBetaBuffer = AllocateOutputBuffer(backend, normalizedSize);
@@ -6091,7 +6091,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (batchSize * normalizedSize != input.Length)
                 return base.RMSNorm(input, gamma, epsilon, out rms);
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
             using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
             using var saveRmsBuffer = AllocateOutputBuffer(backend, batchSize);
@@ -6127,10 +6127,10 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (batchSize * normalizedSize != input.Length)
                 return base.RMSNormBackward(gradOutput, input, gamma, rms, epsilon, out gradGamma);
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
-            using var saveRmsBuffer = GetOrAllocateBuffer(backend, rms.Data);
+            using var saveRmsBuffer = GetOrAllocateBuffer(backend, rms.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, input.Length);
             using var gradGammaBuffer = AllocateOutputBuffer(backend, normalizedSize);
 
@@ -6172,7 +6172,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             if (channels % numGroups != 0)
                 return base.GroupNorm(input, numGroups, gamma, beta, epsilon, out mean, out variance);
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
             using var betaBuffer = GetOrCacheWeightBuffer(backend, beta.ToArray(), PersistentTensorRole.Biases);
             using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
@@ -6216,7 +6216,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             for (int i = 2; i < input.Rank; i++)
                 spatialSize *= input.Shape[i];
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
             using var betaBuffer = GetOrCacheWeightBuffer(backend, beta.ToArray(), PersistentTensorRole.Biases);
             using var outputBuffer = AllocateOutputBuffer(backend, input.Length);
@@ -6289,8 +6289,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // Upload parameters to GPU (these are typically cached)
         using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
         using var betaBuffer = GetOrCacheWeightBuffer(backend, beta.ToArray(), PersistentTensorRole.Biases);
-        using var runningMeanBuffer = GetOrCacheWeightBuffer(backend, runningMean.Data, PersistentTensorRole.NormalizationParams);
-        using var runningVarBuffer = GetOrCacheWeightBuffer(backend, runningVar.Data, PersistentTensorRole.NormalizationParams);
+        using var runningMeanBuffer = GetOrCacheWeightBuffer(backend, runningMean.ToArray(), PersistentTensorRole.NormalizationParams);
+        using var runningVarBuffer = GetOrCacheWeightBuffer(backend, runningVar.ToArray(), PersistentTensorRole.NormalizationParams);
 
         // Allocate output and save buffers
         int outputSize = input.ElementCount;
@@ -6431,8 +6431,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 
         // Upload gamma, saveMean, saveInvVar to GPU
         using var gammaBuffer = GetOrCacheWeightBuffer(backend, gamma.ToArray(), PersistentTensorRole.Weights);
-        float[] saveMeanFloat = DirectGpuEngine.ToFloatArray(saveMean.Data);
-        float[] saveInvVarFloat = DirectGpuEngine.ToFloatArray(saveInvVar.Data);
+        float[] saveMeanFloat = DirectGpuEngine.ToFloatArray(saveMean.ToArray());
+        float[] saveInvVarFloat = DirectGpuEngine.ToFloatArray(saveInvVar.ToArray());
 
         // Allocate temporary and output buffers with exception-safe disposal
         IGpuBuffer? saveMeanBuffer = null;
@@ -7144,7 +7144,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int size = input.Length;
             ulong seed = (ulong)DateTime.UtcNow.Ticks;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
             using var maskBuffer = AllocateOutputBuffer(backend, size);
 
@@ -7174,8 +7174,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var maskBuffer = GetOrAllocateBuffer(backend, mask.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var maskBuffer = GetOrAllocateBuffer(backend, mask.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.DropoutBackward(gradOutBuffer.Buffer, maskBuffer.Buffer, gradInputBuffer.Buffer, size, (float)dropoutRate);
@@ -7206,8 +7206,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int numIndices = indices.Length;
             int embeddingDim = embeddingTable.Shape[^1];
 
-            using var indicesBuffer = backend.AllocateIntBuffer(indices.Data);
-            using var tableBuffer = GetOrCacheWeightBuffer(backend, embeddingTable.Data, PersistentTensorRole.Embeddings);
+            using var indicesBuffer = backend.AllocateIntBuffer(indices.ToArray());
+            using var tableBuffer = GetOrCacheWeightBuffer(backend, embeddingTable.ToArray(), PersistentTensorRole.Embeddings);
             using var outputBuffer = AllocateOutputBuffer(backend, numIndices * embeddingDim);
 
             backend.Embedding(indicesBuffer, tableBuffer.Buffer, outputBuffer.Buffer, numIndices, embeddingDim);
@@ -7240,8 +7240,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int numIndices = indices.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var indicesBuffer = backend.AllocateIntBuffer(indices.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var indicesBuffer = backend.AllocateIntBuffer(indices.ToArray());
             using var gradEmbeddingBuffer = AllocateOutputBuffer(backend, vocabSize * embeddingDim);
 
             // Initialize to zero
@@ -7287,8 +7287,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int embeddingDim = embeddingTable.Shape[^1];
 
         // Upload indices and embedding table to GPU
-        using var indicesBuffer = backend.AllocateIntBuffer(indices.Data);
-        using var tableBuffer = GetOrCacheWeightBuffer(backend, embeddingTable.Data, PersistentTensorRole.Embeddings);
+        using var indicesBuffer = backend.AllocateIntBuffer(indices.ToArray());
+        using var tableBuffer = GetOrCacheWeightBuffer(backend, embeddingTable.ToArray(), PersistentTensorRole.Embeddings);
 
         // Allocate output buffer (stays on GPU)
         var outputBuffer = backend.AllocateBuffer(numIndices * embeddingDim);
@@ -7323,7 +7323,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int numIndices = indices.Length;
 
         // Upload indices to GPU (embedding table is already on GPU)
-        using var indicesBuffer = backend.AllocateIntBuffer(indices.Data);
+        using var indicesBuffer = backend.AllocateIntBuffer(indices.ToArray());
 
         // Allocate output buffer (stays on GPU)
         var outputBuffer = backend.AllocateBuffer(numIndices * embeddingDim);
@@ -7359,7 +7359,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int numIndices = indices.Length;
 
         // Upload indices to GPU
-        using var indicesBuffer = backend.AllocateIntBuffer(indices.Data);
+        using var indicesBuffer = backend.AllocateIntBuffer(indices.ToArray());
 
         // Allocate gradient embedding buffer and initialize to zero
         var gradEmbeddingBuffer = backend.AllocateBuffer(vocabSize * embeddingDim);
@@ -7392,8 +7392,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int batchSize = predictions.Shape[0];
             int numClasses = predictions.Shape[1];
 
-            using var predBuffer = GetOrAllocateBuffer(backend, predictions.Data);
-            using var targetBuffer = GetOrAllocateBuffer(backend, targets.Data);
+            using var predBuffer = GetOrAllocateBuffer(backend, predictions.ToArray());
+            using var targetBuffer = GetOrAllocateBuffer(backend, targets.ToArray());
 
             float loss = backend.CrossEntropyLoss(predBuffer.Buffer, targetBuffer.Buffer, batchSize, numClasses);
             return DirectGpuEngine.FromFloatArray<T>(new[] { loss })[0];
@@ -7420,8 +7420,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int batchSize = predictions.Shape[0];
             int numClasses = predictions.Shape[1];
 
-            using var predBuffer = GetOrAllocateBuffer(backend, predictions.Data);
-            using var targetBuffer = GetOrAllocateBuffer(backend, targets.Data);
+            using var predBuffer = GetOrAllocateBuffer(backend, predictions.ToArray());
+            using var targetBuffer = GetOrAllocateBuffer(backend, targets.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, predictions.Length);
 
             backend.CrossEntropyBackward(predBuffer.Buffer, targetBuffer.Buffer, gradInputBuffer.Buffer, batchSize, numClasses);
@@ -7447,8 +7447,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = predictions.Length;
 
-            using var predBuffer = GetOrAllocateBuffer(backend, predictions.Data);
-            using var targetBuffer = GetOrAllocateBuffer(backend, targets.Data);
+            using var predBuffer = GetOrAllocateBuffer(backend, predictions.ToArray());
+            using var targetBuffer = GetOrAllocateBuffer(backend, targets.ToArray());
 
             float loss = backend.MseLoss(predBuffer.Buffer, targetBuffer.Buffer, size);
             return DirectGpuEngine.FromFloatArray<T>(new[] { loss })[0];
@@ -7471,8 +7471,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = predictions.Length;
 
-            using var predBuffer = GetOrAllocateBuffer(backend, predictions.Data);
-            using var targetBuffer = GetOrAllocateBuffer(backend, targets.Data);
+            using var predBuffer = GetOrAllocateBuffer(backend, predictions.ToArray());
+            using var targetBuffer = GetOrAllocateBuffer(backend, targets.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.MseBackward(predBuffer.Buffer, targetBuffer.Buffer, gradInputBuffer.Buffer, size);
@@ -7502,8 +7502,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.ReluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, size);
@@ -7529,8 +7529,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var outputBuffer = GetOrAllocateBuffer(backend, output.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var outputBuffer = GetOrAllocateBuffer(backend, output.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.SigmoidBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, size);
@@ -7556,8 +7556,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var outputBuffer = GetOrAllocateBuffer(backend, output.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var outputBuffer = GetOrAllocateBuffer(backend, output.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.TanhBackward(gradOutBuffer.Buffer, outputBuffer.Buffer, gradInputBuffer.Buffer, size);
@@ -7583,8 +7583,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.GeluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, size);
@@ -7612,7 +7612,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             float negativeSlope = (float)numOps.ToDouble(alpha);
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.LeakyRelu(inputBuffer.Buffer, outputBuffer.Buffer, negativeSlope, size);
@@ -7638,8 +7638,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = gradOutput.Length;
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var gradInputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.LeakyReluBackward(gradOutBuffer.Buffer, inputBuffer.Buffer, gradInputBuffer.Buffer, (float)negativeSlope, size);
@@ -7665,7 +7665,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = input.Length;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Elu(inputBuffer.Buffer, outputBuffer.Buffer, (float)alpha, size);
@@ -7691,7 +7691,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = input.Length;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Swish(inputBuffer.Buffer, outputBuffer.Buffer, size);
@@ -7717,7 +7717,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = input.Length;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Mish(inputBuffer.Buffer, outputBuffer.Buffer, size);
@@ -7743,7 +7743,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = input.Length;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Softplus(inputBuffer.Buffer, outputBuffer.Buffer, size);
@@ -7769,7 +7769,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         {
             int size = input.Length;
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, size);
 
             backend.Hardswish(inputBuffer.Buffer, outputBuffer.Buffer, size);
@@ -7820,8 +7820,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int kernelH = kernel.Shape[2];
             int kernelW = kernel.Shape[3];
 
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
-            using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
+            using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
             using var gradInputBuffer = AllocateOutputBuffer(backend, batch * inChannels * inHeight * inWidth);
 
             backend.Conv2DBackwardInput(gradOutBuffer.Buffer, kernelBuffer.Buffer, gradInputBuffer.Buffer,
@@ -7870,8 +7870,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int kernelH = kernelShape[2];
             int kernelW = kernelShape[3];
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
-            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
+            using var gradOutBuffer = GetOrAllocateBuffer(backend, gradOutput.ToArray());
             using var gradKernelBuffer = AllocateOutputBuffer(backend, outChannels * inChannels * kernelH * kernelW);
 
             backend.Conv2DBackwardKernel(inputBuffer.Buffer, gradOutBuffer.Buffer, gradKernelBuffer.Buffer,
@@ -7909,7 +7909,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int height = input.Shape[2];
             int width = input.Shape[3];
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels);
 
             backend.GlobalAvgPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, height, width);
@@ -7941,7 +7941,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int height = input.Shape[2];
             int width = input.Shape[3];
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels);
 
             backend.GlobalMaxPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, height, width);
@@ -7973,7 +7973,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             int inHeight = input.Shape[2];
             int inWidth = input.Shape[3];
 
-            using var inputBuffer = GetOrAllocateBuffer(backend, input.Data);
+            using var inputBuffer = GetOrAllocateBuffer(backend, input.ToArray());
             using var outputBuffer = AllocateOutputBuffer(backend, batch * channels * outputHeight * outputWidth);
 
             backend.AdaptiveAvgPool2D(inputBuffer.Buffer, outputBuffer.Buffer, batch, channels, inHeight, inWidth, outputHeight, outputWidth);
@@ -8157,7 +8157,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         var outputShape = outputShapeList.ToArray();
 
         // Upload input
-        float[] inputFloat = DirectGpuEngine.ToFloatArray(input.Data);
+        float[] inputFloat = DirectGpuEngine.ToFloatArray(input.ToArray());
         using var inputBuffer = GetOrAllocateBuffer(backend, inputFloat);
         using var outputBuffer = AllocateOutputBuffer(backend, outerSize);
 
@@ -8436,7 +8436,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             throw new ArgumentException($"Bias length {bias.Length} must match output columns {N}");
 
         // Upload bias
-        using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.Data, PersistentTensorRole.Biases);
+        using var biasBuffer = GetOrCacheWeightBuffer(backend, bias.ToArray(), PersistentTensorRole.Biases);
 
         // Allocate output buffer
         var outputBuffer = backend.AllocateBuffer(M * N);
@@ -8937,9 +8937,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         if (!TryGetBackend(out var backend))
             throw new InvalidOperationException("No GPU backend available for SgdMomentumUpdateGpu");
 
-        using var paramBuffer = GetOrAllocateBuffer(backend, param.Data);
-        using var gradBuffer = GetOrAllocateBuffer(backend, gradient.Data);
-        using var velocityBuffer = GetOrAllocateBuffer(backend, velocity.Data);
+        using var paramBuffer = GetOrAllocateBuffer(backend, param.ToArray());
+        using var gradBuffer = GetOrAllocateBuffer(backend, gradient.ToArray());
+        using var velocityBuffer = GetOrAllocateBuffer(backend, velocity.ToArray());
 
         backend.SgdMomentumUpdate(paramBuffer.Buffer, gradBuffer.Buffer, velocityBuffer.Buffer,
             learningRate, momentum, weightDecay, param.Length);
@@ -8970,8 +8970,8 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
 
         // Upload persistent tensors (using cache if registered)
-        using var centersBuffer = GetOrAllocateBuffer(backend, centers.Data);
-        using var epsilonsBuffer = GetOrAllocateBuffer(backend, epsilons.Data);
+        using var centersBuffer = GetOrAllocateBuffer(backend, centers.ToArray());
+        using var epsilonsBuffer = GetOrAllocateBuffer(backend, epsilons.ToArray());
 
         var outputBuffer = backend.AllocateBuffer(batch * numCenters);
 
@@ -9027,7 +9027,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // If cached, we modify it in place.
         // We must ensure CPU side knows it's dirty if we download later.
 
-        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.Data, PersistentTensorRole.Weights);
+        using var weightsBuffer = GetOrCacheWeightBuffer(backend, weights.ToArray(), PersistentTensorRole.Weights);
         backend.StdpUpdate(
             weightsBuffer.Buffer,
             preTrace.Buffer,
@@ -9044,13 +9044,13 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         // For now, let's assume the user will keep using GPU path.
         // Ideally we should download if we are done, but for training loop we keep it there.
         // To be safe, we can download back to CPU tensor immediately if this isn't fully persistent-managed.
-        // Or we rely on the fact that weights.Data is the key.
+        // Or we rely on the fact that weights.ToArray() is the key.
         // If we modify GPU buffer, CPU array is stale.
         // DirectGpuTensorEngine doesn't have "MarkDirty".
         // We will download to keep consistency for now, or assume layer manages it.
         // Given UpdateParameters returns void, we should update the CPU tensor too.
 
-        backend.DownloadBuffer(weightsBuffer.Buffer, DirectGpuEngine.ToFloatArray(weights.Data));
+        backend.DownloadBuffer(weightsBuffer.Buffer, DirectGpuEngine.ToFloatArray(weights.ToArray()));
     }
 
     #endregion
@@ -9416,7 +9416,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         var gradInputBuffer = backend.AllocateBuffer(batch * inChannels * inHeight * inWidth);
 
         // Upload kernel
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
 
         backend.Conv2DBackwardInput(
             gradOutput.Buffer, kernelBuffer.Buffer, gradInputBuffer,
@@ -9579,7 +9579,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         var gradInputBuffer = backend.AllocateBuffer(batch * inChannels * inHeight * inWidth);
 
         // Upload kernel
-        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.Data, PersistentTensorRole.Weights);
+        using var kernelBuffer = GetOrCacheWeightBuffer(backend, kernel.ToArray(), PersistentTensorRole.Weights);
 
         backend.ConvTranspose2DBackwardInput(
             gradOutput.Buffer, kernelBuffer.Buffer, gradInputBuffer,

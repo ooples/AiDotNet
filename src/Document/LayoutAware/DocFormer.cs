@@ -270,7 +270,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -376,7 +376,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
 
         for (int i = 0; i < numClasses; i++)
         {
-            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data[i])));
+            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data.Span[i])));
         }
 
         return predictions.OrderByDescending(p => p.Score).Take(k).ToList();
@@ -390,20 +390,20 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         double maxVal = double.MinValue;
         for (int i = 0; i < length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
             if (val > maxVal) maxVal = val;
         }
 
         double sumExp = 0;
         for (int i = 0; i < length; i++)
         {
-            sumExp += Math.Exp(NumOps.ToDouble(input.Data[i]) - maxVal);
+            sumExp += Math.Exp(NumOps.ToDouble(input.Data.Span[i]) - maxVal);
         }
 
         for (int i = 0; i < length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
-            output.Data[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
+            output.Data.Span[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
         }
 
         return output;
@@ -481,7 +481,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data[idx]) - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
                     }
                 }
             }

@@ -439,7 +439,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
-            output.Data[i] = _leakyReLU.Activate(input.Data[i]);
+            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
         }
         return output;
     }
@@ -452,9 +452,9 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(gradient.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            output.Data[i] = NumOps.Multiply(
-                gradient.Data[i],
-                _leakyReLU.Derivative(forwardInput.Data[i]));
+            output.Data.Span[i] = NumOps.Multiply(
+                gradient.Data.Span[i],
+                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
         }
         return output;
     }
@@ -467,7 +467,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {
-            output.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+            output.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
         return output;
     }

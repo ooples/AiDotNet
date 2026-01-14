@@ -1859,7 +1859,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Download indices ONCE - tiny data (~256 bytes for batch=32, topK=2)
             // This is essential for MoE efficiency: run only selected experts, not all N
-            topKIndicesFlat = topKIndicesGpu.ToTensor().Data;
+            topKIndicesFlat = topKIndicesGpu.ToTensor().Data.ToArray();
 
             // Cache 2D array for backward pass in training mode
             if (IsTrainingMode)

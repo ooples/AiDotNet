@@ -245,8 +245,8 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         int frameSize = channels * height * width;
         for (int b = 0; b < batchSize; b++)
         {
-            Array.Copy(input.Data, b * 2 * frameSize, frame1.Data, b * frameSize, frameSize);
-            Array.Copy(input.Data, b * 2 * frameSize + frameSize, frame2.Data, b * frameSize, frameSize);
+            Array.Copy(input.Data.ToArray(), b * 2 * frameSize, frame1.Data.ToArray(), b * frameSize, frameSize);
+            Array.Copy(input.Data.ToArray(), b * 2 * frameSize + frameSize, frame2.Data.ToArray(), b * frameSize, frameSize);
         }
 
         return EstimateFlow(frame1, frame2);
@@ -258,7 +258,7 @@ public class GMFlow<T> : NeuralNetworkBase<T>
 
         // Compute loss gradient
         var lossGradient = prediction.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         // Backward pass through all layers
         var gradient = lossGradient;
@@ -442,7 +442,7 @@ public class GMFlow<T> : NeuralNetworkBase<T>
 
     private Tensor<T> DecodeFlow(Tensor<T> feat1, Tensor<T> feat2)
     {
-        var diff = feat1.Transform((v, idx) => NumOps.Subtract(v, feat2.Data[idx]));
+        var diff = feat1.Transform((v, idx) => NumOps.Subtract(v, feat2.Data.Span[idx]));
 
         foreach (var layer in _flowDecoder)
         {
@@ -611,7 +611,7 @@ public class GMFlow<T> : NeuralNetworkBase<T>
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
 
     private Tensor<T> ApplyReLU(Tensor<T> input) =>
         input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
@@ -619,14 +619,14 @@ public class GMFlow<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
         return result;
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        Array.Copy(tensor.Data, result.Data, result.Data.Length);
+        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), result.Data.Length);
         return result;
     }
 

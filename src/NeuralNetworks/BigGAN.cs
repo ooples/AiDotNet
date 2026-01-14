@@ -448,7 +448,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             if (padded > totalLen)
             {
                 var paddedData = new T[padded];
-                Array.Copy(input.Data, paddedData, totalLen);
+                Array.Copy(input.Data.ToArray(), paddedData, totalLen);
                 reshapedInput = new Tensor<T>(paddedData, [1, h, w]);
             }
             else
@@ -1003,7 +1003,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
             var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
-            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
+            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");

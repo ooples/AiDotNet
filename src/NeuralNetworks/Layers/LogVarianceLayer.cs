@@ -415,9 +415,9 @@ public class LogVarianceLayer<T> : LayerBase<T>
         const float epsilon = 1e-8f;
 
         // Upload data to GPU
-        float[] inputData = DirectGpuEngine.ToFloatArray(_lastInput.Data);
-        float[] outputData = DirectGpuEngine.ToFloatArray(_lastOutput.Data);
-        float[] meanData = DirectGpuEngine.ToFloatArray(_meanValues.Data);
+        float[] inputData = DirectGpuEngine.ToFloatArray(_lastInput.Data.ToArray());
+        float[] outputData = DirectGpuEngine.ToFloatArray(_lastOutput.Data.ToArray());
+        float[] meanData = DirectGpuEngine.ToFloatArray(_meanValues.Data.ToArray());
         float[] gradOutputData = backend.DownloadBuffer(outputGradient.Buffer);
 
         var inputBuffer = backend.AllocateBuffer(inputData);

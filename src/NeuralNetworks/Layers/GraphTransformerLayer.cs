@@ -568,14 +568,14 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Upload output projection weights and bias
-        using var outputWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data));
-        using var outputBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputBias.Data));
+        using var outputWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data.ToArray()));
+        using var outputBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputBias.Data.ToArray()));
 
         // Upload FFN weights and biases
-        using var ffnWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights1.Data));
-        using var ffnWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights2.Data));
-        using var ffnBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias1.Data));
-        using var ffnBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias2.Data));
+        using var ffnWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights1.Data.ToArray()));
+        using var ffnWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights2.Data.ToArray()));
+        using var ffnBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias1.Data.ToArray()));
+        using var ffnBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias2.Data.ToArray()));
 
         // Upload structural bias if enabled - precompute per-head slices for efficient GPU access
         IGpuBuffer[]? structuralBiasPerHead = null;
@@ -592,7 +592,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     int srcIdx = biasOffset + i;
                     if (srcIdx < _structuralBias.Length)
                     {
-                        headBiasSlice[i] = (float)NumOps.ToDouble(_structuralBias.Data[srcIdx]);
+                        headBiasSlice[i] = (float)NumOps.ToDouble(_structuralBias.Data.Span[srcIdx]);
                     }
                 }
                 structuralBiasPerHead[h] = backend.AllocateBuffer(headBiasSlice);

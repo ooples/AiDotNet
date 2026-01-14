@@ -312,7 +312,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var combinedTensor = Tensor<T>.FromVector(combined);
 
         var syncOutput = _syncHead.Forward(combinedTensor);
-        var offsetValue = NumOps.ToDouble(syncOutput.Data[0]);
+        var offsetValue = NumOps.ToDouble(syncOutput.Data.Span[0]);
 
         // Compute confidence from correspondence score
         var correspondence = ComputeCorrespondence(audioWaveform, frameList);
@@ -442,7 +442,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var logits = new List<T>();
         for (int i = 0; i < labelList.Count; i++)
         {
-            var logit = i < classFeatures.Length ? classFeatures.Data[i] : NumOps.Zero;
+            var logit = i < classFeatures.Length ? classFeatures.Data.Span[i] : NumOps.Zero;
             logits.Add(logit);
             softmaxDenominator = NumOps.Add(softmaxDenominator,
                 NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logit))));
@@ -631,8 +631,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             {
                 var freq = (bin + 1.0) / SPECTROGRAM_BINS;
                 var sampleIdx = Math.Min(startSample + bin, waveLength - 1);
-                var value = NumOps.ToDouble(waveform.Data[sampleIdx]);
-                spectrogram.Data[frame * SPECTROGRAM_BINS + bin] =
+                var value = NumOps.ToDouble(waveform.Data.Span[sampleIdx]);
+                spectrogram.Data.Span[frame * SPECTROGRAM_BINS + bin] =
                     NumOps.FromDouble(Math.Log(Math.Abs(value * freq) + 1e-8));
             }
         }
@@ -663,8 +663,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                     var idx = i * _embeddingDimension + j;
                     if (idx < projected.Length)
                     {
-                        projected.Data[idx] = NumOps.Add(
-                            projected.Data[idx],
+                        projected.Data.Span[idx] = NumOps.Add(
+                            projected.Data.Span[idx],
                             _audioPositionalEmbedding[i, j]);
                     }
                 }
@@ -709,8 +709,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                     var idx = i * _embeddingDimension + j;
                     if (idx < projected.Length)
                     {
-                        projected.Data[idx] = NumOps.Add(
-                            projected.Data[idx],
+                        projected.Data.Span[idx] = NumOps.Add(
+                            projected.Data.Span[idx],
                             _visualPositionalEmbedding[i, j]);
                     }
                 }
@@ -780,7 +780,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                             if (srcIdx < frame.Length)
                             {
-                                patches.Data[patchIdx * patchDim + flatIdx] = frame.Data[srcIdx];
+                                patches.Data.Span[patchIdx * patchDim + flatIdx] = frame.Data.Span[srcIdx];
                             }
                             flatIdx++;
                         }
@@ -811,35 +811,35 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                 var idx = pos * _embeddingDimension + j;
                 if (idx < spatialFeatures.Length)
                 {
-                    spatialVec[j] = spatialFeatures.Data[idx];
+                    spatialVec[j] = spatialFeatures.Data.Span[idx];
                 }
             }
 
             var score = ComputeCosineSimilarity(audioEmbedding, spatialVec);
-            attentionScores.Data[pos] = score;
+            attentionScores.Data.Span[pos] = score;
         }
 
         // Softmax normalization
         var maxScore = NumOps.Zero;
         for (int i = 0; i < numPositions; i++)
         {
-            if (NumOps.ToDouble(attentionScores.Data[i]) > NumOps.ToDouble(maxScore))
+            if (NumOps.ToDouble(attentionScores.Data.Span[i]) > NumOps.ToDouble(maxScore))
             {
-                maxScore = attentionScores.Data[i];
+                maxScore = attentionScores.Data.Span[i];
             }
         }
 
         var sumExp = NumOps.Zero;
         for (int i = 0; i < numPositions; i++)
         {
-            var shifted = NumOps.Subtract(attentionScores.Data[i], maxScore);
-            attentionScores.Data[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            sumExp = NumOps.Add(sumExp, attentionScores.Data[i]);
+            var shifted = NumOps.Subtract(attentionScores.Data.Span[i], maxScore);
+            attentionScores.Data.Span[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
+            sumExp = NumOps.Add(sumExp, attentionScores.Data.Span[i]);
         }
 
         for (int i = 0; i < numPositions; i++)
         {
-            attentionScores.Data[i] = NumOps.Divide(attentionScores.Data[i], sumExp);
+            attentionScores.Data.Span[i] = NumOps.Divide(attentionScores.Data.Span[i], sumExp);
         }
 
         // Reshape to spatial dimensions
@@ -851,7 +851,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var attentionMap = new Tensor<T>([patchH, patchW]);
         for (int i = 0; i < Math.Min(numPositions, patchH * patchW); i++)
         {
-            attentionMap.Data[i] = attentionScores.Data[i];
+            attentionMap.Data.Span[i] = attentionScores.Data.Span[i];
         }
 
         return attentionMap;
@@ -869,7 +869,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             for (int i = 0; i < seqLen; i++)
             {
                 var idx = i * _embeddingDimension + j;
-                columnVector[i] = idx < features.Length ? features.Data[idx] : NumOps.Zero;
+                columnVector[i] = idx < features.Length ? features.Data.Span[idx] : NumOps.Zero;
             }
             // Use IEngine vectorized sum
             T sum = Engine.Sum(columnVector);
@@ -949,7 +949,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             for (int bin = 0; bin < numBins; bin++)
             {
                 var maskIdx = bin < mask.Length ? bin : mask.Length - 1;
-                broadcastedMask.Data[frame * numBins + bin] = mask.Data[maskIdx];
+                broadcastedMask.Data.Span[frame * numBins + bin] = mask.Data.Span[maskIdx];
             }
         }
 
@@ -975,10 +975,10 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                 if (specIdx < maskedSpectrogram.Length)
                 {
-                    var logMag = NumOps.ToDouble(maskedSpectrogram.Data[specIdx]);
+                    var logMag = NumOps.ToDouble(maskedSpectrogram.Data.Span[specIdx]);
                     var mag = Math.Exp(logMag) - 1e-8;
                     var phase = Math.Sin(2.0 * Math.PI * i / SPECTROGRAM_HOP);
-                    output.Data[startSample + i] = NumOps.FromDouble(mag * phase);
+                    output.Data.Span[startSample + i] = NumOps.FromDouble(mag * phase);
                 }
             }
         }

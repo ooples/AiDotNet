@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -283,17 +283,17 @@ public static class StlMeshIO
         writer.Write(header);
         writer.Write((uint)mesh.NumFaces);
 
-        var vertices = mesh.Vertices.Data;
-        var faces = mesh.Faces.Data;
+        var vertices = mesh.Vertices.Data.Span;
+        var faces = mesh.Faces.Data.Span;
         var faceNormals = mesh.FaceNormals ?? mesh.ComputeFaceNormals();
 
         for (int f = 0; f < mesh.NumFaces; f++)
         {
             int faceOffset = f * 3;
             int normalOffset = f * 3;
-            writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset]));
-            writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset + 1]));
-            writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset + 2]));
+            writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset]));
+            writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset + 1]));
+            writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset + 2]));
 
             WriteVertexBinary(writer, vertices, numOps, faces[faceOffset]);
             WriteVertexBinary(writer, vertices, numOps, faces[faceOffset + 1]);
@@ -312,8 +312,8 @@ public static class StlMeshIO
         using var writer = new StreamWriter(stream, Encoding.ASCII, 1024, leaveOpen: true);
         writer.WriteLine($"solid {solidName}");
 
-        var vertices = mesh.Vertices.Data;
-        var faces = mesh.Faces.Data;
+        var vertices = mesh.Vertices.Data.Span;
+        var faces = mesh.Faces.Data.Span;
         var faceNormals = mesh.FaceNormals ?? mesh.ComputeFaceNormals();
 
         for (int f = 0; f < mesh.NumFaces; f++)
@@ -323,9 +323,9 @@ public static class StlMeshIO
             writer.WriteLine(string.Format(
                 CultureInfo.InvariantCulture,
                 "facet normal {0} {1} {2}",
-                numOps.ToDouble(faceNormals.Data[normalOffset]),
-                numOps.ToDouble(faceNormals.Data[normalOffset + 1]),
-                numOps.ToDouble(faceNormals.Data[normalOffset + 2])));
+                numOps.ToDouble(faceNormals.Data.Span[normalOffset]),
+                numOps.ToDouble(faceNormals.Data.Span[normalOffset + 1]),
+                numOps.ToDouble(faceNormals.Data.Span[normalOffset + 2])));
             writer.WriteLine("outer loop");
 
             WriteVertexAscii(writer, vertices, numOps, faces[faceOffset]);
@@ -395,7 +395,7 @@ public static class StlMeshIO
         }
     }
 
-    private static void WriteVertexBinary<T>(BinaryWriter writer, T[] vertices, INumericOperations<T> numOps, int index)
+    private static void WriteVertexBinary<T>(BinaryWriter writer, ReadOnlySpan<T> vertices, INumericOperations<T> numOps, int index)
     {
         int offset = index * 3;
         writer.Write((float)numOps.ToDouble(vertices[offset]));
@@ -403,7 +403,7 @@ public static class StlMeshIO
         writer.Write((float)numOps.ToDouble(vertices[offset + 2]));
     }
 
-    private static void WriteVertexAscii<T>(StreamWriter writer, T[] vertices, INumericOperations<T> numOps, int index)
+    private static void WriteVertexAscii<T>(StreamWriter writer, ReadOnlySpan<T> vertices, INumericOperations<T> numOps, int index)
     {
         int offset = index * 3;
         writer.WriteLine(string.Format(

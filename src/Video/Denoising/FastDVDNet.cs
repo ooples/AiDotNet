@@ -196,12 +196,12 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
             for (int x = 1; x < w - 1; x++)
             {
                 // Proper indexing for any rank tensor (use first batch/channel)
-                double center = Convert.ToDouble(frame.Data[y * stride + x]);
+                double center = Convert.ToDouble(frame.Data.Span[y * stride + x]);
                 double laplacian = 4 * center
-                    - Convert.ToDouble(frame.Data[(y - 1) * stride + x])
-                    - Convert.ToDouble(frame.Data[(y + 1) * stride + x])
-                    - Convert.ToDouble(frame.Data[y * stride + (x - 1)])
-                    - Convert.ToDouble(frame.Data[y * stride + (x + 1)]);
+                    - Convert.ToDouble(frame.Data.Span[(y - 1) * stride + x])
+                    - Convert.ToDouble(frame.Data.Span[(y + 1) * stride + x])
+                    - Convert.ToDouble(frame.Data.Span[y * stride + (x - 1)])
+                    - Convert.ToDouble(frame.Data.Span[y * stride + (x + 1)]);
                 data.Add(Math.Abs(laplacian));
             }
         }
@@ -227,9 +227,9 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         for (int i = 0; i < frame.Length; i++)
         {
             double noise = random.NextGaussian() * (sigma / 255.0);
-            double value = Convert.ToDouble(frame.Data[i]) + noise;
+            double value = Convert.ToDouble(frame.Data.Span[i]) + noise;
             value = MathHelper.Clamp(value, 0.0, 1.0);
-            noisy.Data[i] = NumOps.FromDouble(value);
+            noisy.Data.Span[i] = NumOps.FromDouble(value);
         }
 
         return noisy;
@@ -251,7 +251,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data[i]);
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -293,7 +293,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < noiseMap.Length; i++)
         {
-            noiseMap.Data[i] = NumOps.FromDouble(normalizedNoise);
+            noiseMap.Data.Span[i] = NumOps.FromDouble(normalizedNoise);
         }
 
         return noiseMap;
@@ -345,13 +345,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         {
             // Only copy single-frame data (first batch if batched input)
             // This handles 2D [H,W], 3D [C,H,W] and 4D [N,C,H,W] inputs correctly
-            Array.Copy(frame.Data, 0, stacked.Data, offset, frameSize);
+            Array.Copy(frame.Data.ToArray(), 0, stacked.Data.ToArray(), offset, frameSize);
             offset += frameSize;
         }
 
         // Add noise map (single channel, same H x W)
         int noiseMapSize = h * w;
-        Array.Copy(noiseMap.Data, 0, stacked.Data, offset, noiseMapSize);
+        Array.Copy(noiseMap.Data.ToArray(), 0, stacked.Data.ToArray(), offset, noiseMapSize);
 
         return stacked;
     }
