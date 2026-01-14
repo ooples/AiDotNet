@@ -208,9 +208,9 @@ jobs:
         if: steps.check-commits.outputs.needs_fix == 'true'
         env:
           AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          BRANCH: ${{ github.head_ref }}
         shell: bash
         run: |
-          BRANCH="${{ github.head_ref }}"
           if [ -n "$AUTOFIX_PAT" ]; then
             git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
           else
@@ -322,9 +322,9 @@ jobs:
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
         env:
           AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          BRANCH: ${{ github.head_ref }}
         shell: bash
         run: |
-          BRANCH="${{ github.head_ref }}"
           if [ -n "$AUTOFIX_PAT" ]; then
             git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
           else
