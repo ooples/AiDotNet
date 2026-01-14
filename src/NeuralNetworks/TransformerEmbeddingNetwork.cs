@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -242,7 +242,7 @@ namespace AiDotNet.NeuralNetworks
             var tokenizer = _tokenizer ?? (_fallbackTokenizer ??= Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT));
             var tokenResult = tokenizer.Encode(text);
             var tokens = tokenResult.TokenIds.Take(_maxSequenceLength).ToList();
-            
+
             if (tokens.Count == 0) tokens.Add(0);
 
             // OOV protection: ensure token IDs are within vocabulary bounds

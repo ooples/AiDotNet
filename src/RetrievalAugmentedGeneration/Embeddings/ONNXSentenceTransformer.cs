@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.ML.OnnxRuntime;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -82,10 +82,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
             // 3. Run inference
             using var results = _session.Run(inputs);
-            
+
             // 4. Process output (last_hidden_state is typical for sentence-transformers)
             var lastHiddenState = results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
-            
+
             // 5. Mean Pooling
             var embedding = ApplyMeanPooling(lastHiddenState, attentionMask);
 
@@ -160,4 +160,4 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 }
 
 
-        
+

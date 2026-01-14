@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tokenization.Interfaces;
+using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -327,7 +327,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         };
 
         using var results = _textSession.Run(inputs);
-        var output = results.FirstOrDefault(r => 
+        var output = results.FirstOrDefault(r =>
             r.Name == "text_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
 
         if (output == null)
@@ -370,7 +370,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         };
 
         using var results = _imageSession.Run(inputs);
-        var output = results.FirstOrDefault(r => 
+        var output = results.FirstOrDefault(r =>
             r.Name == "image_embeds" || r.Name == "pooler_output" || r.Name == "last_hidden_state")?.AsTensor<float>();
 
         if (output == null)
@@ -436,4 +436,4 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     }
 }
 
-    
+

@@ -171,7 +171,7 @@ namespace AiDotNet.NeuralNetworks
             var metadata = base.GetModelMetadata();
             metadata.Name = "InstructorEmbedding";
             metadata.Description = "Instruction-Tuned high-flexibility embedding model";
-            
+
             if (metadata.AdditionalInfo == null)
                 metadata.AdditionalInfo = new Dictionary<string, object>();
 
