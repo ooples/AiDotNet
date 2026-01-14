@@ -303,8 +303,8 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         var saveInvVarBuffer = backend.AllocateBuffer(statsSize);
 
         // Upload gamma and beta parameters to GPU
-        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
-        var betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data);
+        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data.ToArray());
+        var betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data.ToArray());
         using var gammaBuffer = backend.AllocateBuffer(gammaData);
         using var betaBuffer = backend.AllocateBuffer(betaData);
 
@@ -365,7 +365,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         int totalSize = batch * channels * spatialSize;
 
         // Upload gamma to GPU
-        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
+        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data.ToArray());
         using var gammaBuffer = backend.AllocateBuffer(gammaData);
 
         // Allocate output buffers

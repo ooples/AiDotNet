@@ -319,8 +319,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         var normalized = new Tensor<T>(processed.Shape);
         for (int i = 0; i < processed.Data.Length; i++)
         {
-            double val = NumOps.ToDouble(processed.Data[i]);
-            normalized.Data[i] = NumOps.FromDouble((val / 255.0 - 0.5) * 2.0);
+            double val = NumOps.ToDouble(processed.Data.Span[i]);
+            normalized.Data.Span[i] = NumOps.FromDouble((val / 255.0 - 0.5) * 2.0);
         }
 
         return normalized;

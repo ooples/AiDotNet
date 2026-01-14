@@ -445,7 +445,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -877,7 +877,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
             int sourceOffset = tokenId * _decoderHiddenDim;
             int destinationOffset = i * _decoderHiddenDim;
-            Array.Copy(_tokenEmbeddings.Data, sourceOffset, input.Data, destinationOffset, _decoderHiddenDim);
+            _tokenEmbeddings.Data.Span.Slice(sourceOffset, _decoderHiddenDim).CopyTo(input.Data.Span.Slice(destinationOffset, _decoderHiddenDim));
         }
 
         return input;
@@ -944,7 +944,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         for (int i = 0; i < _vocabSize; i++)
         {
-            double val = NumOps.ToDouble(logits.Data[vocabStart + i]);
+            double val = NumOps.ToDouble(logits.Data.Span[vocabStart + i]);
             if (val > maxVal)
             {
                 maxVal = val;
@@ -1002,8 +1002,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }
@@ -1333,9 +1333,9 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             int gradLen = Math.Min(gradient.Data.Length, _decoderPositionEmbeddingsGradients.Data.Length);
             for (int i = 0; i < gradLen; i++)
             {
-                _decoderPositionEmbeddingsGradients.Data[i] = NumOps.Add(
-                    _decoderPositionEmbeddingsGradients.Data[i],
-                    gradient.Data[i % gradient.Data.Length]);
+                _decoderPositionEmbeddingsGradients.Data.Span[i] = NumOps.Add(
+                    _decoderPositionEmbeddingsGradients.Data.Span[i],
+                    gradient.Data.Span[i % gradient.Data.Length]);
             }
         }
     }
@@ -1353,7 +1353,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         // Add embedding gradients
         if (_decoderPositionEmbeddingsGradients is not null)
-            gradients.AddRange(_decoderPositionEmbeddingsGradients.Data);
+            gradients.AddRange(_decoderPositionEmbeddingsGradients.Data.ToArray());
 
         return new Vector<T>([.. gradients]);
     }

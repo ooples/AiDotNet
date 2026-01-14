@@ -621,10 +621,10 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                     var fx = srcX - x0;
 
                     // Get the four corner values
-                    var v00 = NumOps.ToDouble(image.Data[c * oldHeight * oldWidth + y0 * oldWidth + x0]);
-                    var v01 = NumOps.ToDouble(image.Data[c * oldHeight * oldWidth + y0 * oldWidth + x1]);
-                    var v10 = NumOps.ToDouble(image.Data[c * oldHeight * oldWidth + y1 * oldWidth + x0]);
-                    var v11 = NumOps.ToDouble(image.Data[c * oldHeight * oldWidth + y1 * oldWidth + x1]);
+                    var v00 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y0 * oldWidth + x0]);
+                    var v01 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y0 * oldWidth + x1]);
+                    var v10 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y1 * oldWidth + x0]);
+                    var v11 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y1 * oldWidth + x1]);
 
                     // Bilinear interpolation
                     var interpolated = v00 * (1 - fx) * (1 - fy) +
@@ -632,7 +632,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                                        v10 * (1 - fx) * fy +
                                        v11 * fx * fy;
 
-                    result.Data[c * newHeight * newWidth + y * newWidth + x] = NumOps.FromDouble(interpolated);
+                    result.Data.Span[c * newHeight * newWidth + y * newWidth + x] = NumOps.FromDouble(interpolated);
                 }
             }
         }
@@ -663,7 +663,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                 {
                     var srcIdx = c * height * width + y * width + x;
                     var dstIdx = c * newHeight * newWidth + (y + offsetY) * newWidth + (x + offsetX);
-                    result.Data[dstIdx] = image.Data[srcIdx];
+                    result.Data.Span[dstIdx] = image.Data.Span[srcIdx];
                 }
             }
         }
@@ -683,7 +683,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             {
                 var isOriginalArea = x >= offsetX && x < offsetX + origWidth &&
                                      y >= offsetY && y < offsetY + origHeight;
-                mask.Data[y * newWidth + x] = isOriginalArea ? zero : one;
+                mask.Data.Span[y * newWidth + x] = isOriginalArea ? zero : one;
             }
         }
 

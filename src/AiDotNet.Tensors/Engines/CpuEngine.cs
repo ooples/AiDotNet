@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -3684,7 +3685,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         // Calculate strides for the dimension
@@ -3734,8 +3735,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -3798,7 +3799,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -3852,8 +3853,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -3926,7 +3927,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -3978,8 +3979,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -4045,7 +4046,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -4096,8 +4097,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -5309,11 +5310,11 @@ public class CpuEngine : IEngine
         }
 
         var result = new Tensor<T>([batch, outChannels, outputHeight, outputWidth]);
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
-        var outputData = result.Data;
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
+        var outputData = result.ToArray();
 
         // Parallel over batch * outChannels for maximum parallelism
         Parallel.For(0, batch * outChannels, idx =>
@@ -5475,11 +5476,11 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradInput = new Tensor<T>(inputShape);
-        var gradInputData = gradInput.Data;
-        var gradOutputData = gradOutput.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradInputData = gradInput.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         // Use a lock array to avoid race conditions during atomic adds
         var locks = new object[batch * inChannels * height * width];
@@ -5642,11 +5643,11 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradKernel = new Tensor<T>(kernelShape);
-        var gradKernelData = gradKernel.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradKernelData = gradKernel.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         // Use locks for atomic operations on kernel gradients
         var locks = new object[outChannels * inChannels * kernelHeight * kernelWidth];
@@ -5763,12 +5764,12 @@ public class CpuEngine : IEngine
         int numKernelPositions = kernelHeight * kernelWidth;
 
         var gradOffset = new Tensor<T>(offset.Shape);
-        var gradOffsetData = gradOffset.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
-        var maskData = mask?.Data;
+        var gradOffsetData = gradOffset.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
+        var maskData = mask?.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -6076,11 +6077,11 @@ public class CpuEngine : IEngine
 
         // Mask shape: [batch, kernel_h*kernel_w, out_h, out_w]
         var gradMask = new Tensor<T>([batch, numKernelPositions, outputHeight, outputWidth]);
-        var gradMaskData = gradMask.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var kernelData = kernel.Data;
-        var offsetData = offset.Data;
+        var gradMaskData = gradMask.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var kernelData = kernel.ToArray();
+        var offsetData = offset.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -6170,9 +6171,9 @@ public class CpuEngine : IEngine
         if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: inputShape has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradInput = new Tensor<T>(inputShape);
-        var gradInputData = gradInput.Data;
-        var gradOutputData = gradOutput.Data;
-        var gridData = grid.Data;
+        var gradInputData = gradInput.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var gridData = grid.ToArray();
 
         // Use locks for atomic addition - NHWC layout
         var locks = new object[batch * height * width * channels];
@@ -6241,10 +6242,10 @@ public class CpuEngine : IEngine
         if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: input has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradGrid = new Tensor<T>(grid.Shape);
-        var gradGridData = gradGrid.Data;
-        var gradOutputData = gradOutput.Data;
-        var inputData = input.Data;
-        var gridData = grid.Data;
+        var gradGridData = gradGrid.ToArray();
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gridData = grid.ToArray();
 
         Parallel.For(0, batch, b =>
         {
@@ -9232,8 +9233,8 @@ public class CpuEngine : IEngine
 
         // Compute attention scores: Q @ K^T -> [batch, heads, seqQ, seqK]
         var scoresData = new T[batch * heads * seqQ * seqK];
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
 
         Parallel.For(0, batch * heads, bh =>
         {
@@ -9307,7 +9308,7 @@ public class CpuEngine : IEngine
 
         // Compute output: weights @ V -> [batch, heads, seqQ, d_v]
         var outputData = new T[batch * heads * seqQ * d_v];
-        var valueData = value.ToVector().Data;
+        var valueData = value.ToVector().ToArray();
 
         Parallel.For(0, batch * heads, bh =>
         {
@@ -9370,11 +9371,11 @@ public class CpuEngine : IEngine
 
         T scaleFactor = numOps.FromDouble(scale);
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var weightsData = attentionWeights.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var weightsData = attentionWeights.ToVector().ToArray();
 
         var gradVData = new T[batch * heads * seqK * d_v];
         var gradQData = new T[batch * heads * seqQ * d_k];
@@ -9508,9 +9509,9 @@ public class CpuEngine : IEngine
         const int BLOCK_Q = 64;
         const int BLOCK_KV = 64;
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
 
         // Output and statistics
         var outputData = new T[batch * heads * seqQ * headDim];
@@ -9675,12 +9676,12 @@ public class CpuEngine : IEngine
         const int BLOCK_Q = 64;
         const int BLOCK_KV = 64;
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var outputData = output.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
-        var statsData = softmaxStats.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var outputData = output.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var statsData = softmaxStats.ToVector().ToArray();
 
         var gradQData = new T[batch * heads * seqQ * headDim];
         var gradKData = new T[batch * heads * seqK * headDim];
@@ -9836,9 +9837,9 @@ public class CpuEngine : IEngine
         T scaleFactor = numOps.FromDouble(scaleValue);
         T negInf = numOps.FromDouble(double.NegativeInfinity);
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
 
         var outputData = new T[batch * numQHeads * seqQ * headDim];
         var weightsData = new T[batch * numQHeads * seqQ * seqK];
@@ -9957,11 +9958,11 @@ public class CpuEngine : IEngine
 
         T scaleFactor = numOps.FromDouble(scale);
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var weightsData = attentionWeights.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var weightsData = attentionWeights.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
 
         var gradQData = new T[batch * numQHeads * seqQ * headDim];
         var gradKData = new T[batch * numKVHeads * seqK * headDim];
@@ -10525,7 +10526,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {source.Rank}");
 
         // Determine output size along scatter dimension
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10537,7 +10538,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
 
         // Initialize to zero
@@ -10589,8 +10590,8 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var indicesData = indices.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var indicesData = indices.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         int innerSize = 1;
@@ -10638,7 +10639,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10649,7 +10650,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
         var countData = new int[outDimSize];
 
@@ -10723,9 +10724,9 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var indicesData = indices.ToVector().Data;
-        var countsData = counts.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var indicesData = indices.ToVector().ToArray();
+        var countsData = counts.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         int innerSize = 1;
@@ -10775,7 +10776,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10786,7 +10787,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         int outputLength = outputShape.Aggregate(1, (a, b) => a * b);
         var outputData = new T[outputLength];
         var argmaxData = new int[outputLength];
@@ -10849,8 +10850,8 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var argmaxData = argmax.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var argmaxData = argmax.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         // Initialize to zero
@@ -10903,7 +10904,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10911,7 +10912,7 @@ public class CpuEngine : IEngine
         }
         int numGroups = outputSize ?? (maxIndex + 1);
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[sourceData.Length];
 
         int innerSize = 1;
@@ -10992,7 +10993,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? output.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -11000,8 +11001,8 @@ public class CpuEngine : IEngine
         }
         int numGroups = maxIndex + 1;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var outData = output.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var outData = output.ToVector().ToArray();
         var gradInputData = new T[gradOutData.Length];
 
         int innerSize = 1;
@@ -15014,32 +15015,37 @@ public class CpuEngine : IEngine
             // Use optimized fused operations for float type
             if (typeof(T) == typeof(float))
             {
-                // Cast arrays directly (boxing avoids generic constraint issues)
-                var inputArray = (float[])(object)input.Data;
-                var weightsArray = (float[])(object)weights.Data;
-                var biasArray = bias != null ? (float[])(object)bias.Data : null;
-                var outputArray = (float[])(object)result.Data;
+                // Try to get underlying arrays without copying using MemoryMarshal
+                var inputArray = GetUnderlyingArrayOrCopy<T, float>(input.Data);
+                var weightsArray = GetUnderlyingArrayOrCopy<T, float>(weights.Data);
+                var biasArray = bias != null ? GetUnderlyingArrayOrCopy<T, float>(bias.Data) : null;
+                var outputArray = new float[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                return result;
+                // Reinterpret float[] as T[] using Unsafe.As (safe since T is float)
+                var typedOutput = Unsafe.As<float[], T[]>(ref outputArray);
+                return new Tensor<T>([M, N], new Vector<T>(typedOutput));
             }
 
             // Use optimized fused operations for double type
             if (typeof(T) == typeof(double))
             {
-                var inputArray = (double[])(object)input.Data;
-                var weightsArray = (double[])(object)weights.Data;
-                var biasArray = bias != null ? (double[])(object)bias.Data : null;
-                var outputArray = (double[])(object)result.Data;
+                // Try to get underlying arrays without copying using MemoryMarshal
+                var inputArray = GetUnderlyingArrayOrCopy<T, double>(input.Data);
+                var weightsArray = GetUnderlyingArrayOrCopy<T, double>(weights.Data);
+                var biasArray = bias != null ? GetUnderlyingArrayOrCopy<T, double>(bias.Data) : null;
+                var outputArray = new double[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                return result;
+                // Reinterpret double[] as T[] using Unsafe.As (safe since T is double)
+                var typedOutput = Unsafe.As<double[], T[]>(ref outputArray);
+                return new Tensor<T>([M, N], new Vector<T>(typedOutput));
             }
         }
 
@@ -16921,6 +16927,38 @@ public class CpuEngine : IEngine
         }
 
         return new Tensor<T>([batch, channels, outputHeight, outputWidth], new Vector<T>(resultData));
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Gets the underlying array from a Memory without copying if possible.
+    /// Falls back to ToArray() if the Memory is not backed by an array at offset 0.
+    /// </summary>
+    /// <typeparam name="TSource">The source generic type parameter.</typeparam>
+    /// <typeparam name="TDest">The destination type (float or double).</typeparam>
+    /// <param name="memory">The memory to extract the array from.</param>
+    /// <returns>The underlying array or a copy.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static TDest[] GetUnderlyingArrayOrCopy<TSource, TDest>(Memory<TSource> memory)
+        where TDest : unmanaged
+    {
+        // Reinterpret the Memory<TSource> as Memory<TDest> using Unsafe.As
+        // This is safe when called after checking typeof(TSource) == typeof(TDest)
+        var destMemory = Unsafe.As<Memory<TSource>, Memory<TDest>>(ref memory);
+
+        // Try to get the underlying array without copying
+        if (MemoryMarshal.TryGetArray((ReadOnlyMemory<TDest>)destMemory, out var segment)
+            && segment.Offset == 0
+            && segment.Array != null)
+        {
+            return segment.Array;
+        }
+
+        // Fall back to creating a copy
+        return destMemory.ToArray();
     }
 
     #endregion

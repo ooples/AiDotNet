@@ -233,7 +233,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < probs.Data.Length; i++)
         {
-            results.Add((i, Convert.ToDouble(probs.Data[i])));
+            results.Add((i, Convert.ToDouble(probs.Data.Span[i])));
         }
 
         return results.OrderByDescending(x => x.Probability).Take(k).ToList();
@@ -416,7 +416,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -574,7 +574,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
                                               t * origChannels * origHeight * origWidth +
                                               origC * origHeight * origWidth +
                                               origH * origWidth + origW;
-                                    sum = NumOps.Add(sum, original.Data[idx]);
+                                    sum = NumOps.Add(sum, original.Data.Span[idx]);
                                 }
                                 origVal = NumOps.Divide(sum, NumOps.FromDouble(numFrames));
                             }
@@ -649,21 +649,21 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             double maxVal = double.MinValue;
             for (int i = 0; i < lastDim; i++)
             {
-                double val = Convert.ToDouble(input.Data[offset + i]);
+                double val = Convert.ToDouble(input.Data.Span[offset + i]);
                 if (val > maxVal) maxVal = val;
             }
 
             double sum = 0;
             for (int i = 0; i < lastDim; i++)
             {
-                double val = Convert.ToDouble(input.Data[offset + i]);
+                double val = Convert.ToDouble(input.Data.Span[offset + i]);
                 sum += Math.Exp(val - maxVal);
             }
 
             for (int i = 0; i < lastDim; i++)
             {
-                double val = Convert.ToDouble(input.Data[offset + i]);
-                output.Data[offset + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sum);
+                double val = Convert.ToDouble(input.Data.Span[offset + i]);
+                output.Data.Span[offset + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sum);
             }
         }
 
@@ -678,7 +678,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([1, t, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -691,7 +691,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

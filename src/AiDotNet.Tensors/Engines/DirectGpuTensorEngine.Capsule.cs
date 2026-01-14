@@ -291,9 +291,10 @@ public partial class DirectGpuTensorEngine
             throw new ArgumentException($"Input dim mismatch: input has {inputDim}, weights has {weightsInputDim}");
 
         // Upload weights to GPU
+        var weightsArray = weights.ToArray();
         var weightsData = new float[weights.Length];
         for (int i = 0; i < weights.Length; i++)
-            weightsData[i] = Convert.ToSingle(weights.Data[i]);
+            weightsData[i] = Convert.ToSingle(weightsArray[i]);
         using var weightsBuffer = backend.AllocateBuffer(weightsData);
 
         // Allocate output: [batch, inputCapsules, outputCapsules, outputDim]
@@ -384,9 +385,10 @@ public partial class DirectGpuTensorEngine
             throw new ArgumentException($"Input dim mismatch: input has {inputDim}, weights has {weightsInputDim}");
 
         // Upload weights to GPU
+        var weightsArray = weights.ToArray();
         var weightsData = new float[weights.Length];
         for (int i = 0; i < weights.Length; i++)
-            weightsData[i] = Convert.ToSingle(weights.Data[i]);
+            weightsData[i] = Convert.ToSingle(weightsArray[i]);
         using var weightsBuffer = backend.AllocateBuffer(weightsData);
 
         // Allocate output: [batch, inputCapsules, numCapsules, capsuleDim]
@@ -473,9 +475,10 @@ public partial class DirectGpuTensorEngine
             [batchSize, inputCapsules, numCapsules], GpuTensorRole.Intermediate, ownsBuffer: true);
 
         // Upload bias to GPU (reshape from [numCapsules*capsuleDim] to [1, numCapsules, capsuleDim])
+        var biasArray = bias.ToArray();
         var biasData = new float[bias.Length];
         for (int i = 0; i < bias.Length; i++)
-            biasData[i] = Convert.ToSingle(bias.Data[i]);
+            biasData[i] = Convert.ToSingle(biasArray[i]);
         using var biasBuffer = backend.AllocateBuffer(biasData);
         var biasGpu = new GpuTensor<T>(backend, biasBuffer,
             [1, numCapsules, capsuleDim], GpuTensorRole.Bias, ownsBuffer: false);

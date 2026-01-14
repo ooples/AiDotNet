@@ -346,7 +346,7 @@ public class FILM<T> : NeuralNetworkBase<T>
     {
         var predicted = Predict(input);
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -630,7 +630,7 @@ public class FILM<T> : NeuralNetworkBase<T>
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -640,7 +640,7 @@ public class FILM<T> : NeuralNetworkBase<T>
         for (int i = 0; i < newShape.Length; i++)
             newShape[i] = tensor.Shape[i + 1];
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -912,9 +912,9 @@ public class FILM<T> : NeuralNetworkBase<T>
                         double w2Val = Convert.ToDouble(warped2[b, c, h, w]);
 
                         // Gradient w.r.t. warped values
-                        gradWarped1.Data[(b * channels + c) * height * width + h * width + w] =
+                        gradWarped1.Data.Span[(b * channels + c) * height * width + h * width + w] =
                             NumOps.FromDouble(grad * weight1 / totalWeight);
-                        gradWarped2.Data[(b * channels + c) * height * width + h * width + w] =
+                        gradWarped2.Data.Span[(b * channels + c) * height * width + h * width + w] =
                             NumOps.FromDouble(grad * weight2 / totalWeight);
 
                         // Gradient w.r.t. occlusion (accumulated over channels)
@@ -982,25 +982,25 @@ public class FILM<T> : NeuralNetworkBase<T>
                         if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height)
                         {
                             int idx = (b * channels + c) * height * width + y0 * width + x0;
-                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
                                 NumOps.FromDouble(grad * w00));
                         }
                         if (x1 >= 0 && x1 < width && y0 >= 0 && y0 < height)
                         {
                             int idx = (b * channels + c) * height * width + y0 * width + x1;
-                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
                                 NumOps.FromDouble(grad * w01));
                         }
                         if (x0 >= 0 && x0 < width && y1 >= 0 && y1 < height)
                         {
                             int idx = (b * channels + c) * height * width + y1 * width + x0;
-                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
                                 NumOps.FromDouble(grad * w10));
                         }
                         if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
                         {
                             int idx = (b * channels + c) * height * width + y1 * width + x1;
-                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
                                 NumOps.FromDouble(grad * w11));
                         }
 
@@ -1036,7 +1036,7 @@ public class FILM<T> : NeuralNetworkBase<T>
     {
         return gradOutput.Transform((g, idx) =>
         {
-            double x = Convert.ToDouble(input.Data[idx]);
+            double x = Convert.ToDouble(input.Data.Span[idx]);
             double grad = Convert.ToDouble(g);
             return NumOps.FromDouble(x > 0 ? grad : grad * negativeSlope);
         });
@@ -1188,7 +1188,7 @@ public class FILM<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     private void BackwardThroughFeatureExtractor(Tensor<T> gradient, List<Tensor<T>> activationCache)

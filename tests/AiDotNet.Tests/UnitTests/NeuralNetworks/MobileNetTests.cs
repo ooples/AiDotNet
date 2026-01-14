@@ -124,7 +124,7 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble() * 0.5 + 0.1;
+            input.Data.Span[i] = random.NextDouble() * 0.5 + 0.1;
 
         // Act
         var output = network.Predict(input);
@@ -143,13 +143,13 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(42);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble();
+            input.Data.Span[i] = random.NextDouble();
 
         // Act
         var output = network.Predict(input);
 
         // Assert
-        bool hasNonZero = output.Data.Any(v => Math.Abs(v) > 1e-10);
+        bool hasNonZero = output.Data.ToArray().Any(v => Math.Abs(v) > 1e-10);
         Assert.True(hasNonZero, "Output should have at least some non-zero values");
     }
 
@@ -259,7 +259,7 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble() * 0.5 + 0.1;
+            input.Data.Span[i] = random.NextDouble() * 0.5 + 0.1;
 
         // Act
         var output = network.Predict(input);
@@ -279,7 +279,7 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble() * 0.5 + 0.1;
+            input.Data.Span[i] = random.NextDouble() * 0.5 + 0.1;
 
         // Act
         var output = network.Predict(input);
@@ -349,7 +349,7 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 32, 8, 8]);
         var random = new Random(42);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble();
+            input.Data.Span[i] = random.NextDouble();
 
         // Act
         var output = block.Forward(input);
@@ -378,7 +378,7 @@ public class MobileNetTests
         var input = new Tensor<double>([1, 32, 16, 16]);
         var random = new Random(42);
         for (int i = 0; i < input.Data.Length; i++)
-            input.Data[i] = random.NextDouble();
+            input.Data.Span[i] = random.NextDouble();
 
         // Act
         var output = block.Forward(input);
@@ -615,8 +615,8 @@ public class MobileNetTests
 
         var input = new Tensor<double>([1, 3, 224, 224]);
         var target = new Tensor<double>([10]);
-        for (int i = 0; i < input.Data.Length; i++) input.Data[i] = 0.5;
-        target.Data[0] = 1.0;
+        for (int i = 0; i < input.Data.Length; i++) input.Data.Span[i] = 0.5;
+        target.Data.Span[0] = 1.0;
 
         // Act & Assert - should not throw
         network.Train(input, target);
@@ -630,8 +630,8 @@ public class MobileNetTests
 
         var input = new Tensor<double>([1, 3, 224, 224]);
         var target = new Tensor<double>([10]);
-        for (int i = 0; i < input.Data.Length; i++) input.Data[i] = 0.5;
-        target.Data[0] = 1.0;
+        for (int i = 0; i < input.Data.Length; i++) input.Data.Span[i] = 0.5;
+        target.Data.Span[0] = 1.0;
 
         // Act & Assert - should not throw
         network.Train(input, target);

@@ -393,14 +393,14 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         }
 
         // Upload weight tensors to GPU
-        using var preTransformWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformWeights.Data));
-        using var preTransformBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformBias.Data));
-        using var postWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights1.Data));
-        using var postWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights2.Data));
-        using var postBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias1.Data));
-        using var postBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias2.Data));
-        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
-        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data));
+        using var preTransformWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformWeights.Data.ToArray()));
+        using var preTransformBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_preTransformBias.Data.ToArray()));
+        using var postWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights1.Data.ToArray()));
+        using var postWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationWeights2.Data.ToArray()));
+        using var postBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias1.Data.ToArray()));
+        using var postBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_postAggregationBias2.Data.ToArray()));
+        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data.ToArray()));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray()));
 
         // Convert adjacency matrix to CSR for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);

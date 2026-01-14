@@ -267,7 +267,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
@@ -418,14 +418,14 @@ public class XMem<T> : NeuralNetworkBase<T>
             int minLen = Math.Min(result.Length, mem.Length);
             for (int i = 0; i < minLen; i++)
             {
-                result.Data[i] = NumOps.Add(result.Data[i], mem.Data[i]);
+                result.Data.Span[i] = NumOps.Add(result.Data.Span[i], mem.Data.Span[i]);
             }
         }
 
         double scale = 1.0 / memory.Count;
         for (int i = 0; i < result.Length; i++)
         {
-            result.Data[i] = NumOps.FromDouble(Convert.ToDouble(result.Data[i]) * scale);
+            result.Data.Span[i] = NumOps.FromDouble(Convert.ToDouble(result.Data.Span[i]) * scale);
         }
 
         return result;
@@ -585,14 +585,14 @@ public class XMem<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        Array.Copy(tensor.Data, result.Data, result.Data.Length);
+        tensor.Data.Span.Slice(0, result.Data.Length).CopyTo(result.Data.Span);
         return result;
     }
 

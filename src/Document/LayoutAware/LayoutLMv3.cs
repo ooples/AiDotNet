@@ -339,7 +339,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -417,7 +417,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             int maxClass = 0;
             for (int c = 0; c < numClasses; c++)
             {
-                double conf = NumOps.ToDouble(output.Data[i * numValues + c]);
+                double conf = NumOps.ToDouble(output.Data.Span[i * numValues + c]);
                 if (conf > maxConf)
                 {
                     maxConf = conf;
@@ -432,10 +432,10 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                 if (hasBbox && numValues >= 4)
                 {
                     int bboxOffset = i * numValues + numValues - 4;
-                    double x1 = NumOps.ToDouble(output.Data[bboxOffset]) * ImageSize;
-                    double y1 = NumOps.ToDouble(output.Data[bboxOffset + 1]) * ImageSize;
-                    double x2 = NumOps.ToDouble(output.Data[bboxOffset + 2]) * ImageSize;
-                    double y2 = NumOps.ToDouble(output.Data[bboxOffset + 3]) * ImageSize;
+                    double x1 = NumOps.ToDouble(output.Data.Span[bboxOffset]) * ImageSize;
+                    double y1 = NumOps.ToDouble(output.Data.Span[bboxOffset + 1]) * ImageSize;
+                    double x2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 2]) * ImageSize;
+                    double y2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 3]) * ImageSize;
 
                     bbox = new Vector<T>([
                         NumOps.FromDouble(Math.Max(0, x1)),
@@ -663,7 +663,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
         for (int v = 0; v < vocabSize; v++)
         {
-            double val = NumOps.ToDouble(logits.Data[offset + v]);
+            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
             if (val > maxVal)
             {
                 maxVal = val;
@@ -674,7 +674,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         double sumExp = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double val = NumOps.ToDouble(logits.Data[offset + v]);
+            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
             sumExp += Math.Exp(val - maxVal);
         }
 
@@ -687,7 +687,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         double maxVal = double.MinValue;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             if (scaled > maxVal)
             {
                 maxVal = scaled;
@@ -697,7 +697,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         double sumExp = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             sumExp += Math.Exp(scaled - maxVal);
         }
 
@@ -711,7 +711,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         double cumulative = 0.0;
         for (int v = 0; v < vocabSize; v++)
         {
-            double scaled = NumOps.ToDouble(logits.Data[offset + v]) / temperature;
+            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
             double expVal = Math.Exp(scaled - maxVal);
             cumulative += expVal;
             if (cumulative >= roll)
@@ -872,8 +872,8 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }
@@ -902,21 +902,21 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             double maxVal = double.MinValue;
             for (int i = 0; i < lastDim; i++)
             {
-                double val = NumOps.ToDouble(input.Data[b * lastDim + i]);
+                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
                 if (val > maxVal) maxVal = val;
             }
 
             double sumExp = 0;
             for (int i = 0; i < lastDim; i++)
             {
-                double val = NumOps.ToDouble(input.Data[b * lastDim + i]);
+                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
                 sumExp += Math.Exp(val - maxVal);
             }
 
             for (int i = 0; i < lastDim; i++)
             {
-                double val = NumOps.ToDouble(input.Data[b * lastDim + i]);
-                output.Data[b * lastDim + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
+                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
+                output.Data.Span[b * lastDim + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
             }
         }
 
@@ -1015,7 +1015,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             writer.Write(dim);
 
         writer.Write(tensor.Data.Length);
-        foreach (var val in tensor.Data)
+        foreach (var val in tensor.Data.ToArray())
             writer.Write(NumOps.ToDouble(val));
     }
 
@@ -1029,7 +1029,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < length; i++)
-            tensor.Data[i] = NumOps.FromDouble(reader.ReadDouble());
+            tensor.Data.Span[i] = NumOps.FromDouble(reader.ReadDouble());
 
         return tensor;
     }
@@ -1141,9 +1141,9 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             int gradLen = Math.Min(gradient.Data.Length, _position1DEmbeddingsGradients.Data.Length);
             for (int i = 0; i < gradLen; i++)
             {
-                _position1DEmbeddingsGradients.Data[i] = NumOps.Add(
-                    _position1DEmbeddingsGradients.Data[i],
-                    gradient.Data[i % gradient.Data.Length]);
+                _position1DEmbeddingsGradients.Data.Span[i] = NumOps.Add(
+                    _position1DEmbeddingsGradients.Data.Span[i],
+                    gradient.Data.Span[i % gradient.Data.Length]);
             }
         }
     }
@@ -1161,11 +1161,11 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
         // Add embedding gradients
         if (_position1DEmbeddingsGradients is not null)
-            gradients.AddRange(_position1DEmbeddingsGradients.Data);
+            gradients.AddRange(_position1DEmbeddingsGradients.Data.ToArray());
         if (_position2DXEmbeddingsGradients is not null)
-            gradients.AddRange(_position2DXEmbeddingsGradients.Data);
+            gradients.AddRange(_position2DXEmbeddingsGradients.Data.ToArray());
         if (_position2DYEmbeddingsGradients is not null)
-            gradients.AddRange(_position2DYEmbeddingsGradients.Data);
+            gradients.AddRange(_position2DYEmbeddingsGradients.Data.ToArray());
 
         return new Vector<T>([.. gradients]);
     }

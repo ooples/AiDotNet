@@ -507,8 +507,8 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         backend.Copy(aggregatedUploadBuffer, aggregatedBuffer, numEdges * aggregatedSize);
 
         // Upload weights and biases
-        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
-        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data));
+        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data.ToArray()));
+        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data.ToArray()));
 
         // Transpose weights for GEMM: [OutputChannels, aggregatedSize]^T = [aggregatedSize, OutputChannels]
         using var weightsTransposedBuffer = backend.AllocateBuffer(aggregatedSize * OutputChannels);

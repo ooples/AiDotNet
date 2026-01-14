@@ -256,7 +256,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         var results = new List<(int, double)>();
         for (int i = 0; i < probabilities.Length; i++)
         {
-            results.Add((i, Convert.ToDouble(probabilities.Data[i])));
+            results.Add((i, Convert.ToDouble(probabilities.Data.Span[i])));
         }
 
         return results.OrderByDescending(x => x.Item2).Take(topK).ToList();
@@ -303,7 +303,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
@@ -335,20 +335,20 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < logits.Length; i++)
         {
-            double val = Convert.ToDouble(logits.Data[i]);
+            double val = Convert.ToDouble(logits.Data.Span[i]);
             if (val > maxVal) maxVal = val;
         }
 
         double sum = 0;
         for (int i = 0; i < logits.Length; i++)
         {
-            sum += Math.Exp(Convert.ToDouble(logits.Data[i]) - maxVal);
+            sum += Math.Exp(Convert.ToDouble(logits.Data.Span[i]) - maxVal);
         }
 
         for (int i = 0; i < logits.Length; i++)
         {
-            double prob = Math.Exp(Convert.ToDouble(logits.Data[i]) - maxVal) / sum;
-            result.Data[i] = NumOps.FromDouble(prob);
+            double prob = Math.Exp(Convert.ToDouble(logits.Data.Span[i]) - maxVal) / sum;
+            result.Data.Span[i] = NumOps.FromDouble(prob);
         }
 
         return result;

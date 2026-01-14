@@ -351,7 +351,7 @@ public class MultiplyLayer<T> : LayerBase<T>
         var gpuInputBuffers = new IGpuBuffer[numInputs];
         for (int i = 0; i < numInputs; i++)
         {
-            float[] floatData = DirectGpuEngine.ToFloatArray(_lastInputs[i].Data);
+            float[] floatData = DirectGpuEngine.ToFloatArray(_lastInputs[i].Data.ToArray());
             gpuInputBuffers[i] = backend.AllocateBuffer(floatData);
         }
 

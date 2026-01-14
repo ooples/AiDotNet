@@ -356,9 +356,9 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleT = NumOps.FromDouble(scale);
         for (int i = 0; i < a.Length; i++)
         {
-            output.Data[i] = NumOps.Add(
-                NumOps.Multiply(a.Data[i], scaleT),
-                b.Data[i]);
+            output.Data.Span[i] = NumOps.Add(
+                NumOps.Multiply(a.Data.Span[i], scaleT),
+                b.Data.Span[i]);
         }
         return output;
     }
@@ -372,7 +372,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleT = NumOps.FromDouble(scale);
         for (int i = 0; i < gradient.Length; i++)
         {
-            output.Data[i] = NumOps.Multiply(gradient.Data[i], scaleT);
+            output.Data.Span[i] = NumOps.Multiply(gradient.Data.Span[i], scaleT);
         }
         return output;
     }
@@ -385,7 +385,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {
-            output.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+            output.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
         return output;
     }
@@ -484,7 +484,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleTensor = new Tensor<T>(node.Value.Shape);
         for (int i = 0; i < scaleTensor.Length; i++)
         {
-            scaleTensor.Data[i] = scaleValue;
+            scaleTensor.Data.Span[i] = scaleValue;
         }
 
         var scaleNode = TensorOperations<T>.Constant(scaleTensor, name);

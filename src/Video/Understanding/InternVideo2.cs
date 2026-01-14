@@ -327,7 +327,7 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
@@ -399,8 +399,8 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
         int minLen = Math.Min(a.Data.Length, b.Data.Length);
         for (int i = 0; i < minLen; i++)
         {
-            double valA = NumOps.ToDouble(a.Data[i]);
-            double valB = NumOps.ToDouble(b.Data[i]);
+            double valA = NumOps.ToDouble(a.Data.Span[i]);
+            double valB = NumOps.ToDouble(b.Data.Span[i]);
             dotProduct += valA * valB;
             normA += valA * valA;
             normB += valB * valB;

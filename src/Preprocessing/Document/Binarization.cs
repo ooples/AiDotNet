@@ -90,7 +90,7 @@ public class Binarization<T> : IDisposable
         var histogram = new int[256];
         for (int i = 0; i < gray.Length; i++)
         {
-            int bin = PreprocessingHelpers.Clamp((int)(_numOps.ToDouble(gray.Data[i]) * 255), 0, 255);
+            int bin = PreprocessingHelpers.Clamp((int)(_numOps.ToDouble(gray.Data.Span[i]) * 255), 0, 255);
             histogram[bin]++;
         }
 
@@ -269,7 +269,7 @@ public class Binarization<T> : IDisposable
 
         for (int i = 0; i < gray.Length; i++)
         {
-            double value = _numOps.ToDouble(gray.Data[i]);
+            double value = _numOps.ToDouble(gray.Data.Span[i]);
             result[i] = value > threshold ? _numOps.FromDouble(1.0) : _numOps.FromDouble(0.0);
         }
 

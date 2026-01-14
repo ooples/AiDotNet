@@ -327,7 +327,7 @@ public class MemoryManagementTests
         var input = new Tensor<float>(new[] { 1, 64 });
         for (int i = 0; i < input.Data.Length; i++)
         {
-            input.Data[i] = 1.0f;
+            input.Data.Span[i] = 1.0f;
         }
 
         // Act
@@ -349,7 +349,7 @@ public class MemoryManagementTests
         var input = new Tensor<float>(new[] { 1, 64 });
         for (int i = 0; i < input.Data.Length; i++)
         {
-            input.Data[i] = 1.0f;
+            input.Data.Span[i] = 1.0f;
         }
         var output = shard.Forward(input);
 
@@ -357,7 +357,7 @@ public class MemoryManagementTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Data.Length; i++)
         {
-            gradient.Data[i] = 1.0f;
+            gradient.Data.Span[i] = 1.0f;
         }
 
         // Act

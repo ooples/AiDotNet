@@ -256,8 +256,8 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
 
         // Upload gamma and beta to GPU
-        float[] gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data);
-        float[] betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data);
+        float[] gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data.ToArray());
+        float[] betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data.ToArray());
         using var gammaBuffer = backend.AllocateBuffer(gammaData);
         using var betaBuffer = backend.AllocateBuffer(betaData);
 

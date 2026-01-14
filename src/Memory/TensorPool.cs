@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 
 namespace AiDotNet.Memory;
@@ -44,9 +45,11 @@ namespace AiDotNet.Memory;
 public class TensorPool<T> : IDisposable
 {
     private readonly ConcurrentDictionary<int, ConcurrentBag<TensorEntry>> _tensorPools;
+    private readonly ConcurrentDictionary<int, ConcurrentBag<MemoryEntry>> _memoryPools;
     private readonly PoolingOptions _options;
     private long _currentMemoryBytes;
     private int _totalPooledTensors;
+    private int _totalPooledMemory;
     private bool _disposed;
 
     /// <summary>
@@ -94,6 +97,7 @@ public class TensorPool<T> : IDisposable
     {
         _options = options ?? new PoolingOptions();
         _tensorPools = new ConcurrentDictionary<int, ConcurrentBag<TensorEntry>>();
+        _memoryPools = new ConcurrentDictionary<int, ConcurrentBag<MemoryEntry>>();
     }
 
     /// <summary>
@@ -204,18 +208,97 @@ public class TensorPool<T> : IDisposable
     }
 
     /// <summary>
-    /// Removes all tensors from the pool and resets memory tracking.
+    /// Rents raw memory from the pool for lower-level operations.
+    /// Returns an IMemoryOwner that automatically returns the memory when disposed.
+    /// </summary>
+    /// <param name="elementCount">The number of elements to allocate.</param>
+    /// <returns>An IMemoryOwner wrapping the pooled memory.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the pool has been disposed.</exception>
+    /// <example>
+    /// <code>
+    /// using var memory = pool.RentMemory(1024);
+    /// var span = memory.Memory.Span;
+    /// // Use span... memory is automatically returned when block exits
+    /// </code>
+    /// </example>
+    public IMemoryOwner<T> RentMemory(int elementCount)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(TensorPool<T>));
+
+        if (elementCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(elementCount), "Element count must be positive.");
+
+        if (!_options.Enabled || elementCount > _options.MaxElementsToPool)
+            return new PooledMemoryOwner<T>(this, new T[elementCount]);
+
+        var key = elementCount; // Use element count as key for memory pools
+
+        if (_memoryPools.TryGetValue(key, out var pool))
+        {
+            while (pool.TryTake(out var entry))
+            {
+                UpdateMemoryUsage(-entry.SizeBytes);
+                Interlocked.Decrement(ref _totalPooledMemory);
+
+                if (entry.Array is not null && entry.Array.Length == elementCount)
+                {
+                    Array.Clear(entry.Array, 0, entry.Array.Length);
+                    return new PooledMemoryOwner<T>(this, entry.Array);
+                }
+            }
+        }
+
+        return new PooledMemoryOwner<T>(this, new T[elementCount]);
+    }
+
+    /// <summary>
+    /// Returns memory to the pool for future reuse.
+    /// Called automatically when PooledMemoryOwner is disposed.
+    /// </summary>
+    /// <param name="array">The array to return to the pool.</param>
+    internal void ReturnMemory(T[]? array)
+    {
+        if (_disposed || array == null)
+            return;
+
+        if (array.Length > _options.MaxElementsToPool)
+            return;
+
+        var sizeBytes = GetTensorSizeBytes(array.Length);
+        if (!TryReserveMemory(sizeBytes))
+            return;
+
+        var key = array.Length;
+        var pool = _memoryPools.GetOrAdd(key, _ => new ConcurrentBag<MemoryEntry>());
+
+        if (pool.Count < _options.MaxItemsPerBucket)
+        {
+            pool.Add(new MemoryEntry { Array = array, SizeBytes = sizeBytes });
+            Interlocked.Increment(ref _totalPooledMemory);
+        }
+        else
+        {
+            UpdateMemoryUsage(-sizeBytes);
+        }
+    }
+
+    /// <summary>
+    /// Removes all tensors and memory from the pool and resets memory tracking.
     /// </summary>
     /// <remarks>
-    /// After calling Clear, all pooled tensors become eligible for garbage collection.
-    /// New tensors can still be rented and returned after clearing.
+    /// After calling Clear, all pooled tensors and memory become eligible for garbage collection.
+    /// New tensors and memory can still be rented and returned after clearing.
     /// </remarks>
     public void Clear()
     {
         foreach (var pool in _tensorPools.Values)
             while (pool.TryTake(out _)) { }
+        foreach (var pool in _memoryPools.Values)
+            while (pool.TryTake(out _)) { }
         Interlocked.Exchange(ref _currentMemoryBytes, 0);
         Interlocked.Exchange(ref _totalPooledTensors, 0);
+        Interlocked.Exchange(ref _totalPooledMemory, 0);
     }
 
     /// <summary>
@@ -297,13 +380,19 @@ public class TensorPool<T> : IDisposable
 
     private static void ClearTensor(Tensor<T> tensor)
     {
-        // Array.Clear uses optimized native code, ~100x faster than element-wise loop
-        Array.Clear(tensor.Data, 0, tensor.Data.Length);
+        // Use Span.Clear for zero-copy clearing of tensor data
+        tensor.AsWritableSpan().Clear();
     }
 
     private struct TensorEntry
     {
         public Tensor<T>? Tensor;
+        public long SizeBytes;
+    }
+
+    private struct MemoryEntry
+    {
+        public T[]? Array;
         public long SizeBytes;
     }
 
@@ -319,5 +408,45 @@ public class TensorPool<T> : IDisposable
             _disposed = true;
         }
         GC.SuppressFinalize(this);
+    }
+}
+
+/// <summary>
+/// An IMemoryOwner implementation that returns memory to the pool when disposed.
+/// </summary>
+/// <typeparam name="T">The element type of the memory.</typeparam>
+public sealed class PooledMemoryOwner<T> : IMemoryOwner<T>
+{
+    private readonly TensorPool<T>? _pool;
+    private T[]? _array;
+
+    internal PooledMemoryOwner(TensorPool<T>? pool, T[] array)
+    {
+        _pool = pool;
+        _array = array;
+    }
+
+    /// <summary>
+    /// Gets the Memory wrapped by this owner.
+    /// </summary>
+    public Memory<T> Memory => _array ?? Memory<T>.Empty;
+
+    /// <summary>
+    /// Gets the underlying array (internal use for pool return).
+    /// </summary>
+    internal T[]? Array => _array;
+
+    /// <summary>
+    /// Returns the memory to the pool and releases the reference.
+    /// </summary>
+    public void Dispose()
+    {
+        var array = _array;
+        _array = null;
+
+        if (array != null && _pool != null)
+        {
+            _pool.ReturnMemory(array);
+        }
     }
 }

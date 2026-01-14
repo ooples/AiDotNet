@@ -292,7 +292,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     int idx = start + i;
                     if (idx < rawAudio.Length)
                     {
-                        double sample = _numOps.ToDouble(rawAudio.Data[idx]);
+                        double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
                         // Simplified mel bin calculation
                         double melWeight = Math.Exp(-Math.Pow(m - (double)i / _windowSize * _numMelBands, 2) / 10);
                         sum += Math.Abs(sample) * melWeight;
@@ -400,7 +400,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                                 if (specIdx < melSpec.Length && wIdx < _audioPatchEmbedWeight.Length)
                                 {
                                     sum = _numOps.Add(sum, _numOps.Multiply(
-                                        melSpec.Data[specIdx],
+                                        melSpec.Data.Span[specIdx],
                                         _audioPatchEmbedWeight[wIdx]));
                                 }
                             }
@@ -446,7 +446,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             for (int d = 0; d < _embeddingDim; d++)
             {
                 int idx = b * (numPatches + 1) * _embeddingDim + d;
-                clsTokens[b * _embeddingDim + d] = hidden.Data[idx];
+                clsTokens[b * _embeddingDim + d] = hidden.Data.Span[idx];
             }
         }
 
@@ -514,7 +514,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         for (int d = 0; d < _embeddingDim; d++)
         {
             int idx = (seqLen - 1) * _embeddingDim + d;
-            lastToken[d] = hidden.Data[idx];
+            lastToken[d] = hidden.Data.Span[idx];
         }
 
         // Project to embedding space
@@ -597,8 +597,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int len = Math.Min(a.Length, b.Length);
         for (int i = 0; i < len; i++)
         {
-            double valA = _numOps.ToDouble(a.Data[i]);
-            double valB = _numOps.ToDouble(b.Data[i]);
+            double valA = _numOps.ToDouble(a.Data.Span[i]);
+            double valB = _numOps.ToDouble(b.Data.Span[i]);
             dot += valA * valB;
             normA += valA * valA;
             normB += valB * valB;
@@ -624,7 +624,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             for (int d = 0; d < dim; d++)
             {
                 int idx = b * dim + d;
-                double val = _numOps.ToDouble(embeddings.Data[idx]);
+                double val = _numOps.ToDouble(embeddings.Data.Span[idx]);
                 norm += val * val;
             }
             norm = Math.Sqrt(norm + 1e-10);
@@ -632,7 +632,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             for (int d = 0; d < dim; d++)
             {
                 int idx = b * dim + d;
-                normalized[idx] = _numOps.FromDouble(_numOps.ToDouble(embeddings.Data[idx]) / norm);
+                normalized[idx] = _numOps.FromDouble(_numOps.ToDouble(embeddings.Data.Span[idx]) / norm);
             }
         }
 
@@ -657,7 +657,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         return new AudioFingerprint<T>
         {
-            Data = embedding.Data,
+            Data = embedding.Data.ToArray(),
             Duration = duration,
             SampleRate = SampleRate,
             Algorithm = Name,
@@ -680,8 +680,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
-        var tensor1 = new Tensor<T>(fp1.Data, new[] { fp1.Data.Length });
-        var tensor2 = new Tensor<T>(fp2.Data, new[] { fp2.Data.Length });
+        var tensor1 = new Tensor<T>(fp1.Data.ToArray(), new[] { fp1.Data.Length });
+        var tensor2 = new Tensor<T>(fp2.Data.ToArray(), new[] { fp2.Data.Length });
         return ComputeCosineSimilarity(tensor1, tensor2);
     }
 
@@ -757,8 +757,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int tIdx = i * _projectionDim + d; // Positive pair
                 if (aIdx < audioEmb.Length && tIdx < textEmb.Length)
                 {
-                    positiveScore += _numOps.ToDouble(audioEmb.Data[aIdx]) *
-                                    _numOps.ToDouble(textEmb.Data[tIdx]);
+                    positiveScore += _numOps.ToDouble(audioEmb.Data.Span[aIdx]) *
+                                    _numOps.ToDouble(textEmb.Data.Span[tIdx]);
                 }
             }
 
@@ -771,8 +771,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     int tIdx = j * _projectionDim + d;
                     if (aIdx < audioEmb.Length && tIdx < textEmb.Length)
                     {
-                        score += _numOps.ToDouble(audioEmb.Data[aIdx]) *
-                                _numOps.ToDouble(textEmb.Data[tIdx]);
+                        score += _numOps.ToDouble(audioEmb.Data.Span[aIdx]) *
+                                _numOps.ToDouble(textEmb.Data.Span[tIdx]);
                     }
                 }
                 negativeSum += Math.Exp(score / temp);
@@ -1017,7 +1017,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             var attended = new T[input.Length];
             for (int i = 0; i < input.Length; i++)
             {
-                attended[i] = input.Data[i]; // Placeholder for actual attention
+                attended[i] = input.Data.Span[i]; // Placeholder for actual attention
             }
 
             // Residual + LayerNorm
@@ -1047,7 +1047,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                         int idx = b * seqLen * dim + s * dim + d;
                         double val = (_ops.ToDouble(attended[idx]) - mean) / variance;
                         val = val * _ops.ToDouble(_norm1Gamma[d]) + _ops.ToDouble(_norm1Beta[d]);
-                        normed[idx] = _ops.Add(input.Data[idx], _ops.FromDouble(val));
+                        normed[idx] = _ops.Add(input.Data.Span[idx], _ops.FromDouble(val));
                     }
                 }
             }

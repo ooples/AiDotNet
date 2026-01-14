@@ -276,7 +276,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         var results = new List<(int, double)>();
         for (int i = 0; i < probabilities.Length; i++)
         {
-            results.Add((i, Convert.ToDouble(probabilities.Data[i])));
+            results.Add((i, Convert.ToDouble(probabilities.Data.Span[i])));
         }
 
         return results.OrderByDescending(x => x.Item2).Take(topK).ToList();
@@ -363,7 +363,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             {
                 int srcOffset = b * totalChannels * h * w + srcFrame * channelsPerFrame * h * w;
                 int dstOffset = b * subsampledChannels * h * w + dstFrame * channelsPerFrame * h * w;
-                Array.Copy(input.Data, srcOffset, result.Data, dstOffset, Math.Min(srcFrameSize, dstFrameSize));
+                int copyLen = Math.Min(srcFrameSize, dstFrameSize);
+                input.Data.Span.Slice(srcOffset, copyLen).CopyTo(result.Data.Span.Slice(dstOffset, copyLen));
                 dstFrame++;
             }
         }
@@ -397,8 +398,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         for (int bi = 0; bi < batch; bi++)
         {
-            Array.Copy(a.Data, bi * aSliceSize, result.Data, bi * resultSliceSize, aSliceSize);
-            Array.Copy(b.Data, bi * bSliceSize, result.Data, bi * resultSliceSize + aSliceSize, bSliceSize);
+            a.Data.Span.Slice(bi * aSliceSize, aSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize, aSliceSize));
+            b.Data.Span.Slice(bi * bSliceSize, bSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize + aSliceSize, bSliceSize));
         }
 
         return result;
@@ -433,7 +434,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
@@ -533,8 +534,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         for (int bi = 0; bi < batch; bi++)
         {
-            Array.Copy(fusedGradient.Data, bi * totalSliceSize, slowGrad.Data, bi * slowSliceSize, slowSliceSize);
-            Array.Copy(fusedGradient.Data, bi * totalSliceSize + slowSliceSize, fastGrad.Data, bi * fastSliceSize, fastSliceSize);
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize, slowSliceSize).CopyTo(slowGrad.Data.Span.Slice(bi * slowSliceSize, slowSliceSize));
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize + slowSliceSize, fastSliceSize).CopyTo(fastGrad.Data.Span.Slice(bi * fastSliceSize, fastSliceSize));
         }
 
         return (slowGrad, fastGrad);

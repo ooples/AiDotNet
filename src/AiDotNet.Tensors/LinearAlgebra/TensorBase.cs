@@ -58,14 +58,13 @@ public abstract class TensorBase<T>
     public int Rank => Shape.Length;
 
     /// <summary>
-    /// Gets direct access to the underlying data array for high-performance operations.
+    /// Gets the underlying data as a Memory&lt;T&gt; for zero-copy access.
     /// </summary>
     /// <remarks>
-    /// <para><b>Warning:</b> This property provides direct access to internal storage.
-    /// Modifications to this array will affect the tensor. Use with caution in
-    /// performance-critical code paths like SIMD operations.</para>
+    /// <para><b>For Beginners:</b> This provides direct access to the tensor's data without copying.
+    /// Use .Span for indexed access or iteration. Use this for async operations.</para>
     /// </remarks>
-    internal T[] Data => _data.Data;
+    internal Memory<T> Data => _data.AsWritableMemory();
 
     /// <summary>
     /// Creates a new array containing a copy of the tensor's elements in flattened order.
@@ -101,7 +100,7 @@ public abstract class TensorBase<T>
         {
             throw new ArgumentException($"Source array length ({source.Length}) must match tensor length ({_data.Length}).");
         }
-        Array.Copy(source, _data.Data, source.Length);
+        source.AsSpan().CopyTo(_data.AsWritableSpan());
     }
 
     /// <summary>

@@ -252,7 +252,7 @@ public class DocumentPreprocessor<T> : IDisposable
 
         for (int i = 0; i < image.Length; i++)
         {
-            double val = _numOps.ToDouble(image.Data[i]);
+            double val = _numOps.ToDouble(image.Data.Span[i]);
             if (val < min) min = val;
             if (val > max) max = val;
         }
@@ -264,7 +264,7 @@ public class DocumentPreprocessor<T> : IDisposable
         var result = new T[image.Length];
         for (int i = 0; i < image.Length; i++)
         {
-            double val = _numOps.ToDouble(image.Data[i]);
+            double val = _numOps.ToDouble(image.Data.Span[i]);
             result[i] = _numOps.FromDouble((val - min) / range);
         }
 

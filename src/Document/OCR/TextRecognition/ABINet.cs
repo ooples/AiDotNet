@@ -236,7 +236,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data[i] = NumOps.FromDouble(randStdNormal * stdDev);
+            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
     }
 
@@ -340,8 +340,8 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         for (int i = 0; i < processed.Data.Length; i++)
         {
-            double val = NumOps.ToDouble(processed.Data[i]);
-            normalized.Data[i] = NumOps.FromDouble((val / 255.0 - 0.5) / 0.5);
+            double val = NumOps.ToDouble(processed.Data.Span[i]);
+            normalized.Data.Span[i] = NumOps.FromDouble((val / 255.0 - 0.5) / 0.5);
         }
 
         return normalized;

@@ -57,7 +57,7 @@ public class MultimodalInput<T>
             InternalData = new Tensor<T>([channels, height, width])
         };
         var srcData = pixels.ToArray();
-        Array.Copy(srcData, input.InternalData.Data, Math.Min(srcData.Length, input.InternalData.Data.Length));
+        Array.Copy(srcData, input.InternalData.Data.ToArray(), Math.Min(srcData.Length, input.InternalData.Data.Length));
         return input;
     }
 
@@ -77,7 +77,7 @@ public class MultimodalInput<T>
             InternalData = new Tensor<T>([1, samples.Length])
         };
         var srcData = samples.ToArray();
-        Array.Copy(srcData, input.InternalData.Data, srcData.Length);
+        Array.Copy(srcData, input.InternalData.Data.ToArray(), srcData.Length);
         return input;
     }
 
@@ -101,7 +101,7 @@ public class MultimodalInput<T>
             InternalData = new Tensor<T>([numFrames, channels, height, width])
         };
         var srcData = frames.ToArray();
-        Array.Copy(srcData, input.InternalData.Data, Math.Min(srcData.Length, input.InternalData.Data.Length));
+        Array.Copy(srcData, input.InternalData.Data.ToArray(), Math.Min(srcData.Length, input.InternalData.Data.Length));
         return input;
     }
 }
@@ -134,7 +134,7 @@ public class MultimodalOutput<T>
     {
         if (Modality != ModalityType.Image || InternalData is null)
             return null;
-        return new Vector<T>((T[])InternalData.Data.Clone());
+        return new Vector<T>(InternalData.Data.ToArray());
     }
 
     /// <summary>
@@ -154,7 +154,7 @@ public class MultimodalOutput<T>
     {
         if (Modality != ModalityType.Audio || InternalData is null)
             return null;
-        return new Vector<T>((T[])InternalData.Data.Clone());
+        return new Vector<T>(InternalData.Data.ToArray());
     }
 
     /// <summary>
@@ -164,7 +164,7 @@ public class MultimodalOutput<T>
     {
         if (Modality != ModalityType.Video || InternalData is null)
             return null;
-        return new Vector<T>((T[])InternalData.Data.Clone());
+        return new Vector<T>(InternalData.Data.ToArray());
     }
 
     /// <summary>

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.CUDA;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
@@ -347,6 +349,54 @@ public sealed class DirectGpuEngine : IDisposable
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new float[data.Length];
         numOps.ToFloatSpan(new ReadOnlySpan<T>(data), new Span<float>(result));
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a Memory&lt;T&gt; to a float array for GPU operations.
+    /// </summary>
+    public static float[] ToFloatArray<T>(Memory<T> data)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            // Try to get underlying array without copying using MemoryMarshal
+            var floatMemory = Unsafe.As<Memory<T>, Memory<float>>(ref data);
+            if (MemoryMarshal.TryGetArray((ReadOnlyMemory<float>)floatMemory, out var segment)
+                && segment.Offset == 0
+                && segment.Array != null)
+            {
+                return segment.Array;
+            }
+            return floatMemory.ToArray();
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new float[data.Length];
+        numOps.ToFloatSpan(data.Span, new Span<float>(result));
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a ReadOnlyMemory&lt;T&gt; to a float array for GPU operations.
+    /// </summary>
+    public static float[] ToFloatArray<T>(ReadOnlyMemory<T> data)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            // Try to get underlying array without copying using MemoryMarshal
+            var floatMemory = Unsafe.As<ReadOnlyMemory<T>, ReadOnlyMemory<float>>(ref data);
+            if (MemoryMarshal.TryGetArray(floatMemory, out var segment)
+                && segment.Offset == 0
+                && segment.Array != null)
+            {
+                return segment.Array;
+            }
+            return floatMemory.ToArray();
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new float[data.Length];
+        numOps.ToFloatSpan(data.Span, new Span<float>(result));
         return result;
     }
 

@@ -265,7 +265,7 @@ public class MemoryBank<T> : IMemoryBank<T>
         int storageOffset = index * _embeddingDim;
 
         // Handle both [1, dim] and [dim] shapes
-        var flatData = embedding.Data;
+        var flatData = embedding.Data.Span;
         if (flatData.Length != _embeddingDim)
         {
             throw new ArgumentException(

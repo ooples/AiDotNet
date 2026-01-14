@@ -263,8 +263,8 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         var reductionParams = _reduction.GetParameters();
 
         var result = new T[normParams.Length + reductionParams.Length];
-        Array.Copy(normParams.Data, 0, result, 0, normParams.Length);
-        Array.Copy(reductionParams.Data, 0, result, normParams.Length, reductionParams.Length);
+        normParams.AsSpan().CopyTo(result.AsSpan(0, normParams.Length));
+        reductionParams.AsSpan().CopyTo(result.AsSpan(normParams.Length, reductionParams.Length));
 
         return new Vector<T>(result);
     }
@@ -278,8 +278,8 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         var normParams = new T[normCount];
         var reductionParams = new T[reductionCount];
 
-        Array.Copy(parameters.Data, 0, normParams, 0, normCount);
-        Array.Copy(parameters.Data, normCount, reductionParams, 0, reductionCount);
+        parameters.AsSpan().Slice(0, normCount).CopyTo(normParams);
+        parameters.AsSpan().Slice(normCount, reductionCount).CopyTo(reductionParams);
 
         _norm.SetParameters(new Vector<T>(normParams));
         _reduction.SetParameters(new Vector<T>(reductionParams));
@@ -292,8 +292,8 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         var reductionGrads = _reduction.GetParameterGradients();
 
         var result = new T[normGrads.Length + reductionGrads.Length];
-        Array.Copy(normGrads.Data, 0, result, 0, normGrads.Length);
-        Array.Copy(reductionGrads.Data, 0, result, normGrads.Length, reductionGrads.Length);
+        normGrads.AsSpan().CopyTo(result.AsSpan(0, normGrads.Length));
+        reductionGrads.AsSpan().CopyTo(result.AsSpan(normGrads.Length, reductionGrads.Length));
 
         return new Vector<T>(result);
     }

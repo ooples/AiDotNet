@@ -146,7 +146,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         {
             for (int j = 0; j < _inputChannels; j++)
             {
-                inputMatrix[i, j] = input.Data[i * _inputChannels + j];
+                inputMatrix[i, j] = input.Data.Span[i * _inputChannels + j];
             }
         }
 
@@ -208,7 +208,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         {
             for (int j = 0; j < _inputChannels; j++)
             {
-                inputMatrix[i, j] = _lastInput.Data[i * _inputChannels + j];
+                inputMatrix[i, j] = _lastInput.Data.Span[i * _inputChannels + j];
             }
         }
 
@@ -217,7 +217,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         {
             for (int j = 0; j < _outputChannels; j++)
             {
-                gradMatrix[i, j] = gradientTensor.Data[i * _outputChannels + j];
+                gradMatrix[i, j] = gradientTensor.Data.Span[i * _outputChannels + j];
             }
         }
 

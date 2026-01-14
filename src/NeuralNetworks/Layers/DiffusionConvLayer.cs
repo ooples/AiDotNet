@@ -1490,7 +1490,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         _weights = _gpuWeights.ToTensor();
         _biases = _gpuBiases.ToTensor();
 
-        var updatedTimes = _gpuDiffusionTimes.ToTensor().Data;
+        var updatedTimes = _gpuDiffusionTimes.ToTensor().Data.Span;
         for (int t = 0; t < NumTimeScales; t++)
         {
             DiffusionTimes[t] = updatedTimes[t];

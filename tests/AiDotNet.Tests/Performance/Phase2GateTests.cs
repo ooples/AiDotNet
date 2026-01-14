@@ -77,7 +77,7 @@ public class Phase2GateTests
         var tensor = pool.Rent(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data[i] = 42.0f;
+            tensor.Data.Span[i] = 42.0f;
         }
 
         // Return and rent again
@@ -87,7 +87,7 @@ public class Phase2GateTests
         // All values should be zero
         for (int i = 0; i < tensor2.Length; i++)
         {
-            Assert.Equal(0.0f, tensor2.Data[i]);
+            Assert.Equal(0.0f, tensor2.Data.Span[i]);
         }
 
         pool.Dispose();
@@ -112,7 +112,7 @@ public class Phase2GateTests
                 // Simulate some work
                 for (int j = 0; j < 10; j++)
                 {
-                    tensor.Data[j] = (float)i;
+                    tensor.Data.Span[j] = (float)i;
                 }
 
                 pool.Return(tensor);
@@ -254,11 +254,11 @@ public class Phase2GateTests
         // Set some non-zero values
         for (int i = 0; i < weights.Length; i++)
         {
-            weights.Data[i] = 42.0f;
+            weights.Data.Span[i] = 42.0f;
         }
         for (int i = 0; i < biases.Length; i++)
         {
-            biases.Data[i] = 42.0f;
+            biases.Data.Span[i] = 42.0f;
         }
 
         // Initialize with zero strategy
@@ -268,11 +268,11 @@ public class Phase2GateTests
         // All values should be zero
         for (int i = 0; i < weights.Length; i++)
         {
-            Assert.Equal(0.0f, weights.Data[i]);
+            Assert.Equal(0.0f, weights.Data.Span[i]);
         }
         for (int i = 0; i < biases.Length; i++)
         {
-            Assert.Equal(0.0f, biases.Data[i]);
+            Assert.Equal(0.0f, biases.Data.Span[i]);
         }
     }
 
@@ -292,12 +292,12 @@ public class Phase2GateTests
         bool hasNonZero = false;
         for (int i = 0; i < weights.Length; i++)
         {
-            if (Math.Abs(weights.Data[i]) > 0.0001f)
+            if (Math.Abs(weights.Data.Span[i]) > 0.0001f)
             {
                 hasNonZero = true;
             }
-            Assert.True(Math.Abs(weights.Data[i]) < maxExpected,
-                $"Weight {weights.Data[i]} exceeds expected range for Xavier init");
+            Assert.True(Math.Abs(weights.Data.Span[i]) < maxExpected,
+                $"Weight {weights.Data.Span[i]} exceeds expected range for Xavier init");
         }
 
         Assert.True(hasNonZero, "Xavier initialization should produce non-zero weights");
@@ -425,7 +425,7 @@ public class Phase2GateTests
         var input = new Tensor<float>(new[] { 1, 10 });
         for (int i = 0; i < 10; i++)
         {
-            input.Data[i] = 1.0f;
+            input.Data.Span[i] = 1.0f;
         }
 
         // After forward, lazy layer should be initialized and produce output

@@ -774,8 +774,8 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                         ? b * 2 * height * width + height * width + h * width + w
                         : height * width + h * width + w;
 
-                    double dx = NumOps.ToDouble(flow.Data[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data[flowIdxY]);
+                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
+                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
 
                     double srcX = w + dx;
                     double srcY = h + dy;
@@ -787,7 +787,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                         int outIdx = hasBatch
                             ? b * channels * height * width + c * height * width + h * width + w
                             : c * height * width + h * width + w;
-                        warped.Data[outIdx] = value;
+                        warped.Data.Span[outIdx] = value;
                     }
                 }
             }
@@ -834,7 +834,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         int idx = hasBatch
             ? b * channels * height * width + c * height * width + h * width + w
             : c * height * width + h * width + w;
-        return tensor.Data[idx];
+        return tensor.Data.Span[idx];
     }
 
     private Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
@@ -863,7 +863,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    output.Data[dstOffset + i] = feat1.Data[srcOffset + i];
+                    output.Data.Span[dstOffset + i] = feat1.Data.Span[srcOffset + i];
                 }
             }
 
@@ -875,7 +875,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    output.Data[dstOffset + i] = feat2.Data[srcOffset + i];
+                    output.Data.Span[dstOffset + i] = feat2.Data.Span[srcOffset + i];
                 }
             }
         }
@@ -895,7 +895,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < frameSize; i++)
         {
-            frame.Data[i] = frames.Data[srcOffset + i];
+            frame.Data.Span[i] = frames.Data.Span[srcOffset + i];
         }
 
         return frame;
@@ -911,7 +911,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < frameSize; i++)
         {
-            output.Data[dstOffset + i] = frame.Data[i];
+            output.Data.Span[dstOffset + i] = frame.Data.Span[i];
         }
     }
 
@@ -928,7 +928,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         var inputData = new float[frames.Length];
         for (int i = 0; i < frames.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(frames.Data[i]);
+            inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape);
@@ -963,12 +963,12 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < output.Length; i++)
         {
-            T diff = NumOps.Subtract(output.Data[i], target.Data[i]);
+            T diff = NumOps.Subtract(output.Data.Span[i], target.Data.Span[i]);
             // Charbonnier loss gradient: diff / sqrt(diff^2 + epsilon^2)
             double d = NumOps.ToDouble(diff);
             double eps = 1e-6;
             double grad = d / Math.Sqrt(d * d + eps * eps);
-            gradient.Data[i] = NumOps.FromDouble(grad);
+            gradient.Data.Span[i] = NumOps.FromDouble(grad);
         }
 
         return gradient;
@@ -1179,7 +1179,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    firstGrad.Data[dstOffset + i] = gradient.Data[srcOffset + i];
+                    firstGrad.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
                 }
             }
 
@@ -1195,7 +1195,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
                 for (int i = 0; i < pixelsPerChannel; i++)
                 {
-                    secondGrad.Data[dstOffset + i] = gradient.Data[srcOffset + i];
+                    secondGrad.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
                 }
             }
         }
@@ -1233,8 +1233,8 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                         ? b * 2 * height * width + height * width + h * width + w
                         : height * width + h * width + w;
 
-                    double dx = NumOps.ToDouble(flow.Data[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data[flowIdxY]);
+                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
+                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
 
                     double srcX = w + dx;
                     double srcY = h + dy;
@@ -1266,7 +1266,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                             ? b * channels * height * width + c * height * width + h * width + w
                             : c * height * width + h * width + w;
 
-                        double grad = NumOps.ToDouble(outputGrad.Data[outIdx]);
+                        double grad = NumOps.ToDouble(outputGrad.Data.Span[outIdx]);
 
                         // Distribute gradient to input feature positions
                         int idx00 = hasBatch
@@ -1283,13 +1283,13 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                             : c * height * width + y1c * width + x1c;
 
                         // Add gradient contribution to feature gradient
-                        featureGrad.Data[idx00] = NumOps.Add(featureGrad.Data[idx00],
+                        featureGrad.Data.Span[idx00] = NumOps.Add(featureGrad.Data.Span[idx00],
                             NumOps.FromDouble(grad * w00));
-                        featureGrad.Data[idx01] = NumOps.Add(featureGrad.Data[idx01],
+                        featureGrad.Data.Span[idx01] = NumOps.Add(featureGrad.Data.Span[idx01],
                             NumOps.FromDouble(grad * w01));
-                        featureGrad.Data[idx10] = NumOps.Add(featureGrad.Data[idx10],
+                        featureGrad.Data.Span[idx10] = NumOps.Add(featureGrad.Data.Span[idx10],
                             NumOps.FromDouble(grad * w10));
-                        featureGrad.Data[idx11] = NumOps.Add(featureGrad.Data[idx11],
+                        featureGrad.Data.Span[idx11] = NumOps.Add(featureGrad.Data.Span[idx11],
                             NumOps.FromDouble(grad * w11));
 
                         // Compute gradient with respect to flow
@@ -1304,9 +1304,9 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                         // dOutput/dy = (v10 - v00) * (1 - wx) + (v11 - v01) * wx
                         double dOutDy = (v10 - v00) * (1 - wx) + (v11 - v01) * wx;
 
-                        flowGrad.Data[flowIdxX] = NumOps.Add(flowGrad.Data[flowIdxX],
+                        flowGrad.Data.Span[flowIdxX] = NumOps.Add(flowGrad.Data.Span[flowIdxX],
                             NumOps.FromDouble(grad * dOutDx));
-                        flowGrad.Data[flowIdxY] = NumOps.Add(flowGrad.Data[flowIdxY],
+                        flowGrad.Data.Span[flowIdxY] = NumOps.Add(flowGrad.Data.Span[flowIdxY],
                             NumOps.FromDouble(grad * dOutDy));
                     }
                 }
@@ -1329,7 +1329,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < target.Length; i++)
         {
-            target.Data[i] = NumOps.Add(target.Data[i], source.Data[i]);
+            target.Data.Span[i] = NumOps.Add(target.Data.Span[i], source.Data.Span[i]);
         }
     }
 

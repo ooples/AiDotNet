@@ -381,7 +381,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var noisyInput = input.Transform((v, idx) =>
         {
             double x0 = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data[idx]);
+            double n = Convert.ToDouble(noise.Data.Span[idx]);
             return NumOps.FromDouble(sqrtAlphaCumprod * x0 + sqrtOneMinusAlphaCumprod * n);
         });
 
@@ -393,7 +393,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         T loss = NumOps.Zero;
         for (int i = 0; i < noise.Length; i++)
         {
-            T diff = NumOps.Subtract(predictedNoise.Data[i], noise.Data[i]);
+            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
             loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
         }
         loss = NumOps.Divide(loss, NumOps.FromDouble(noise.Length));
@@ -404,8 +404,8 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         T scale = NumOps.FromDouble(2.0 / noise.Length);
         for (int i = 0; i < noise.Length; i++)
         {
-            T diff = NumOps.Subtract(predictedNoise.Data[i], noise.Data[i]);
-            gradient.Data[i] = NumOps.Multiply(diff, scale);
+            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
+            gradient.Data.Span[i] = NumOps.Multiply(diff, scale);
         }
 
         // Backpropagate through the network
@@ -476,7 +476,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var latents = new Tensor<T>(shape);
         for (int i = 0; i < latents.Data.Length; i++)
         {
-            latents.Data[i] = NumOps.FromDouble(random.NextGaussian());
+            latents.Data.Span[i] = NumOps.FromDouble(random.NextGaussian());
         }
         return latents;
     }
@@ -489,7 +489,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         return imageLatent.Transform((v, idx) =>
         {
             double img = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data[idx]);
+            double n = Convert.ToDouble(noise.Data.Span[idx]);
             return NumOps.FromDouble(img * 0.5 + n * 0.5);
         });
     }
@@ -501,7 +501,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
             int batch = textEmbedding.Shape[0];
             int dim = textEmbedding.Shape[1];
             var reshaped = new Tensor<T>([batch, dim, 1, 1]);
-            Array.Copy(textEmbedding.Data, reshaped.Data, textEmbedding.Data.Length);
+            textEmbedding.Data.Span.CopyTo(reshaped.Data.Span);
             textEmbedding = reshaped;
         }
 
@@ -628,7 +628,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         return latents.Transform((v, idx) =>
         {
             double x = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data[idx]);
+            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
             double x0 = (x - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod;
             double next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise;
             return NumOps.FromDouble(next);
@@ -640,7 +640,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         return uncond.Transform((v, idx) =>
         {
             double u = Convert.ToDouble(v);
-            double c = Convert.ToDouble(cond.Data[idx]);
+            double c = Convert.ToDouble(cond.Data.Span[idx]);
             return NumOps.FromDouble(u + scale * (c - u));
         });
     }
@@ -744,8 +744,8 @@ public class OpenSora<T> : NeuralNetworkBase<T>
             {
                 for (int j = 0; j < encoded.Length; j++)
                 {
-                    double val = NumOps.ToDouble(encoded.Data[j]);
-                    encoded.Data[j] = NumOps.FromDouble(Math.Max(0, val));
+                    double val = NumOps.ToDouble(encoded.Data.Span[j]);
+                    encoded.Data.Span[j] = NumOps.FromDouble(Math.Max(0, val));
                 }
             }
         }
@@ -856,12 +856,12 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         return features.Transform((v, idx) =>
         {
             int condIdx = idx % condition.Data.Length;
-            return NumOps.Add(v, condition.Data[condIdx]);
+            return NumOps.Add(v, condition.Data.Span[condIdx]);
         });
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
 
     private Tensor<T> Upsample2x(Tensor<T> input)
     {
@@ -1054,7 +1054,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

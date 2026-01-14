@@ -127,7 +127,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         var imageData = new double[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            imageData[i] = NumOps.ToDouble(input.Data[i]);
+            imageData[i] = NumOps.ToDouble(input.Data.Span[i]);
         }
 
         var embedding = EncodeImage(imageData);

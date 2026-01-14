@@ -307,7 +307,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
             // Capture global features after max pooling
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
             {
-                _globalFeatures = new Vector<T>(x.Data);
+                _globalFeatures = new Vector<T>(x.Data.ToArray());
             }
         }
 
@@ -333,7 +333,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
                 int featureChannels = feature.Shape[1];
                 for (int c = 0; c < featureChannels; c++)
                 {
-                    concatenated[n * totalChannels + outIdx++] = feature.Data[n * featureChannels + c];
+                    concatenated[n * totalChannels + outIdx++] = feature.Data.Span[n * featureChannels + c];
                 }
             }
         }
@@ -397,7 +397,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     public Vector<T> ClassifyPointCloud(Tensor<T> pointCloud)
     {
         var output = Predict(pointCloud);
-        return new Vector<T>(output.Data);
+        return new Vector<T>(output.Data.ToArray());
     }
 
     public Tensor<T> SegmentPointCloud(Tensor<T> pointCloud)
@@ -736,14 +736,14 @@ internal class EdgeConvLayer<T> : LayerBase<T>
                 // First half: point feature
                 for (int c = 0; c < _inputChannels; c++)
                 {
-                    edgeFeatures[outIdx + c] = input.Data[i * _inputChannels + c];
+                    edgeFeatures[outIdx + c] = input.Data.Span[i * _inputChannels + c];
                 }
 
                 // Second half: difference feature (neighbor - point)
                 for (int c = 0; c < _inputChannels; c++)
                 {
-                    var neighborFeature = input.Data[neighborIdx * _inputChannels + c];
-                    var pointFeature = input.Data[i * _inputChannels + c];
+                    var neighborFeature = input.Data.Span[neighborIdx * _inputChannels + c];
+                    var pointFeature = input.Data.Span[i * _inputChannels + c];
                     edgeFeatures[outIdx + _inputChannels + c] = numOps.Subtract(neighborFeature, pointFeature);
                 }
             }
@@ -764,12 +764,12 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         {
             for (int c = 0; c < _outputChannels; c++)
             {
-                T maxVal = edgeFeatures.Data[(i * k) * _outputChannels + c];
+                T maxVal = edgeFeatures.Data.Span[(i * k) * _outputChannels + c];
                 int maxIdx = 0;
 
                 for (int kIdx = 1; kIdx < k; kIdx++)
                 {
-                    T val = edgeFeatures.Data[(i * k + kIdx) * _outputChannels + c];
+                    T val = edgeFeatures.Data.Span[(i * k + kIdx) * _outputChannels + c];
                     if (numOps.GreaterThan(val, maxVal))
                     {
                         maxVal = val;
@@ -803,7 +803,7 @@ internal class EdgeConvLayer<T> : LayerBase<T>
             {
                 int maxIdx = _maxIndices[i, c];
                 int edgeIdx = (i * k + maxIdx) * _outputChannels + c;
-                edgeGradients[edgeIdx] = outputGradient.Data[i * _outputChannels + c];
+                edgeGradients[edgeIdx] = outputGradient.Data.Span[i * _outputChannels + c];
             }
         }
 
@@ -823,8 +823,8 @@ internal class EdgeConvLayer<T> : LayerBase<T>
 
                 for (int c = 0; c < _inputChannels; c++)
                 {
-                    var gradSelf = edgeFeatureGradient.Data[baseIdx + c];
-                    var gradDiff = edgeFeatureGradient.Data[baseIdx + _inputChannels + c];
+                    var gradSelf = edgeFeatureGradient.Data.Span[baseIdx + c];
+                    var gradDiff = edgeFeatureGradient.Data.Span[baseIdx + _inputChannels + c];
 
                     inputGradient[i * _inputChannels + c] = numOps.Add(
                         inputGradient[i * _inputChannels + c],

@@ -444,7 +444,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
 
             for (int i = 0; i < totalIndices; i++)
             {
-                int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
+                int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
                 flatIndices[i] = index;
             }
 
@@ -604,7 +604,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         var flatIndices = new Tensor<int>([totalIndices]);
         for (int i = 0; i < totalIndices; i++)
         {
-            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data[i]));
+            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data.Span[i]));
         }
 
         // Cache indices for backward pass
@@ -624,7 +624,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     {
         for (int i = 0; i < input.Length; i++)
         {
-            double val = NumOps.ToDouble(input.Data[i]);
+            double val = NumOps.ToDouble(input.Data.Span[i]);
             if (double.IsNaN(val) || double.IsInfinity(val))
             {
                 return true;
@@ -700,7 +700,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         var flatIndices = new Tensor<int>([totalIndices]);
         for (int i = 0; i < totalIndices; i++)
         {
-            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(_lastInput.Data[i]));
+            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(_lastInput.Data.Span[i]));
         }
 
         // Flatten outputGradient: [..., embeddingDim] -> [totalIndices, embeddingDim]

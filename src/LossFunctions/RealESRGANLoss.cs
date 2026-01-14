@@ -292,7 +292,7 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predictedFeatures.Length; i++)
         {
-            T diff = NumOps.Subtract(predictedFeatures.Data[i], actualFeatures.Data[i]);
+            T diff = NumOps.Subtract(predictedFeatures.Data.Span[i], actualFeatures.Data.Span[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
 

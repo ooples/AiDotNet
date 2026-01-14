@@ -218,7 +218,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
 
         // Calculate loss gradient
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         // Backward pass
         BackwardPass(lossGradient);
@@ -724,7 +724,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
         var result = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {
-            result.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
         return result;
     }
@@ -967,7 +967,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -979,7 +979,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

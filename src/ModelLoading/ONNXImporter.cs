@@ -368,7 +368,7 @@ public class ONNXImporter<T>
                     var floats = MemoryMarshal.Cast<byte, float>(initializer.RawData);
                     for (int i = 0; i < Math.Min(floats.Length, tensor.Length); i++)
                     {
-                        tensor.Data[i] = NumOps.FromDouble(floats[i]);
+                        tensor.Data.Span[i] = NumOps.FromDouble(floats[i]);
                     }
                     break;
 
@@ -376,7 +376,7 @@ public class ONNXImporter<T>
                     var doubles = MemoryMarshal.Cast<byte, double>(initializer.RawData);
                     for (int i = 0; i < Math.Min(doubles.Length, tensor.Length); i++)
                     {
-                        tensor.Data[i] = NumOps.FromDouble(doubles[i]);
+                        tensor.Data.Span[i] = NumOps.FromDouble(doubles[i]);
                     }
                     break;
 
@@ -384,7 +384,7 @@ public class ONNXImporter<T>
                     var fp16 = MemoryMarshal.Cast<byte, Half>(initializer.RawData);
                     for (int i = 0; i < Math.Min(fp16.Length, tensor.Length); i++)
                     {
-                        tensor.Data[i] = NumOps.FromDouble((double)fp16[i]);
+                        tensor.Data.Span[i] = NumOps.FromDouble((double)fp16[i]);
                     }
                     break;
 
@@ -397,7 +397,7 @@ public class ONNXImporter<T>
                         var floatBits = (uint)bf16[i] << 16;
                         // Note: BitConverter.Int32BitsToSingle not available in .NET Framework 4.7.1
                         var value = BitConverter.ToSingle(BitConverter.GetBytes((int)floatBits), 0);
-                        tensor.Data[i] = NumOps.FromDouble(value);
+                        tensor.Data.Span[i] = NumOps.FromDouble(value);
                     }
                     break;
 
@@ -409,7 +409,7 @@ public class ONNXImporter<T>
         {
             for (int i = 0; i < Math.Min(initializer.FloatData.Length, tensor.Length); i++)
             {
-                tensor.Data[i] = NumOps.FromDouble(initializer.FloatData[i]);
+                tensor.Data.Span[i] = NumOps.FromDouble(initializer.FloatData[i]);
             }
         }
 

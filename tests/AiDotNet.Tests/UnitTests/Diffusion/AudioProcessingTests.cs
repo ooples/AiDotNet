@@ -117,7 +117,7 @@ public class AudioProcessingTests
         var signal = new Tensor<float>(new[] { signalLength });
         for (int i = 0; i < signalLength; i++)
         {
-            signal.Data[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000); // 440 Hz sine
+            signal.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000); // 440 Hz sine
         }
 
         // Act
@@ -143,14 +143,14 @@ public class AudioProcessingTests
         var random = new Random(42);
         for (int i = 0; i < signalLength; i++)
         {
-            signal.Data[i] = (float)(random.NextDouble() - 0.5);
+            signal.Data.Span[i] = (float)(random.NextDouble() - 0.5);
         }
 
         // Act
         var magnitude = stft.Magnitude(signal);
 
         // Assert - All magnitudes should be non-negative
-        foreach (var value in magnitude.Data)
+        foreach (var value in magnitude.Data.ToArray())
         {
             Assert.True(value >= 0f, "Magnitude should be non-negative");
         }
@@ -166,7 +166,7 @@ public class AudioProcessingTests
         var signal = new Tensor<float>(new[] { 1024 });
         for (int i = 0; i < 1024; i++)
         {
-            signal.Data[i] = (float)Math.Sin(2 * Math.PI * 100 * i / 8000);
+            signal.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 100 * i / 8000);
         }
 
         // Act
@@ -176,8 +176,8 @@ public class AudioProcessingTests
         // Assert
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            var expected = magnitude.Data[i] * magnitude.Data[i];
-            Assert.True(Math.Abs(expected - power.Data[i]) < 1e-5f,
+            var expected = magnitude.Data.Span[i] * magnitude.Data.Span[i];
+            Assert.True(Math.Abs(expected - power.Data.Span[i]) < 1e-5f,
                 $"Power should equal magnitude squared at index {i}");
         }
     }
@@ -194,7 +194,7 @@ public class AudioProcessingTests
         var original = new Tensor<float>(new[] { signalLength });
         for (int i = 0; i < signalLength; i++)
         {
-            original.Data[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000);
+            original.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000);
         }
 
         // Act
@@ -205,7 +205,7 @@ public class AudioProcessingTests
         double totalError = 0;
         for (int i = 0; i < signalLength; i++)
         {
-            double diff = Math.Abs(original.Data[i] - reconstructed.Data[i]);
+            double diff = Math.Abs(original.Data.Span[i] - reconstructed.Data.Span[i]);
             totalError += diff * diff;
         }
         double rmse = Math.Sqrt(totalError / signalLength);
@@ -254,7 +254,7 @@ public class AudioProcessingTests
         var signal = new Tensor<float>(new[] { signalLength });
         for (int i = 0; i < signalLength; i++)
         {
-            signal.Data[i] = (float)Math.Sin(2 * Math.PI * 1000 * i / sampleRate);
+            signal.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 1000 * i / sampleRate);
         }
 
         // Act
@@ -321,7 +321,7 @@ public class AudioProcessingTests
             float rowSum = 0;
             for (int f = 0; f < numFreqs; f++)
             {
-                rowSum += filterbank.Data[mel * numFreqs + f];
+                rowSum += filterbank.Data.Span[mel * numFreqs + f];
             }
             Assert.True(Math.Abs(rowSum - 1.0f) < 0.01f || rowSum < 0.01f,
                 $"Row {mel} sum should be ~1 (normalized) or 0 (zero filter): {rowSum}");
@@ -371,7 +371,7 @@ public class AudioProcessingTests
         // Fill with some magnitude values
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            magnitude.Data[i] = 1.0f;
+            magnitude.Data.Span[i] = 1.0f;
         }
 
         // Act
@@ -393,7 +393,7 @@ public class AudioProcessingTests
         var signal = new Tensor<float>(new[] { 1024 });
         for (int i = 0; i < 1024; i++)
         {
-            signal.Data[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000);
+            signal.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 16000);
         }
         var targetMagnitude = stft.Magnitude(signal);
 
@@ -424,7 +424,7 @@ public class AudioProcessingTests
         var magnitude = new Tensor<float>(new[] { 16, nFft / 2 + 1 });
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            magnitude.Data[i] = 1.0f;
+            magnitude.Data.Span[i] = 1.0f;
         }
 
         var callbackCounts = 0;
@@ -455,14 +455,14 @@ public class AudioProcessingTests
         var audio = new Tensor<float>(new[] { 22050 }); // 1 second
         for (int i = 0; i < 22050; i++)
         {
-            audio.Data[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 22050);
+            audio.Data.Span[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 22050);
         }
 
         // Act
         var spectrogram = processor.AudioToSpectrogram(audio);
 
         // Assert - Should be normalized to [0, 1]
-        foreach (var value in spectrogram.Data)
+        foreach (var value in spectrogram.Data.ToArray())
         {
             Assert.True(value >= 0f && value <= 1f,
                 $"Spectrogram value {value} should be in [0, 1]");
@@ -498,7 +498,7 @@ public class AudioProcessingTests
         var audio = new Tensor<float>(new[] { 1000 });
         for (int i = 0; i < 1000; i++)
         {
-            audio.Data[i] = (float)(0.1 * Math.Sin(2 * Math.PI * 100 * i / 1000));
+            audio.Data.Span[i] = (float)(0.1 * Math.Sin(2 * Math.PI * 100 * i / 1000));
         }
 
         double targetPeak = 0.8;
@@ -508,7 +508,7 @@ public class AudioProcessingTests
 
         // Assert - Find max absolute value
         float maxAbs = 0;
-        foreach (var value in normalized.Data)
+        foreach (var value in normalized.Data.ToArray())
         {
             maxAbs = Math.Max(maxAbs, Math.Abs(value));
         }
@@ -526,7 +526,7 @@ public class AudioProcessingTests
         var audio = new Tensor<float>(new[] { 100 });
         for (int i = 0; i < 100; i++)
         {
-            audio.Data[i] = 1.0f;
+            audio.Data.Span[i] = 1.0f;
         }
 
         // Act
@@ -537,12 +537,12 @@ public class AudioProcessingTests
         // First 100 should be 1.0
         for (int i = 0; i < 100; i++)
         {
-            Assert.Equal(1.0f, padded.Data[i]);
+            Assert.Equal(1.0f, padded.Data.Span[i]);
         }
         // Rest should be 0 (padded)
         for (int i = 100; i < 200; i++)
         {
-            Assert.Equal(0f, padded.Data[i]);
+            Assert.Equal(0f, padded.Data.Span[i]);
         }
     }
 
@@ -555,7 +555,7 @@ public class AudioProcessingTests
         var audio = new Tensor<float>(new[] { 200 });
         for (int i = 0; i < 200; i++)
         {
-            audio.Data[i] = (float)i;
+            audio.Data.Span[i] = (float)i;
         }
 
         // Act
@@ -565,7 +565,7 @@ public class AudioProcessingTests
         Assert.Equal(100, truncated.Data.Length);
         for (int i = 0; i < 100; i++)
         {
-            Assert.Equal((float)i, truncated.Data[i]);
+            Assert.Equal((float)i, truncated.Data.Span[i]);
         }
     }
 

@@ -380,7 +380,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         // Apply softmax to get probabilities
-        var probs = Softmax(modelOutput.Data);
+        var probs = Softmax(modelOutput.Data.ToArray());
         return new Tensor<T>(probs, modelOutput.Shape);
     }
 
@@ -554,7 +554,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
             output = ForwardNative(preprocessed);
         }
 
-        return output.Data;
+        return output.Data.ToArray();
     }
 
     private Tensor<T> ForwardNative(Tensor<T> features)
@@ -793,7 +793,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         int offset = 0;
         foreach (var tensor in tensors)
         {
-            Array.Copy(tensor.Data, 0, output, offset, tensor.Length);
+            Array.Copy(tensor.Data.ToArray(), 0, output, offset, tensor.Length);
             offset += tensor.Length;
         }
         return new Tensor<T>(output, [totalLen]);

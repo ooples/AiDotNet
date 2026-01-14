@@ -508,7 +508,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         // Compute loss gradient
         var lossGradient = predictedNoise.Transform((v, idx) =>
-            NumOps.Subtract(v, noise.Data[idx]));
+            NumOps.Subtract(v, noise.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -644,7 +644,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         {
             int srcOffset = b * latents.Shape[1] * sliceSize + frameIndex * sliceSize;
             int dstOffset = b * sliceSize;
-            Array.Copy(latents.Data, srcOffset, slice.Data, dstOffset, sliceSize);
+            latents.Data.Span.Slice(srcOffset, sliceSize).CopyTo(slice.Data.Span.Slice(dstOffset, sliceSize));
         }
 
         return slice;
@@ -660,11 +660,11 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         // Use sinusoidal temporal modulation
         for (int i = 0; i < latents.Length; i++)
         {
-            double val = NumOps.ToDouble(latents.Data[i]);
+            double val = NumOps.ToDouble(latents.Data.Span[i]);
             // Add smooth temporal variation using sine wave
             double freq = 2.0 * Math.PI * (i % width) / width;
             double temporalMod = 0.1 * Math.Sin(freq + t * Math.PI);
-            result.Data[i] = NumOps.FromDouble(val + temporalMod);
+            result.Data.Span[i] = NumOps.FromDouble(val + temporalMod);
         }
 
         return result;
@@ -675,7 +675,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var latents = new Tensor<T>(shape);
         for (int i = 0; i < latents.Data.Length; i++)
         {
-            latents.Data[i] = NumOps.FromDouble(random.NextGaussian());
+            latents.Data.Span[i] = NumOps.FromDouble(random.NextGaussian());
         }
         return latents;
     }
@@ -755,7 +755,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var x0Pred = latents.Transform((v, idx) =>
         {
             double latent = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data[idx]);
+            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
             double x0 = (latent - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod;
             return NumOps.FromDouble(x0);
         });
@@ -768,7 +768,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var nextLatent = x0Pred.Transform((v, idx) =>
         {
             double x0 = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data[idx]);
+            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
             double next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise;
             return NumOps.FromDouble(next);
         });
@@ -781,7 +781,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return uncond.Transform((v, idx) =>
         {
             double u = Convert.ToDouble(v);
-            double c = Convert.ToDouble(cond.Data[idx]);
+            double c = Convert.ToDouble(cond.Data.Span[idx]);
             double guided = u + scale * (c - u);
             return NumOps.FromDouble(guided);
         });
@@ -812,7 +812,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
             int batch = textEmbedding.Shape[0];
             int dim = textEmbedding.Shape[1];
             var reshaped = new Tensor<T>([batch, dim, 1, 1]);
-            Array.Copy(textEmbedding.Data, reshaped.Data, textEmbedding.Data.Length);
+            textEmbedding.Data.Span.CopyTo(reshaped.Data.Span);
             textEmbedding = reshaped;
         }
 
@@ -970,7 +970,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     private Tensor<T> AddCondition(Tensor<T> features, Tensor<T> condition)
@@ -988,14 +988,14 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         // Simple addition if shapes match, otherwise broadcast
         if (condChannels == channels && condH == height && condW == width)
         {
-            return features.Transform((v, idx) => NumOps.Add(v, condition.Data[idx % condition.Data.Length]));
+            return features.Transform((v, idx) => NumOps.Add(v, condition.Data.Span[idx % condition.Data.Length]));
         }
 
         // Broadcast condition
         return features.Transform((v, idx) =>
         {
             int i = idx % condition.Data.Length;
-            return NumOps.Add(v, condition.Data[i]);
+            return NumOps.Add(v, condition.Data.Span[i]);
         });
     }
 
@@ -1004,7 +1004,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return start.Transform((v, idx) =>
         {
             double s = Convert.ToDouble(v);
-            double e = Convert.ToDouble(end.Data[idx]);
+            double e = Convert.ToDouble(end.Data.Span[idx]);
             double interpolated = s * (1 - t) + e * t;
             return NumOps.FromDouble(interpolated);
         });
@@ -1016,7 +1016,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return latent.Transform((v, idx) =>
         {
             double x = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data[idx]);
+            double n = Convert.ToDouble(noise.Data.Span[idx]);
             return NumOps.FromDouble(x + noiseLevel * n);
         });
     }
@@ -1030,7 +1030,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return latent.Transform((v, idx) =>
         {
             double x = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data[idx]);
+            double n = Convert.ToDouble(noise.Data.Span[idx]);
             return NumOps.FromDouble(sqrtAlpha * x + sqrtOneMinusAlpha * n);
         });
     }
@@ -1153,7 +1153,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -1166,7 +1166,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

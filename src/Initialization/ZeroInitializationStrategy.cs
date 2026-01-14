@@ -28,7 +28,7 @@ public class ZeroInitializationStrategy<T> : InitializationStrategyBase<T>
         var zero = NumOps.Zero;
         for (int i = 0; i < weights.Length; i++)
         {
-            weights.Data[i] = zero;
+            weights.Data.Span[i] = zero;
         }
     }
 

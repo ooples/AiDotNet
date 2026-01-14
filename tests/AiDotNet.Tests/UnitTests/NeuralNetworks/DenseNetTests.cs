@@ -337,7 +337,7 @@ public class DenseNetTests
         var random = new Random(42);
         for (int i = 0; i < tensor.Data.Length; i++)
         {
-            tensor.Data[i] = (float)(random.NextDouble() * 2 - 1);
+            tensor.Data.Span[i] = (float)(random.NextDouble() * 2 - 1);
         }
     }
 

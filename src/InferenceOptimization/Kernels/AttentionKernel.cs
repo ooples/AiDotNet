@@ -119,12 +119,12 @@ namespace AiDotNet.InferenceOptimization.Kernels
             for (int i = 0; i < seqLenQ; i++)
             {
                 int qRowOffset = qOffset + i * dK;
-                var qRow = q.Data.AsSpan(qRowOffset, dK);
+                var qRow = q.Data.Span.Slice(qRowOffset, dK);
 
                 for (int j = 0; j < seqLenK; j++)
                 {
                     int kRowOffset = kOffset + j * dK;
-                    var kRow = k.Data.AsSpan(kRowOffset, dK);
+                    var kRow = k.Data.Span.Slice(kRowOffset, dK);
                     float score = SimdKernels.DotProduct(qRow, kRow) * scale;
 
                     // Apply mask if provided
@@ -133,7 +133,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         int effectiveMaskBatch = maskBatchModulo > 0 ? (batchIdx % maskBatchModulo) : batchIdx;
                         int maskIdx = effectiveMaskBatch * seqLenQ * seqLenK + i * seqLenK + j;
                         // Use epsilon-based comparison for floating point equality
-                        if (MathF.Abs(mask.Data[maskIdx]) < 1e-6f)
+                        if (MathF.Abs(mask.Data.Span[maskIdx]) < 1e-6f)
                         {
                             score = float.NegativeInfinity;
                         }
@@ -149,7 +149,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Compute weighted sum: attention_weights * V
             for (int i = 0; i < seqLenQ; i++)
             {
-                var outRow = result.Data.AsSpan(outOffset + i * dV, dV);
+                var outRow = result.Data.Span.Slice(outOffset + i * dV, dV);
                 outRow.Clear();
 
                 // Accumulate weighted values
@@ -161,7 +161,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         continue;
                     }
 
-                    var vRow = v.Data.AsSpan(vOffset + j * dV, dV);
+                    var vRow = v.Data.Span.Slice(vOffset + j * dV, dV);
                     SimdKernels.ScalarMultiplyAdd(outRow, vRow, weight, outRow);
                 }
             }
@@ -291,7 +291,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         {
                             int srcIdx = b * seqLen * numHeads * dK + s * numHeads * dK + h * dK + d;
                             int dstIdx = (b * numHeads + h) * seqLen * dK + s * dK + d;
-                            reshaped.Data[dstIdx] = input.Data[srcIdx];
+                            reshaped.Data.Span[dstIdx] = input.Data.Span[srcIdx];
                         }
                     }
                 }
@@ -316,7 +316,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         {
                             int srcIdx = (b * numHeads + h) * seqLen * dK + s * dK + d;
                             int dstIdx = b * seqLen * dModel + s * dModel + h * dK + d;
-                            reshaped.Data[dstIdx] = input.Data[srcIdx];
+                            reshaped.Data.Span[dstIdx] = input.Data.Span[srcIdx];
                         }
                     }
                 }

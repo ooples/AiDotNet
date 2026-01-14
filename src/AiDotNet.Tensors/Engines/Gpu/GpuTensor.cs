@@ -128,7 +128,7 @@ public sealed class GpuTensor<T> : IGpuTensor<T>, IGpuTensor
     /// <param name="tensor">The CPU tensor to upload.</param>
     /// <param name="role">The role of this tensor.</param>
     public GpuTensor(IDirectGpuBackend backend, Tensor<T> tensor, GpuTensorRole role)
-        : this(backend, tensor.Data, tensor.Shape, role)
+        : this(backend, tensor.ToArray(), tensor.Shape, role)
     {
     }
 

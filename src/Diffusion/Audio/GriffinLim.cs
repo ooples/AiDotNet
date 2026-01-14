@@ -338,9 +338,9 @@ public class GriffinLim<T>
                 double sumSquaredSignal = 0;
                 for (int i = 0; i < signal.Data.Length; i++)
                 {
-                    double diff = NumOps.ToDouble(signal.Data[i]) - NumOps.ToDouble(previousSignal.Data[i]);
+                    double diff = NumOps.ToDouble(signal.Data.Span[i]) - NumOps.ToDouble(previousSignal.Data.Span[i]);
                     sumSquaredDiff += diff * diff;
-                    sumSquaredSignal += NumOps.ToDouble(signal.Data[i]) * NumOps.ToDouble(signal.Data[i]);
+                    sumSquaredSignal += NumOps.ToDouble(signal.Data.Span[i]) * NumOps.ToDouble(signal.Data.Span[i]);
                 }
                 convergence = sumSquaredSignal > 0 ? sumSquaredDiff / sumSquaredSignal : 0;
             }
@@ -378,8 +378,8 @@ public class GriffinLim<T>
 
         for (int i = 0; i < length; i++)
         {
-            double target = NumOps.ToDouble(targetMagnitude.Data[i]);
-            double recon = NumOps.ToDouble(reconstructedMag.Data[i]);
+            double target = NumOps.ToDouble(targetMagnitude.Data.Span[i]);
+            double recon = NumOps.ToDouble(reconstructedMag.Data.Span[i]);
             double diff = target - recon;
 
             sumSquaredDiff += diff * diff;
@@ -399,7 +399,7 @@ public class GriffinLim<T>
         for (int i = 0; i < phase.Data.Length; i++)
         {
             double randomPhase = (_random.NextDouble() * 2.0 - 1.0) * Math.PI;
-            phase.Data[i] = NumOps.FromDouble(randomPhase);
+            phase.Data.Span[i] = NumOps.FromDouble(randomPhase);
         }
 
         return phase;
@@ -411,7 +411,7 @@ public class GriffinLim<T>
     private static Tensor<T> ClonePhase(Tensor<T> phase)
     {
         var clone = new Tensor<T>(phase.Shape);
-        Array.Copy(phase.Data, clone.Data, phase.Data.Length);
+        phase.Data.Span.CopyTo(clone.Data.Span);
         return clone;
     }
 
@@ -420,7 +420,7 @@ public class GriffinLim<T>
     /// </summary>
     private static void CopyPhase(Tensor<T> source, Tensor<T> dest)
     {
-        Array.Copy(source.Data, dest.Data, source.Data.Length);
+        source.Data.Span.CopyTo(dest.Data.Span);
     }
 
     /// <summary>
@@ -432,7 +432,7 @@ public class GriffinLim<T>
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
-            phase.Data[i] = complex.Data[i].Phase;
+            phase.Data.Span[i] = complex.Data.Span[i].Phase;
         }
 
         return phase;
@@ -447,7 +447,7 @@ public class GriffinLim<T>
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            complex.Data[i] = Complex<T>.FromPolarCoordinates(magnitude.Data[i], phase.Data[i]);
+            complex.Data.Span[i] = Complex<T>.FromPolarCoordinates(magnitude.Data.Span[i], phase.Data.Span[i]);
         }
 
         return complex;
@@ -473,17 +473,17 @@ public class GriffinLim<T>
         for (int i = 0; i < newPhase.Data.Length; i++)
         {
             // Compute phase velocity (difference between current and previous)
-            var velocity = NumOps.Subtract(currentPhase.Data[i], previousPhase.Data[i]);
+            var velocity = NumOps.Subtract(currentPhase.Data.Span[i], previousPhase.Data.Span[i]);
 
             // Apply momentum: new_phase + momentum * velocity
             var momentumContrib = NumOps.Multiply(momentumT, velocity);
-            result.Data[i] = NumOps.Add(newPhase.Data[i], momentumContrib);
+            result.Data.Span[i] = NumOps.Add(newPhase.Data.Span[i], momentumContrib);
 
             // Wrap to [-pi, pi]
-            double phaseVal = NumOps.ToDouble(result.Data[i]);
+            double phaseVal = NumOps.ToDouble(result.Data.Span[i]);
             while (phaseVal > Math.PI) phaseVal -= 2 * Math.PI;
             while (phaseVal < -Math.PI) phaseVal += 2 * Math.PI;
-            result.Data[i] = NumOps.FromDouble(phaseVal);
+            result.Data.Span[i] = NumOps.FromDouble(phaseVal);
         }
 
         return result;

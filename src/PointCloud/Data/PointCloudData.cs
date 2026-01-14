@@ -164,7 +164,7 @@ public class PointCloudData<T>
         {
             for (int j = 0; j < 3; j++)
             {
-                coords[i * 3 + j] = Points.Data[i * NumFeatures + j];
+                coords[i * 3 + j] = Points.Data.Span[i * NumFeatures + j];
             }
         }
 
@@ -204,7 +204,7 @@ public class PointCloudData<T>
         {
             for (int j = 0; j < featureDim; j++)
             {
-                features[i * featureDim + j] = Points.Data[i * NumFeatures + 3 + j];
+                features[i * featureDim + j] = Points.Data.Span[i * NumFeatures + 3 + j];
             }
         }
 

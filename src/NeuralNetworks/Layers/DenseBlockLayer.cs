@@ -239,8 +239,8 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         for (int i = 0; i < grad.Data.Length; i++)
         {
             // ReLU derivative: 1 if x > 0, else 0
-            result[i] = NumOps.GreaterThan(input.Data[i], NumOps.Zero)
-                ? grad.Data[i]
+            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero)
+                ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
         return new Tensor<T>(grad.Shape, new Vector<T>(result));

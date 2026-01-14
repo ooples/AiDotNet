@@ -1152,10 +1152,10 @@ public static class PlyMeshIO
         bool includeUvs,
         int colorChannels)
     {
-        var vertices = mesh.Vertices.Data;
-        var normals = includeNormals ? mesh.VertexNormals?.Data : null;
-        var uvs = includeUvs ? mesh.VertexUVs?.Data : null;
-        var colors = colorChannels > 0 ? mesh.VertexColors?.Data : null;
+        var vertices = mesh.Vertices.Data.Span;
+        var normals = includeNormals && mesh.VertexNormals != null ? mesh.VertexNormals.Data.Span : default;
+        var uvs = includeUvs && mesh.VertexUVs != null ? mesh.VertexUVs.Data.Span : default;
+        var colors = colorChannels > 0 && mesh.VertexColors != null ? mesh.VertexColors.Data.Span : default;
 
         for (int i = 0; i < mesh.NumVertices; i++)
         {
@@ -1165,7 +1165,7 @@ public static class PlyMeshIO
                 numOps.ToDouble(vertices[offset + 1]),
                 numOps.ToDouble(vertices[offset + 2])));
 
-            if (includeNormals && normals != null)
+            if (includeNormals && normals.Length > 0)
             {
                 int normalOffset = i * 3;
                 writer.Write(string.Format(CultureInfo.InvariantCulture, " {0} {1} {2}",
@@ -1174,7 +1174,7 @@ public static class PlyMeshIO
                     numOps.ToDouble(normals[normalOffset + 2])));
             }
 
-            if (colorChannels > 0 && colors != null)
+            if (colorChannels > 0 && colors.Length > 0)
             {
                 int colorOffset = i * colorChannels;
                 for (int c = 0; c < colorChannels; c++)
@@ -1184,7 +1184,7 @@ public static class PlyMeshIO
                 }
             }
 
-            if (includeUvs && uvs != null)
+            if (includeUvs && uvs.Length > 0)
             {
                 int uvOffset = i * 2;
                 writer.Write(string.Format(CultureInfo.InvariantCulture, " {0} {1}",
@@ -1206,10 +1206,10 @@ public static class PlyMeshIO
         bool includeUvs,
         int colorChannels)
     {
-        var vertices = mesh.Vertices.Data;
-        var normals = includeNormals ? mesh.VertexNormals?.Data : null;
-        var uvs = includeUvs ? mesh.VertexUVs?.Data : null;
-        var colors = colorChannels > 0 ? mesh.VertexColors?.Data : null;
+        var vertices = mesh.Vertices.Data.Span;
+        var normals = includeNormals && mesh.VertexNormals != null ? mesh.VertexNormals.Data.Span : default;
+        var uvs = includeUvs && mesh.VertexUVs != null ? mesh.VertexUVs.Data.Span : default;
+        var colors = colorChannels > 0 && mesh.VertexColors != null ? mesh.VertexColors.Data.Span : default;
 
         for (int i = 0; i < mesh.NumVertices; i++)
         {
@@ -1218,7 +1218,7 @@ public static class PlyMeshIO
             writer.Write((float)numOps.ToDouble(vertices[offset + 1]));
             writer.Write((float)numOps.ToDouble(vertices[offset + 2]));
 
-            if (includeNormals && normals != null)
+            if (includeNormals && normals.Length > 0)
             {
                 int normalOffset = i * 3;
                 writer.Write((float)numOps.ToDouble(normals[normalOffset]));
@@ -1226,7 +1226,7 @@ public static class PlyMeshIO
                 writer.Write((float)numOps.ToDouble(normals[normalOffset + 2]));
             }
 
-            if (colorChannels > 0 && colors != null)
+            if (colorChannels > 0 && colors.Length > 0)
             {
                 int colorOffset = i * colorChannels;
                 for (int c = 0; c < colorChannels; c++)
@@ -1235,7 +1235,7 @@ public static class PlyMeshIO
                 }
             }
 
-            if (includeUvs && uvs != null)
+            if (includeUvs && uvs.Length > 0)
             {
                 int uvOffset = i * 2;
                 writer.Write((float)numOps.ToDouble(uvs[uvOffset]));
@@ -1248,7 +1248,7 @@ public static class PlyMeshIO
 
     private static void WriteFacesAscii<T>(TriangleMeshData<T> mesh, StreamWriter writer, INumericOperations<T> numOps)
     {
-        var faces = mesh.Faces.Data;
+        var faces = mesh.Faces.Data.Span;
         var faceNormals = mesh.FaceNormals;
         for (int i = 0; i < mesh.NumFaces; i++)
         {
@@ -1262,9 +1262,9 @@ public static class PlyMeshIO
             {
                 int normalOffset = i * 3;
                 writer.Write(string.Format(CultureInfo.InvariantCulture, " {0} {1} {2}",
-                    numOps.ToDouble(faceNormals.Data[normalOffset]),
-                    numOps.ToDouble(faceNormals.Data[normalOffset + 1]),
-                    numOps.ToDouble(faceNormals.Data[normalOffset + 2])));
+                    numOps.ToDouble(faceNormals.Data.Span[normalOffset]),
+                    numOps.ToDouble(faceNormals.Data.Span[normalOffset + 1]),
+                    numOps.ToDouble(faceNormals.Data.Span[normalOffset + 2])));
             }
             writer.WriteLine();
         }
@@ -1272,7 +1272,7 @@ public static class PlyMeshIO
 
     private static void WriteFacesBinary<T>(TriangleMeshData<T> mesh, BinaryWriter writer, INumericOperations<T> numOps)
     {
-        var faces = mesh.Faces.Data;
+        var faces = mesh.Faces.Data.Span;
         var faceNormals = mesh.FaceNormals;
         for (int i = 0; i < mesh.NumFaces; i++)
         {
@@ -1285,9 +1285,9 @@ public static class PlyMeshIO
             if (faceNormals != null)
             {
                 int normalOffset = i * 3;
-                writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset]));
-                writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset + 1]));
-                writer.Write((float)numOps.ToDouble(faceNormals.Data[normalOffset + 2]));
+                writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset]));
+                writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset + 1]));
+                writer.Write((float)numOps.ToDouble(faceNormals.Data.Span[normalOffset + 2]));
             }
         }
     }
@@ -1304,7 +1304,7 @@ public static class PlyMeshIO
         int uvOffset)
     {
         int featureDim = pointCloud.NumFeatures;
-        var data = pointCloud.Points.Data;
+        var data = pointCloud.Points.Data.Span;
         for (int i = 0; i < pointCloud.NumPoints; i++)
         {
             int offset = i * featureDim;
@@ -1353,7 +1353,7 @@ public static class PlyMeshIO
         int uvOffset)
     {
         int featureDim = pointCloud.NumFeatures;
-        var data = pointCloud.Points.Data;
+        var data = pointCloud.Points.Data.Span;
         for (int i = 0; i < pointCloud.NumPoints; i++)
         {
             int offset = i * featureDim;

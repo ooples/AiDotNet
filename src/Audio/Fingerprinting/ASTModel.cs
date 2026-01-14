@@ -294,7 +294,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int idx = start + i;
                 if (idx < rawAudio.Length)
                 {
-                    double sample = _numOps.ToDouble(rawAudio.Data[idx]);
+                    double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
                     // Hann window
                     double window = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (windowSize - 1)));
                     sample *= window;
@@ -406,7 +406,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
                             if (srcIdx < melSpec.Length && dstIdx < patches.Length)
                             {
-                                patches[dstIdx] = melSpec.Data[srcIdx];
+                                patches[dstIdx] = melSpec.Data.Span[srcIdx];
                             }
                         }
                     }
@@ -503,7 +503,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             for (int d = 0; d < _embeddingDim; d++)
             {
                 int idx = b * numTokens * _embeddingDim + d;
-                clsEmbedding[b * _embeddingDim + d] = hidden.Data[idx];
+                clsEmbedding[b * _embeddingDim + d] = hidden.Data.Span[idx];
             }
         }
 
@@ -531,7 +531,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * seqLen * dim + s * dim + d;
-                    mean += _numOps.ToDouble(input.Data[idx]);
+                    mean += _numOps.ToDouble(input.Data.Span[idx]);
                 }
                 mean /= dim;
 
@@ -540,7 +540,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * seqLen * dim + s * dim + d;
-                    double diff = _numOps.ToDouble(input.Data[idx]) - mean;
+                    double diff = _numOps.ToDouble(input.Data.Span[idx]) - mean;
                     variance += diff * diff;
                 }
                 variance /= dim;
@@ -551,7 +551,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * seqLen * dim + s * dim + d;
-                    double val = _numOps.ToDouble(input.Data[idx]);
+                    double val = _numOps.ToDouble(input.Data.Span[idx]);
                     double normed = (val - mean) / std;
                     double gamma = d < _normGamma.Length ? _numOps.ToDouble(_normGamma[d]) : 1.0;
                     double beta = d < _normBeta.Length ? _numOps.ToDouble(_normBeta[d]) : 0.0;
@@ -580,7 +580,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         for (int c = 0; c < _numClasses; c++)
         {
-            double logit = _numOps.ToDouble(logits.Data[c]);
+            double logit = _numOps.ToDouble(logits.Data.Span[c]);
             string label = c < _classLabels.Length ? _classLabels[c] : $"class_{c}";
             predictions.Add((label, logit));
         }
@@ -614,7 +614,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     int wIdx = c * _embeddingDim + d;
                     if (embIdx < embedding.Length && wIdx < _headWeight.Length)
                     {
-                        sum = _numOps.Add(sum, _numOps.Multiply(embedding.Data[embIdx], _headWeight[wIdx]));
+                        sum = _numOps.Add(sum, _numOps.Multiply(embedding.Data.Span[embIdx], _headWeight[wIdx]));
                     }
                 }
                 logits[b * _numClasses + c] = sum;
@@ -643,7 +643,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         return new AudioFingerprint<T>
         {
-            Data = embedding.Data,
+            Data = embedding.Data.ToArray(),
             Duration = duration,
             SampleRate = SampleRate,
             Algorithm = Name,
@@ -747,7 +747,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int idx = b * _numClasses + c;
                 if (idx < predicted.Length)
                 {
-                    maxLogit = Math.Max(maxLogit, _numOps.ToDouble(predicted.Data[idx]));
+                    maxLogit = Math.Max(maxLogit, _numOps.ToDouble(predicted.Data.Span[idx]));
                 }
             }
 
@@ -757,7 +757,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int idx = b * _numClasses + c;
                 if (idx < predicted.Length)
                 {
-                    sumExp += Math.Exp(_numOps.ToDouble(predicted.Data[idx]) - maxLogit);
+                    sumExp += Math.Exp(_numOps.ToDouble(predicted.Data.Span[idx]) - maxLogit);
                 }
             }
 
@@ -768,8 +768,8 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int targIdx = b * _numClasses + c;
                 if (predIdx < predicted.Length && targIdx < target.Length)
                 {
-                    double prob = Math.Exp(_numOps.ToDouble(predicted.Data[predIdx]) - maxLogit) / sumExp;
-                    double t = _numOps.ToDouble(target.Data[targIdx]);
+                    double prob = Math.Exp(_numOps.ToDouble(predicted.Data.Span[predIdx]) - maxLogit) / sumExp;
+                    double t = _numOps.ToDouble(target.Data.Span[targIdx]);
                     if (t > 0.5)
                     {
                         totalLoss -= Math.Log(Math.Max(prob, 1e-10));
@@ -790,8 +790,8 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             int predIdx = i % predicted.Length;
             int targIdx = i % target.Length;
 
-            double pred = _numOps.ToDouble(predicted.Data[predIdx]);
-            double targ = _numOps.ToDouble(target.Data[targIdx]);
+            double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
+            double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
             double grad = (1.0 / (1.0 + Math.Exp(-pred))) - targ;
 
             double weight = _numOps.ToDouble(_headWeight[i]);
@@ -1052,7 +1052,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             var residual1 = new T[input.Length];
             for (int i = 0; i < input.Length; i++)
             {
-                residual1[i] = _ops.Add(input.Data[i], attended.Data[i]);
+                residual1[i] = _ops.Add(input.Data.Span[i], attended.Data.Span[i]);
             }
             var res1Tensor = new Tensor<T>(residual1, input.Shape);
 
@@ -1064,7 +1064,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             var output = new T[input.Length];
             for (int i = 0; i < input.Length; i++)
             {
-                output[i] = _ops.Add(res1Tensor.Data[i], mlpOut.Data[i]);
+                output[i] = _ops.Add(res1Tensor.Data.Span[i], mlpOut.Data.Span[i]);
             }
 
             return new Tensor<T>(output, input.Shape);
@@ -1087,7 +1087,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     for (int d = 0; d < dim; d++)
                     {
                         int idx = b * seqLen * dim + s * dim + d;
-                        mean += _ops.ToDouble(input.Data[idx]);
+                        mean += _ops.ToDouble(input.Data.Span[idx]);
                     }
                     mean /= dim;
 
@@ -1095,7 +1095,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     for (int d = 0; d < dim; d++)
                     {
                         int idx = b * seqLen * dim + s * dim + d;
-                        double diff = _ops.ToDouble(input.Data[idx]) - mean;
+                        double diff = _ops.ToDouble(input.Data.Span[idx]) - mean;
                         variance += diff * diff;
                     }
                     variance /= dim;
@@ -1104,7 +1104,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     for (int d = 0; d < dim; d++)
                     {
                         int idx = b * seqLen * dim + s * dim + d;
-                        double val = _ops.ToDouble(input.Data[idx]);
+                        double val = _ops.ToDouble(input.Data.Span[idx]);
                         double normed = (val - mean) / std;
                         double g = d < gamma.Length ? _ops.ToDouble(gamma[d]) : 1.0;
                         double be = d < beta.Length ? _ops.ToDouble(beta[d]) : 0.0;
@@ -1120,7 +1120,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             // Simplified self-attention (identity for performance)
             var output = new T[input.Length];
-            Array.Copy(input.Data, output, input.Length);
+            Array.Copy(input.Data.ToArray(), output, input.Length);
             return new Tensor<T>(output, input.Shape);
         }
 
@@ -1145,7 +1145,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                             int wIdx = m * dim + d;
                             if (wIdx < _mlpW1.Length)
                             {
-                                sum = _ops.Add(sum, _ops.Multiply(input.Data[inIdx], _mlpW1[wIdx]));
+                                sum = _ops.Add(sum, _ops.Multiply(input.Data.Span[inIdx], _mlpW1[wIdx]));
                             }
                         }
                         // GELU approximation

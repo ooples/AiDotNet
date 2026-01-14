@@ -551,7 +551,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
         // Compute loss gradient (push matching pairs together, non-matching apart)
         var lossGradient = videoEmbed.Transform((v, idx) =>
-            NumOps.Subtract(v, textEmbed.Data[idx]));
+            NumOps.Subtract(v, textEmbed.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -729,7 +729,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         double norm = 0;
         for (int i = 0; i < embedding.Data.Length; i++)
         {
-            double val = Convert.ToDouble(embedding.Data[i]);
+            double val = Convert.ToDouble(embedding.Data.Span[i]);
             norm += val * val;
         }
         norm = Math.Sqrt(norm + 1e-8);
@@ -747,8 +747,8 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int len = Math.Min(a.Data.Length, b.Data.Length);
         for (int i = 0; i < len; i++)
         {
-            double va = Convert.ToDouble(a.Data[i]);
-            double vb = Convert.ToDouble(b.Data[i]);
+            double va = Convert.ToDouble(a.Data.Span[i]);
+            double vb = Convert.ToDouble(b.Data.Span[i]);
             dot += va * vb;
             normA += va * va;
             normB += vb * vb;
@@ -1053,7 +1053,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     private Tensor<T> AddBatchDimension5D(Tensor<T> tensor)
@@ -1064,7 +1064,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([1, t, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -1073,7 +1073,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int len = tensor.Shape[0];
 
         var result = new Tensor<T>([1, len]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -1086,7 +1086,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

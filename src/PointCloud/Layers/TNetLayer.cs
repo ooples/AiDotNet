@@ -160,7 +160,7 @@ public class TNetLayer<T> : LayerBase<T>
         {
             for (int c = 0; c < _transformDim; c++)
             {
-                T value = transformVector.Data[index++];
+                T value = transformVector.Data.Span[index++];
                 if (r == c)
                 {
                     value = numOps.Add(value, numOps.One);
@@ -187,7 +187,7 @@ public class TNetLayer<T> : LayerBase<T>
                 T sum = numOps.Zero;
                 for (int inF = 0; inF < _transformDim; inF++)
                 {
-                    var inputVal = input.Data[n * numFeatures + inF];
+                    var inputVal = input.Data.Span[n * numFeatures + inF];
                     var transformVal = transform[inF, outF];
                     sum = numOps.Add(sum, numOps.Multiply(inputVal, transformVal));
                 }
@@ -197,7 +197,7 @@ public class TNetLayer<T> : LayerBase<T>
             // Copy remaining features if numFeatures > transformDim
             for (int f = _transformDim; f < numFeatures; f++)
             {
-                output[n * numFeatures + f] = input.Data[n * numFeatures + f];
+                output[n * numFeatures + f] = input.Data.Span[n * numFeatures + f];
             }
         }
 
@@ -221,11 +221,11 @@ public class TNetLayer<T> : LayerBase<T>
         {
             for (int outF = 0; outF < _transformDim; outF++)
             {
-                var outGrad = outputGradient.Data[n * numFeatures + outF];
+                var outGrad = outputGradient.Data.Span[n * numFeatures + outF];
                 for (int inF = 0; inF < _transformDim; inF++)
                 {
                     var transformVal = _transformMatrix[inF, outF];
-                    var inputVal = _lastInput.Data[n * numFeatures + inF];
+                    var inputVal = _lastInput.Data.Span[n * numFeatures + inF];
                     inputGradient[n * numFeatures + inF] = numOps.Add(
                         inputGradient[n * numFeatures + inF],
                         numOps.Multiply(outGrad, transformVal));
@@ -238,7 +238,7 @@ public class TNetLayer<T> : LayerBase<T>
 
             for (int f = _transformDim; f < numFeatures; f++)
             {
-                inputGradient[n * numFeatures + f] = outputGradient.Data[n * numFeatures + f];
+                inputGradient[n * numFeatures + f] = outputGradient.Data.Span[n * numFeatures + f];
             }
         }
 
@@ -255,7 +255,7 @@ public class TNetLayer<T> : LayerBase<T>
             layerGradient = _mlpLayers[i].Backward(layerGradient);
         }
 
-        var layerGradData = layerGradient.Data;
+        var layerGradData = layerGradient.Data.Span;
         for (int i = 0; i < inputGradient.Length; i++)
         {
             inputGradient[i] = numOps.Add(inputGradient[i], layerGradData[i]);

@@ -326,7 +326,7 @@ public static class ObjMeshIO
         var numOps = MathHelper.GetNumericOperations<T>();
         using var writer = new StreamWriter(path);
 
-        var vertices = mesh.Vertices.Data;
+        var vertices = mesh.Vertices.Data.Span;
         var vertexCount = mesh.NumVertices;
 
         Tensor<T>? colors = includeColors ? mesh.VertexColors : null;
@@ -350,7 +350,7 @@ public static class ObjMeshIO
                     line += string.Format(
                         CultureInfo.InvariantCulture,
                         " {0}",
-                        numOps.ToDouble(colors.Data[colorOffset + c]));
+                        numOps.ToDouble(colors.Data.Span[colorOffset + c]));
                 }
             }
 
@@ -366,9 +366,9 @@ public static class ObjMeshIO
                 writer.WriteLine(string.Format(
                     CultureInfo.InvariantCulture,
                     "vn {0} {1} {2}",
-                    numOps.ToDouble(normals.Data[offset]),
-                    numOps.ToDouble(normals.Data[offset + 1]),
-                    numOps.ToDouble(normals.Data[offset + 2])));
+                    numOps.ToDouble(normals.Data.Span[offset]),
+                    numOps.ToDouble(normals.Data.Span[offset + 1]),
+                    numOps.ToDouble(normals.Data.Span[offset + 2])));
             }
         }
 
@@ -381,12 +381,12 @@ public static class ObjMeshIO
                 writer.WriteLine(string.Format(
                     CultureInfo.InvariantCulture,
                     "vt {0} {1}",
-                    numOps.ToDouble(uvs.Data[offset]),
-                    numOps.ToDouble(uvs.Data[offset + 1])));
+                    numOps.ToDouble(uvs.Data.Span[offset]),
+                    numOps.ToDouble(uvs.Data.Span[offset + 1])));
             }
         }
 
-        var faces = mesh.Faces.Data;
+        var faces = mesh.Faces.Data.Span;
         var faceCount = mesh.NumFaces;
         bool hasNormals = normals != null;
         bool hasUvs = uvs != null;
@@ -447,18 +447,18 @@ public static class ObjMeshIO
             string line = string.Format(
                 CultureInfo.InvariantCulture,
                 "v {0} {1} {2}",
-                numOps.ToDouble(pointCloud.Points.Data[offset]),
-                numOps.ToDouble(pointCloud.Points.Data[offset + 1]),
-                numOps.ToDouble(pointCloud.Points.Data[offset + 2]));
+                numOps.ToDouble(pointCloud.Points.Data.Span[offset]),
+                numOps.ToDouble(pointCloud.Points.Data.Span[offset + 1]),
+                numOps.ToDouble(pointCloud.Points.Data.Span[offset + 2]));
 
             if (colorOffset >= 0)
             {
                 line += string.Format(
                     CultureInfo.InvariantCulture,
                     " {0} {1} {2}",
-                    numOps.ToDouble(pointCloud.Points.Data[offset + colorOffset]),
-                    numOps.ToDouble(pointCloud.Points.Data[offset + colorOffset + 1]),
-                    numOps.ToDouble(pointCloud.Points.Data[offset + colorOffset + 2]));
+                    numOps.ToDouble(pointCloud.Points.Data.Span[offset + colorOffset]),
+                    numOps.ToDouble(pointCloud.Points.Data.Span[offset + colorOffset + 1]),
+                    numOps.ToDouble(pointCloud.Points.Data.Span[offset + colorOffset + 2]));
             }
 
             writer.WriteLine(line);

@@ -533,7 +533,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             return;
         }
 
-        var gridData = _occupancyGrid.Data;
+        var gridData = _occupancyGrid.Data.Span;
         int cellCount = gridData.Length;
         int bitfieldLength = GetBitfieldLength(cellCount);
         if (_occupancyBitfield == null || _occupancyBitfield.Length != bitfieldLength)
@@ -723,7 +723,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
     {
         int numPoints = positions.Shape[0];
         var normalized = new T[numPoints * 3];
-        var posData = positions.Data;
+        var posData = positions.Data.Span;
 
         for (int i = 0; i < numPoints; i++)
         {
@@ -828,8 +828,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             var occPositions = new T[occupiedIndices.Count * 3];
             var occDirections = new T[occupiedIndices.Count * 3];
-            var posData = samplePositions.Data;
-            var dirData = sampleDirections.Data;
+            var posData = samplePositions.Data.Span;
+            var dirData = sampleDirections.Data.Span;
 
             for (int i = 0; i < occupiedIndices.Count; i++)
             {
@@ -848,8 +848,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             var occDirTensor = new Tensor<T>(occDirections, [occupiedIndices.Count, 3]);
             var (rgbOcc, densityOcc) = QueryField(occPosTensor, occDirTensor);
 
-            var rgbOccData = rgbOcc.Data;
-            var densityOccData = densityOcc.Data;
+            var rgbOccData = rgbOcc.Data.Span;
+            var densityOccData = densityOcc.Data.Span;
 
             for (int i = 0; i < occupiedIndices.Count; i++)
             {
@@ -886,8 +886,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var rayNear = new double[numRays];
         var rayFar = new double[numRays];
 
-        var originData = rayOrigins.Data;
-        var dirData = rayDirections.Data;
+        var originData = rayOrigins.Data.Span;
+        var dirData = rayDirections.Data.Span;
         double near = NumOps.ToDouble(nearBound);
         double far = NumOps.ToDouble(farBound);
         int gridSize = _occupancyGridResolution;
@@ -1026,8 +1026,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             throw new ArgumentException("Hash feature gradients shape does not match cached positions.", nameof(hashFeatureGradients));
         }
 
-        var posData = _lastPositions.Data;
-        var gradData = hashFeatureGradients.Data;
+        var posData = _lastPositions.Data.Span;
+        var gradData = hashFeatureGradients.Data.Span;
         double learningRate = NumOps.ToDouble(_learningRate);
 
         for (int level = 0; level < _numLevels; level++)
@@ -1126,7 +1126,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             return;
         }
 
-        var gridData = _occupancyGrid.Data;
+        var gridData = _occupancyGrid.Data.Span;
         double decay = _occupancyDecay;
         if (decay < 0.0)
         {
@@ -1208,7 +1208,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             var posTensor = new Tensor<T>(positions, [sampleCount, 3]);
             var dirTensor = new Tensor<T>(directions, [sampleCount, 3]);
             var (_, density) = QueryField(posTensor, dirTensor);
-            var densityData = density.Data;
+            var densityData = density.Data.Span;
 
             for (int i = 0; i < count; i++)
             {
@@ -1266,9 +1266,9 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[gradient.Length];
         for (int i = 0; i < gradient.Length; i++)
         {
-            double rawVal = numOps.ToDouble(raw.Data[i]);
+            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
             double sig = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data[i]);
+            double grad = numOps.ToDouble(gradient.Data.Span[i]);
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
@@ -1281,9 +1281,9 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[gradient.Length];
         for (int i = 0; i < gradient.Length; i++)
         {
-            double rawVal = numOps.ToDouble(raw.Data[i]);
+            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
             double sigmoid = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data[i]);
+            double grad = numOps.ToDouble(gradient.Data.Span[i]);
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
@@ -1301,7 +1301,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var data = new T[left.Length];
         for (int i = 0; i < data.Length; i++)
         {
-            data[i] = numOps.Add(left.Data[i], right.Data[i]);
+            data[i] = numOps.Add(left.Data.Span[i], right.Data.Span[i]);
         }
 
         return new Tensor<T>(data, left.Shape);
@@ -1497,8 +1497,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         double[]? sampleTs = null)
     {
         var colors = new T[numRays * 3];
-        var rgbData = rgb.Data;
-        var densityData = density.Data;
+        var rgbData = rgb.Data.Span;
+        var densityData = density.Data.Span;
 
         for (int r = 0; r < numRays; r++)
         {
@@ -1581,8 +1581,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             for (int j = 0; j < 3; j++)
             {
-                positions[i * 3 + j] = input.Data[i * 6 + j];
-                directions[i * 3 + j] = input.Data[i * 6 + 3 + j];
+                positions[i * 3 + j] = input.Data.Span[i * 6 + j];
+                directions[i * 3 + j] = input.Data.Span[i * 6 + 3 + j];
             }
         }
 
@@ -1594,10 +1594,10 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var output = new T[numPoints * 4];
         for (int i = 0; i < numPoints; i++)
         {
-            output[i * 4] = rgb.Data[i * 3];
-            output[i * 4 + 1] = rgb.Data[i * 3 + 1];
-            output[i * 4 + 2] = rgb.Data[i * 3 + 2];
-            output[i * 4 + 3] = density.Data[i];
+            output[i * 4] = rgb.Data.Span[i * 3];
+            output[i * 4 + 1] = rgb.Data.Span[i * 3 + 1];
+            output[i * 4 + 2] = rgb.Data.Span[i * 3 + 2];
+            output[i * 4 + 3] = density.Data.Span[i];
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
@@ -1624,10 +1624,10 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         for (int i = 0; i < numPoints; i++)
         {
             int baseIdx = i * 4;
-            rgbGrad[i * 3] = outputGradient.Data[baseIdx];
-            rgbGrad[i * 3 + 1] = outputGradient.Data[baseIdx + 1];
-            rgbGrad[i * 3 + 2] = outputGradient.Data[baseIdx + 2];
-            densityGrad[i] = outputGradient.Data[baseIdx + 3];
+            rgbGrad[i * 3] = outputGradient.Data.Span[baseIdx];
+            rgbGrad[i * 3 + 1] = outputGradient.Data.Span[baseIdx + 1];
+            rgbGrad[i * 3 + 2] = outputGradient.Data.Span[baseIdx + 2];
+            densityGrad[i] = outputGradient.Data.Span[baseIdx + 3];
         }
 
         var rgbGradTensor = new Tensor<T>(rgbGrad, [numPoints, 3]);
@@ -1649,7 +1649,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             int featureBase = i * _featureDim;
             for (int f = 0; f < _featureDim; f++)
             {
-                gradFeatures[featureBase + f] = gradColor.Data[colorBase + f];
+                gradFeatures[featureBase + f] = gradColor.Data.Span[colorBase + f];
             }
         }
 
@@ -1814,7 +1814,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         writer.Write(_hashTables.Count);
         for (int level = 0; level < _numLevels; level++)
         {
-            var table = _hashTables[level].Data;
+            var table = _hashTables[level].Data.Span;
             writer.Write(table.Length);
             for (int i = 0; i < table.Length; i++)
             {
@@ -1830,7 +1830,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             writer.Write(true);
             writer.Write(_occupancyGridResolution);
-            var gridData = _occupancyGrid.Data;
+            var gridData = _occupancyGrid.Data.Span;
             writer.Write(gridData.Length);
             for (int i = 0; i < gridData.Length; i++)
             {

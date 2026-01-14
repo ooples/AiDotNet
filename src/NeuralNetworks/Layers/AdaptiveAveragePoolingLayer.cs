@@ -167,7 +167,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
                             for (int w = wStart; w < wEnd; w++)
                             {
                                 int inputIndex = b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w;
-                                sum = NumOps.Add(sum, input.Data[inputIndex]);
+                                sum = NumOps.Add(sum, input.Data.Span[inputIndex]);
                                 count++;
                             }
                         }
@@ -383,7 +383,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
                         int outputIndex = b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
 
                         // The gradient from the average is distributed equally to all inputs
-                        T gradPerInput = NumOps.Divide(outputGradient.Data[outputIndex], NumOps.FromDouble(count));
+                        T gradPerInput = NumOps.Divide(outputGradient.Data.Span[outputIndex], NumOps.FromDouble(count));
 
                         for (int h = hStart; h < hEnd; h++)
                         {

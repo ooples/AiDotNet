@@ -315,7 +315,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                             int probIdx = classIdx * height * width + h * width + w;
                             if (probIdx < output.Data.Length)
                             {
-                                sumConfidence += NumOps.ToDouble(output.Data[probIdx]);
+                                sumConfidence += NumOps.ToDouble(output.Data.Span[probIdx]);
                             }
                         }
 
@@ -400,7 +400,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                     int idx = c * height * width + h * width + w;
                     if (idx < output.Data.Length)
                     {
-                        double prob = NumOps.ToDouble(output.Data[idx]);
+                        double prob = NumOps.ToDouble(output.Data.Span[idx]);
                         if (prob > maxProb)
                         {
                             maxProb = prob;
@@ -525,8 +525,8 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }
@@ -562,7 +562,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                     int idx = c * height * width + h * width + w;
                     if (idx < input.Data.Length)
                     {
-                        double val = NumOps.ToDouble(input.Data[idx]);
+                        double val = NumOps.ToDouble(input.Data.Span[idx]);
                         if (val > maxVal) maxVal = val;
                     }
                 }
@@ -573,7 +573,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                     int idx = c * height * width + h * width + w;
                     if (idx < input.Data.Length)
                     {
-                        double val = NumOps.ToDouble(input.Data[idx]);
+                        double val = NumOps.ToDouble(input.Data.Span[idx]);
                         sumExp += Math.Exp(val - maxVal);
                     }
                 }
@@ -583,8 +583,8 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
                     int idx = c * height * width + h * width + w;
                     if (idx < input.Data.Length)
                     {
-                        double val = NumOps.ToDouble(input.Data[idx]);
-                        output.Data[idx] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
+                        double val = NumOps.ToDouble(input.Data.Span[idx]);
+                        output.Data.Span[idx] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
                     }
                 }
             }

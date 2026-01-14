@@ -113,8 +113,8 @@ public class NTXentLoss<T>
 
         for (int i = 0; i < batchSize * dim; i++)
         {
-            gradZ1[i] = gradCombined.Data[i];
-            gradZ2[i] = gradCombined.Data[batchSize * dim + i];
+            gradZ1[i] = gradCombined.Data.Span[i];
+            gradZ2[i] = gradCombined.Data.Span[batchSize * dim + i];
         }
 
         return (loss, new Tensor<T>(gradZ1, [batchSize, dim]), new Tensor<T>(gradZ2, [batchSize, dim]));
@@ -154,8 +154,8 @@ public class NTXentLoss<T>
 
         var result = new T[(batchA + batchB) * dim];
 
-        Array.Copy(a.Data, 0, result, 0, batchA * dim);
-        Array.Copy(b.Data, 0, result, batchA * dim, batchB * dim);
+        Array.Copy(a.Data.ToArray(), 0, result, 0, batchA * dim);
+        Array.Copy(b.Data.ToArray(), 0, result, batchA * dim, batchB * dim);
 
         return new Tensor<T>(result, [batchA + batchB, dim]);
     }
@@ -189,7 +189,7 @@ public class NTXentLoss<T>
 
         for (int i = 0; i < similarity.Length; i++)
         {
-            result[i] = NumOps.Multiply(similarity.Data[i], invTemp);
+            result[i] = NumOps.Multiply(similarity.Data.Span[i], invTemp);
         }
 
         return new Tensor<T>(result, similarity.Shape);

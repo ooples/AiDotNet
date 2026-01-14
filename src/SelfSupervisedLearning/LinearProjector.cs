@@ -190,14 +190,14 @@ public class LinearProjector<T> : IProjectorHead<T>
 
         for (int i = 0; i < _weight.Length; i++)
         {
-            paramList.Add(_weight.Data[i]);
+            paramList.Add(_weight.Data.Span[i]);
         }
 
         if (_useBias && _bias is not null)
         {
             for (int i = 0; i < _bias.Length; i++)
             {
-                paramList.Add(_bias.Data[i]);
+                paramList.Add(_bias.Data.Span[i]);
             }
         }
 
@@ -240,7 +240,7 @@ public class LinearProjector<T> : IProjectorHead<T>
         {
             for (int i = 0; i < _gradWeight.Length; i++)
             {
-                gradList.Add(_gradWeight.Data[i]);
+                gradList.Add(_gradWeight.Data.Span[i]);
             }
         }
         else
@@ -257,7 +257,7 @@ public class LinearProjector<T> : IProjectorHead<T>
             {
                 for (int i = 0; i < _gradBias.Length; i++)
                 {
-                    gradList.Add(_gradBias.Data[i]);
+                    gradList.Add(_gradBias.Data.Span[i]);
                 }
             }
             else

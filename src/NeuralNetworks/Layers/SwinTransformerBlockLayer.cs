@@ -702,18 +702,18 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     {
         var allParams = new List<T>();
 
-        allParams.AddRange(_norm1.GetParameters().Data);
-        allParams.AddRange(_norm2.GetParameters().Data);
-        allParams.AddRange(_qkvProj.GetParameters().Data);
-        allParams.AddRange(_outProj.GetParameters().Data);
+        allParams.AddRange(_norm1.GetParameters().ToArray());
+        allParams.AddRange(_norm2.GetParameters().ToArray());
+        allParams.AddRange(_qkvProj.GetParameters().ToArray());
+        allParams.AddRange(_outProj.GetParameters().ToArray());
 
         for (int i = 0; i < _relativePositionBiasTable.Length; i++)
         {
             allParams.Add(_relativePositionBiasTable[i]);
         }
 
-        allParams.AddRange(_mlpFc1.GetParameters().Data);
-        allParams.AddRange(_mlpFc2.GetParameters().Data);
+        allParams.AddRange(_mlpFc1.GetParameters().ToArray());
+        allParams.AddRange(_mlpFc2.GetParameters().ToArray());
 
         return new Vector<T>([.. allParams]);
     }
@@ -725,22 +725,22 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
 
         // Norm1
         int norm1Count = _norm1.ParameterCount;
-        _norm1.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(norm1Count).ToArray()));
+        _norm1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm1Count).ToArray()));
         offset += norm1Count;
 
         // Norm2
         int norm2Count = _norm2.ParameterCount;
-        _norm2.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(norm2Count).ToArray()));
+        _norm2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm2Count).ToArray()));
         offset += norm2Count;
 
         // QKV projection
         int qkvCount = _qkvProj.ParameterCount;
-        _qkvProj.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(qkvCount).ToArray()));
+        _qkvProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, qkvCount).ToArray()));
         offset += qkvCount;
 
         // Output projection
         int outCount = _outProj.ParameterCount;
-        _outProj.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(outCount).ToArray()));
+        _outProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, outCount).ToArray()));
         offset += outCount;
 
         // Relative position bias
@@ -752,12 +752,12 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
 
         // MLP FC1
         int fc1Count = _mlpFc1.ParameterCount;
-        _mlpFc1.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(fc1Count).ToArray()));
+        _mlpFc1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc1Count).ToArray()));
         offset += fc1Count;
 
         // MLP FC2
         int fc2Count = _mlpFc2.ParameterCount;
-        _mlpFc2.SetParameters(new Vector<T>(parameters.Data.Skip(offset).Take(fc2Count).ToArray()));
+        _mlpFc2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc2Count).ToArray()));
     }
 
     /// <inheritdoc/>
@@ -765,10 +765,10 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     {
         var allGrads = new List<T>();
 
-        allGrads.AddRange(_norm1.GetParameterGradients().Data);
-        allGrads.AddRange(_norm2.GetParameterGradients().Data);
-        allGrads.AddRange(_qkvProj.GetParameterGradients().Data);
-        allGrads.AddRange(_outProj.GetParameterGradients().Data);
+        allGrads.AddRange(_norm1.GetParameterGradients().ToArray());
+        allGrads.AddRange(_norm2.GetParameterGradients().ToArray());
+        allGrads.AddRange(_qkvProj.GetParameterGradients().ToArray());
+        allGrads.AddRange(_outProj.GetParameterGradients().ToArray());
 
         // Bias table gradients (would need to be computed in backward)
         for (int i = 0; i < _relativePositionBiasTable.Length; i++)
@@ -776,8 +776,8 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
             allGrads.Add(NumOps.Zero);
         }
 
-        allGrads.AddRange(_mlpFc1.GetParameterGradients().Data);
-        allGrads.AddRange(_mlpFc2.GetParameterGradients().Data);
+        allGrads.AddRange(_mlpFc1.GetParameterGradients().ToArray());
+        allGrads.AddRange(_mlpFc2.GetParameterGradients().ToArray());
 
         return new Vector<T>([.. allGrads]);
     }

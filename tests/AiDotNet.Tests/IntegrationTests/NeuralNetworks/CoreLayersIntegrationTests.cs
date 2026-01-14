@@ -180,7 +180,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -201,7 +201,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(newWeights.Shape, retrievedWeights.Shape);
         for (int i = 0; i < newWeights.Length; i++)
         {
-            Assert.Equal(newWeights.Data[i], retrievedWeights.Data[i], Tolerance);
+            Assert.Equal(newWeights.Data.Span[i], retrievedWeights.Data.Span[i], Tolerance);
         }
     }
 
@@ -243,7 +243,7 @@ public class CoreLayersIntegrationTests
         bool outputsDiffer = false;
         for (int i = 0; i < reluOutput.Length; i++)
         {
-            if (Math.Abs(reluOutput.Data[i] - sigmoidOutput.Data[i]) > Tolerance)
+            if (Math.Abs(reluOutput.Data.Span[i] - sigmoidOutput.Data.Span[i]) > Tolerance)
             {
                 outputsDiffer = true;
                 break;
@@ -379,7 +379,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -493,7 +493,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -593,7 +593,7 @@ public class CoreLayersIntegrationTests
         int zeroCount = 0;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data[i]) < Tolerance)
+            if (Math.Abs(output.Data.Span[i]) < Tolerance)
                 zeroCount++;
         }
         // With 50% dropout, expect roughly 50% zeros
@@ -617,7 +617,7 @@ public class CoreLayersIntegrationTests
         // Assert - output should equal input in inference mode
         for (int i = 0; i < input.Length; i++)
         {
-            Assert.Equal(input.Data[i], output.Data[i], Tolerance);
+            Assert.Equal(input.Data.Span[i], output.Data.Span[i], Tolerance);
         }
     }
 
@@ -658,7 +658,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -699,8 +699,8 @@ public class CoreLayersIntegrationTests
         float sum1 = 0, sum2 = 0;
         for (int i = 0; i < input.Length; i++)
         {
-            sum1 += input.Data[i];
-            sum2 += output.Data[i];
+            sum1 += input.Data.Span[i];
+            sum2 += output.Data.Span[i];
         }
         Assert.Equal(sum1, sum2, Tolerance);
     }
@@ -739,7 +739,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -783,8 +783,8 @@ public class CoreLayersIntegrationTests
         float sum1 = 0, sum2 = 0;
         for (int i = 0; i < input.Length; i++)
         {
-            sum1 += input.Data[i];
-            sum2 += output.Data[i];
+            sum1 += input.Data.Span[i];
+            sum2 += output.Data.Span[i];
         }
         Assert.Equal(sum1, sum2, Tolerance);
     }
@@ -825,7 +825,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -845,7 +845,7 @@ public class CoreLayersIntegrationTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data[i] = (float)(random.NextDouble() * 2 - 1); // [-1, 1]
+            input.Data.Span[i] = (float)(random.NextDouble() * 2 - 1); // [-1, 1]
         }
 
         // Act
@@ -854,13 +854,13 @@ public class CoreLayersIntegrationTests
         // Assert - negative values should be zeroed
         for (int i = 0; i < output.Length; i++)
         {
-            if (input.Data[i] < 0)
+            if (input.Data.Span[i] < 0)
             {
-                Assert.Equal(0f, output.Data[i], Tolerance);
+                Assert.Equal(0f, output.Data.Span[i], Tolerance);
             }
             else
             {
-                Assert.Equal(input.Data[i], output.Data[i], Tolerance);
+                Assert.Equal(input.Data.Span[i], output.Data.Span[i], Tolerance);
             }
         }
     }
@@ -879,8 +879,8 @@ public class CoreLayersIntegrationTests
         // Assert - all values should be in (0, 1)
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data[i] > 0f && output.Data[i] < 1f,
-                $"Sigmoid output {output.Data[i]} should be in (0, 1)");
+            Assert.True(output.Data.Span[i] > 0f && output.Data.Span[i] < 1f,
+                $"Sigmoid output {output.Data.Span[i]} should be in (0, 1)");
         }
     }
 
@@ -898,8 +898,8 @@ public class CoreLayersIntegrationTests
         // Assert - all values should be in (-1, 1)
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data[i] > -1f && output.Data[i] < 1f,
-                $"Tanh output {output.Data[i]} should be in (-1, 1)");
+            Assert.True(output.Data.Span[i] > -1f && output.Data.Span[i] < 1f,
+                $"Tanh output {output.Data.Span[i]} should be in (-1, 1)");
         }
     }
 
@@ -937,7 +937,7 @@ public class CoreLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data[i], cloneOutput.Data[i], Tolerance);
+            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
         }
     }
 
@@ -1051,8 +1051,8 @@ public class CoreLayersIntegrationTests
         int inferenceZeros = 0;
         for (int i = 0; i < trainOutput.Length; i++)
         {
-            if (Math.Abs(trainOutput.Data[i]) < Tolerance) trainZeros++;
-            if (Math.Abs(inferenceOutput.Data[i]) < Tolerance) inferenceZeros++;
+            if (Math.Abs(trainOutput.Data.Span[i]) < Tolerance) trainZeros++;
+            if (Math.Abs(inferenceOutput.Data.Span[i]) < Tolerance) inferenceZeros++;
         }
         Assert.True(trainZeros > 0, "Training should have some dropouts");
         Assert.True(trainZeros > inferenceZeros, "Training should have more zeros than inference");

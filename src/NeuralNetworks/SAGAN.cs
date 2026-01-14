@@ -285,9 +285,9 @@ public class SAGAN<T> : NeuralNetworkBase<T>
                 // Pad latent code to fit h*w
                 var padded = new Tensor<T>([h * w]);
                 for (int i = 0; i < latentLen; i++)
-                    padded.Data[i] = latentCodes.Data[i];
+                    padded.Data.Span[i] = latentCodes.Data.Span[i];
                 for (int i = latentLen; i < h * w; i++)
-                    padded.Data[i] = NumOps.Zero;
+                    padded.Data.Span[i] = NumOps.Zero;
                 reshapedLatent = padded.Reshape(1, h, w);
             }
             else
@@ -688,7 +688,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
             var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
-            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data, gradientCpu.Length);
+            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");

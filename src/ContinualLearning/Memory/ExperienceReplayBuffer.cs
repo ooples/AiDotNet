@@ -791,7 +791,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
         // Handle Tensor<T>
         if (input is Tensor<T> tensor)
         {
-            var data = tensor.Data;
+            var data = tensor.Data.Span;
             var features = new double[data.Length];
             for (int i = 0; i < data.Length; i++)
             {

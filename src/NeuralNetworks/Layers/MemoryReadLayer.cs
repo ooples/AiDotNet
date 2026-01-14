@@ -888,7 +888,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else if (_lastMemory is not null)
         {
             memorySlots = _lastMemory.Shape[0];
-            float[] memoryData = DirectGpuEngine.ToFloatArray<T>(_lastMemory.Data);
+            float[] memoryData = DirectGpuEngine.ToFloatArray<T>(_lastMemory.Data.ToArray());
             memoryBuffer = backend.AllocateBuffer(memoryData);
             memoryBufferOwned = true;
         }
@@ -898,10 +898,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Upload weights to GPU
-        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data);
-        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data);
-        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data);
-        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data);
+        float[] keyWeightData = DirectGpuEngine.ToFloatArray<T>(_keyWeights.Data.ToArray());
+        float[] valueWeightData = DirectGpuEngine.ToFloatArray<T>(_valueWeights.Data.ToArray());
+        float[] outputWeightData = DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data.ToArray());
+        float[] outputBiasData = DirectGpuEngine.ToFloatArray<T>(_outputBias.Data.ToArray());
 
         using var keyWeightsBuffer = backend.AllocateBuffer(keyWeightData);
         using var valueWeightsBuffer = backend.AllocateBuffer(valueWeightData);

@@ -194,7 +194,7 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
     {
         if (fp1.Hash is null || fp2.Hash is null)
         {
-            return ComputeDataSimilarity(fp1.Data, fp2.Data);
+            return ComputeDataSimilarity(fp1.Data.ToArray(), fp2.Data.ToArray());
         }
 
         // Use hash-based similarity

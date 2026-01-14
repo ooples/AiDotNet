@@ -89,7 +89,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
             int offset = (seqLen - 1) * features;
             for (int i = 0; i < features; i++)
             {
-                result.Data[i] = input.Data[offset + i];
+                result.Data.Span[i] = input.Data.Span[offset + i];
             }
             return result;
         }
@@ -106,7 +106,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
             int lastOffset = (seqLen - 1) * stride;
             for (int i = 0; i < batch * features; i++)
             {
-                result.Data[i] = input.Data[lastOffset + i];
+                result.Data.Span[i] = input.Data.Span[lastOffset + i];
             }
             return result;
         }
@@ -244,7 +244,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
             // Pass through
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                inputGradient.Data[i] = outputGradient.Data[i];
+                inputGradient.Data.Span[i] = outputGradient.Data.Span[i];
             }
         }
         else if (rank == 2)
@@ -254,7 +254,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
             int offset = (_lastSequenceLength - 1) * features;
             for (int i = 0; i < features; i++)
             {
-                inputGradient.Data[offset + i] = outputGradient.Data[i];
+                inputGradient.Data.Span[offset + i] = outputGradient.Data.Span[i];
             }
         }
         else if (rank == 3)
@@ -266,7 +266,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
             int lastOffset = (_lastSequenceLength - 1) * stride;
             for (int i = 0; i < batch * features; i++)
             {
-                inputGradient.Data[lastOffset + i] = outputGradient.Data[i];
+                inputGradient.Data.Span[lastOffset + i] = outputGradient.Data.Span[i];
             }
         }
 

@@ -274,9 +274,9 @@ public class FLAVR<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < frameA.Length; i++)
         {
-            result.Data[i] = NumOps.Add(
-                NumOps.Multiply(frameA.Data[i], factorA),
-                NumOps.Multiply(frameB.Data[i], factorB));
+            result.Data.Span[i] = NumOps.Add(
+                NumOps.Multiply(frameA.Data.Span[i], factorA),
+                NumOps.Multiply(frameB.Data.Span[i], factorB));
         }
         return result;
     }
@@ -324,7 +324,7 @@ public class FLAVR<T> : NeuralNetworkBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data[i]);
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -347,7 +347,7 @@ public class FLAVR<T> : NeuralNetworkBase<T>
 
         var stacked = new Tensor<T>([1, c * frames.Count, h, w]);
         for (int f = 0; f < frames.Count; f++)
-            Array.Copy(frames[f].Data, 0, stacked.Data, f * c * h * w, c * h * w);
+            frames[f].Data.Span.Slice(0, c * h * w).CopyTo(stacked.Data.Span.Slice(f * c * h * w, c * h * w));
         return stacked;
     }
 

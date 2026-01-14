@@ -228,7 +228,7 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data[i]);
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -250,11 +250,11 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         for (int i = 0; i < numDetections; i++)
         {
             int offset = i * (5 + _numClasses);
-            double x = Convert.ToDouble(output.Data[offset]);
-            double y = Convert.ToDouble(output.Data[offset + 1]);
-            double w = Convert.ToDouble(output.Data[offset + 2]);
-            double h = Convert.ToDouble(output.Data[offset + 3]);
-            double conf = Convert.ToDouble(output.Data[offset + 4]);
+            double x = Convert.ToDouble(output.Data.Span[offset]);
+            double y = Convert.ToDouble(output.Data.Span[offset + 1]);
+            double w = Convert.ToDouble(output.Data.Span[offset + 2]);
+            double h = Convert.ToDouble(output.Data.Span[offset + 3]);
+            double conf = Convert.ToDouble(output.Data.Span[offset + 4]);
 
             if (conf >= _lowThreshold)
             {

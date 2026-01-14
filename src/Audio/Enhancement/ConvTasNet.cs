@@ -305,7 +305,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var result = new T[modelOutput.Length];
             for (int i = 0; i < modelOutput.Length; i++)
             {
-                result[i] = _numOps.Multiply(modelOutput.Data[i], strengthT);
+                result[i] = _numOps.Multiply(modelOutput.Data.Span[i], strengthT);
             }
             return new Tensor<T>(result, modelOutput.Shape);
         }
@@ -390,7 +390,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                         {
                             int waveIdx = b * numSamples + sampleIdx;
                             int weightIdx = d * _kernelSize + k;
-                            sum = _numOps.Add(sum, _numOps.Multiply(waveform.Data[waveIdx], _encoderWeight[weightIdx]));
+                            sum = _numOps.Add(sum, _numOps.Multiply(waveform.Data.Span[waveIdx], _encoderWeight[weightIdx]));
                         }
                     }
                     // ReLU activation
@@ -424,7 +424,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * numFrames * dim + f * dim + d;
-                    sum += _numOps.ToDouble(input.Data[idx]);
+                    sum += _numOps.ToDouble(input.Data.Span[idx]);
                 }
                 double mean = sum / dim;
 
@@ -433,7 +433,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * numFrames * dim + f * dim + d;
-                    double diff = _numOps.ToDouble(input.Data[idx]) - mean;
+                    double diff = _numOps.ToDouble(input.Data.Span[idx]) - mean;
                     varSum += diff * diff;
                 }
                 double variance = varSum / dim;
@@ -443,7 +443,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 for (int d = 0; d < dim; d++)
                 {
                     int idx = b * numFrames * dim + f * dim + d;
-                    double x = _numOps.ToDouble(input.Data[idx]);
+                    double x = _numOps.ToDouble(input.Data.Span[idx]);
                     double normed = (x - mean) / std;
                     double gamma = _numOps.ToDouble(_normGamma[d % _normGamma.Length]);
                     double beta = _numOps.ToDouble(_normBeta[d % _normBeta.Length]);
@@ -479,7 +479,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                         int inIdx = b * numFrames * inputDim + f * inputDim + i;
                         if (i == d && inIdx < input.Length)
                         {
-                            sum = input.Data[inIdx]; // Identity-like projection for simplicity
+                            sum = input.Data.Span[inIdx]; // Identity-like projection for simplicity
                         }
                     }
                     int outIdx = b * numFrames * _bottleneckDim + f * _bottleneckDim + d;
@@ -529,7 +529,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                         {
                             int inIdx = b * numFrames * dim + f * dim + i;
                             int wIdx = (s * _encoderDim * dim + d * dim + i) % _maskWeight.Length;
-                            sum = _numOps.Add(sum, _numOps.Multiply(tcnOutput.Data[inIdx], _maskWeight[wIdx]));
+                            sum = _numOps.Add(sum, _numOps.Multiply(tcnOutput.Data.Span[inIdx], _maskWeight[wIdx]));
                         }
 
                         // Sigmoid activation for mask
@@ -572,7 +572,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                                       f * encoderDim + d;
                         int outIdx = maskIdx;
 
-                        masked[outIdx] = _numOps.Multiply(encoded.Data[encIdx], masks.Data[maskIdx]);
+                        masked[outIdx] = _numOps.Multiply(encoded.Data.Span[encIdx], masks.Data.Span[maskIdx]);
                     }
                 }
             }
@@ -619,7 +619,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
                             decoded[outIdx] = _numOps.Add(
                                 decoded[outIdx],
-                                _numOps.Multiply(maskedSources.Data[inIdx], _decoderWeight[weightIdx % _decoderWeight.Length]));
+                                _numOps.Multiply(maskedSources.Data.Span[inIdx], _decoderWeight[weightIdx % _decoderWeight.Length]));
                         }
                     }
                 }
@@ -646,7 +646,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             // [sources, samples] - take first source
             var enhanced = new T[numSamples];
-            Array.Copy(separated.Data, 0, enhanced, 0, numSamples);
+            Array.Copy(separated.Data.ToArray(), 0, enhanced, 0, numSamples);
             return new Tensor<T>(enhanced, new[] { numSamples });
         }
         else
@@ -657,7 +657,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 int srcOffset = b * _numSources * numSamples;
                 int dstOffset = b * numSamples;
-                Array.Copy(separated.Data, srcOffset, enhanced, dstOffset, numSamples);
+                Array.Copy(separated.Data.ToArray(), srcOffset, enhanced, dstOffset, numSamples);
             }
             return new Tensor<T>(enhanced, new[] { batchDim, numSamples });
         }
@@ -687,7 +687,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         for (int i = 0; i < chunkLen; i++)
         {
             // Add sample to buffer
-            _encoderBuffer[_bufferPosition] = audioChunk.Data[i];
+            _encoderBuffer[_bufferPosition] = audioChunk.Data.Span[i];
             _bufferPosition++;
 
             // When buffer is full, process
@@ -695,7 +695,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 var bufferTensor = new Tensor<T>(_encoderBuffer, new[] { 1, _kernelSize });
                 var enhanced = Enhance(bufferTensor);
-                outputChunks.Add(enhanced.Data);
+                outputChunks.Add(enhanced.Data.ToArray());
 
                 // Shift buffer by stride
                 Array.Copy(_encoderBuffer, _stride, _encoderBuffer, 0, _kernelSize - _stride);
@@ -797,8 +797,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
                     if (predIdx < predicted.Length && targIdx < target.Length)
                     {
-                        double pred = _numOps.ToDouble(predicted.Data[predIdx]);
-                        double targ = _numOps.ToDouble(target.Data[targIdx]);
+                        double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
+                        double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
                         dotProduct += pred * targ;
                         targetNormSq += targ * targ;
                     }
@@ -818,9 +818,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
                     if (predIdx < predicted.Length && targIdx < target.Length)
                     {
-                        double targ = _numOps.ToDouble(target.Data[targIdx]);
+                        double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
                         double scaledTarget = scale * targ;
-                        double pred = _numOps.ToDouble(predicted.Data[predIdx]);
+                        double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
                         double noise = pred - scaledTarget;
 
                         signalPower += scaledTarget * scaledTarget;
@@ -853,8 +853,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int len = Math.Min(predicted.Length, target.Length);
         for (int i = 0; i < len; i++)
         {
-            double pred = _numOps.ToDouble(predicted.Data[i]);
-            double targ = i < target.Length ? _numOps.ToDouble(target.Data[i]) : 0;
+            double pred = _numOps.ToDouble(predicted.Data.Span[i]);
+            double targ = i < target.Length ? _numOps.ToDouble(target.Data.Span[i]) : 0;
             double grad = pred - targ;
 
             // Accumulate to decoder gradients
@@ -1239,7 +1239,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                             int wIdx = h * inputDim + i;
                             if (inIdx < input.Length && wIdx < _conv1Weight.Length)
                             {
-                                sum = _ops.Add(sum, _ops.Multiply(input.Data[inIdx], _conv1Weight[wIdx]));
+                                sum = _ops.Add(sum, _ops.Multiply(input.Data.Span[inIdx], _conv1Weight[wIdx]));
                             }
                         }
                         // PReLU activation
@@ -1303,7 +1303,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                         // Residual connection
                         if (inOrigIdx < input.Length)
                         {
-                            output[outIdx] = _ops.Add(sum, input.Data[inOrigIdx]);
+                            output[outIdx] = _ops.Add(sum, input.Data.Span[inOrigIdx]);
                         }
                         else
                         {

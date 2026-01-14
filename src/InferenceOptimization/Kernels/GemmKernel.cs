@@ -58,7 +58,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
             // Choose strategy based on matrix size
             if (m * n * k < MinParallelSize * MinParallelSize)
             {
-                GemmBlocked(a.Data, b.Data, result.Data, m, n, k);
+                GemmBlocked(a.Data.Span, b.Data.Span, result.Data.Span, m, n, k);
             }
             else
             {
@@ -72,7 +72,7 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// Cache-blocked GEMM implementation
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void GemmBlocked(float[] A, float[] B, float[] C, int M, int N, int K)
+        private void GemmBlocked(Span<float> A, Span<float> B, Span<float> C, int M, int N, int K)
         {
             // Blocked algorithm for cache efficiency
             for (int i = 0; i < M; i += BlockSize)
@@ -94,8 +94,8 @@ namespace AiDotNet.InferenceOptimization.Kernels
                             for (int kk = k; kk < kMax; kk++)
                             {
                                 float aVal = A[ii * K + kk];
-                                var bRow = B.AsSpan(kk * N + j, spanLen);
-                                var cRow = C.AsSpan(ii * N + j, spanLen);
+                                var bRow = B.Slice(kk * N + j, spanLen);
+                                var cRow = C.Slice(ii * N + j, spanLen);
 
                                 // SIMD-optimized inner loop: cRow = cRow + aVal * bRow
                                 SimdKernels.ScalarMultiplyAdd(cRow, bRow, aVal, cRow);
@@ -110,13 +110,18 @@ namespace AiDotNet.InferenceOptimization.Kernels
         /// Parallel GEMM implementation for large matrices
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void GemmParallel(float[] A, float[] B, float[] C, int M, int N, int K)
+        private void GemmParallel(Memory<float> A, Memory<float> B, Memory<float> C, int M, int N, int K)
         {
             // Parallelize over rows of A
             Parallel.For(0, (M + BlockSize - 1) / BlockSize, iBlock =>
             {
                 int i = iBlock * BlockSize;
                 int iMax = Math.Min(i + BlockSize, M);
+
+                // Convert Memory<T> to Span<T> inside lambda (ref structs can't be captured)
+                var aSpan = A.Span;
+                var bSpan = B.Span;
+                var cSpan = C.Span;
 
                 for (int j = 0; j < N; j += BlockSize)
                 {
@@ -131,9 +136,9 @@ namespace AiDotNet.InferenceOptimization.Kernels
                         {
                             for (int kk = k; kk < kMax; kk++)
                             {
-                                float aVal = A[ii * K + kk];
-                                var bRow = B.AsSpan(kk * N + j, spanLen);
-                                var cRow = C.AsSpan(ii * N + j, spanLen);
+                                float aVal = aSpan[ii * K + kk];
+                                var bRow = bSpan.Slice(kk * N + j, spanLen);
+                                var cRow = cSpan.Slice(ii * N + j, spanLen);
 
                                 SimdKernels.ScalarMultiplyAdd(cRow, bRow, aVal, cRow);
                             }
@@ -162,11 +167,11 @@ namespace AiDotNet.InferenceOptimization.Kernels
 
             Parallel.For(0, m, i =>
             {
-                var rowA = a.Data.AsSpan(i * k, k);
+                var rowA = a.Data.Span.Slice(i * k, k);
                 for (int j = 0; j < n; j++)
                 {
-                    var rowB = b.Data.AsSpan(j * k, k);
-                    result.Data[i * n + j] = SimdKernels.DotProduct(rowA, rowB);
+                    var rowB = b.Data.Span.Slice(j * k, k);
+                    result.Data.Span[i * n + j] = SimdKernels.DotProduct(rowA, rowB);
                 }
             });
 

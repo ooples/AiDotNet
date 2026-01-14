@@ -416,7 +416,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var probs = Softmax(modelOutput.Data);
+        var probs = Softmax(modelOutput.Data.ToArray());
         return new Tensor<T>(probs, modelOutput.Shape);
     }
 
@@ -574,7 +574,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             output = ForwardNative(preprocessed);
         }
 
-        return output.Data;
+        return output.Data.ToArray();
     }
 
     private Tensor<T> ForwardNative(Tensor<T> features)
@@ -800,7 +800,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         int offset = 0;
         foreach (var tensor in tensors)
         {
-            Array.Copy(tensor.Data, 0, output, offset, tensor.Length);
+            Array.Copy(tensor.Data.ToArray(), 0, output, offset, tensor.Length);
             offset += tensor.Length;
         }
         return new Tensor<T>(output, [totalLen]);

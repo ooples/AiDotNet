@@ -522,24 +522,24 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Upload weight matrices to GPU
-        using var inWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingWeights.Data));
-        using var outWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingWeights.Data));
-        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data));
-        using var combWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationWeights.Data));
+        using var inWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingWeights.Data.ToArray()));
+        using var outWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingWeights.Data.ToArray()));
+        using var selfWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfWeights.Data.ToArray()));
+        using var combWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationWeights.Data.ToArray()));
 
         // Upload bias vectors to GPU
-        using var inBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingBias.Data));
-        using var outBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingBias.Data));
-        using var selfBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfBias.Data));
-        using var combBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationBias.Data));
+        using var inBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_incomingBias.Data.ToArray()));
+        using var outBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outgoingBias.Data.ToArray()));
+        using var selfBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_selfBias.Data.ToArray()));
+        using var combBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_combinationBias.Data.ToArray()));
 
         // Upload gate weights and bias if gating is enabled
         IGpuBuffer? gateWeightsBuffer = null;
         IGpuBuffer? gateBiasBuffer = null;
         if (_useGating && _gateWeights != null && _gateBias != null)
         {
-            gateWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateWeights.Data));
-            gateBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateBias.Data));
+            gateWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateWeights.Data.ToArray()));
+            gateBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateBias.Data.ToArray()));
         }
 
         // Convert adjacency matrix to CSR format for sparse operations

@@ -264,7 +264,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            inputData[i] = Convert.ToSingle(input.Data[i]);
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
         // Create ONNX input tensor
@@ -352,7 +352,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
         var predicted = Predict(input);
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -422,12 +422,14 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         int outWidth = width * 2;
 
         var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-        var inputData = input.Data;
-        var outputData = output.Data;
+        var inputMemory = input.Data;
+        var outputMemory = output.Data;
 
         // Parallel nearest-neighbor upsampling for efficiency
         Parallel.For(0, batchSize * channels, idx =>
         {
+            var inputData = inputMemory.Span;
+            var outputData = outputMemory.Span;
             int b = idx / channels;
             int c = idx % channels;
             int inBaseIdx = (b * channels + c) * height * width;
@@ -478,7 +480,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     {
         return gradient.Transform((g, idx) =>
         {
-            double x = Convert.ToDouble(input.Data[idx]);
+            double x = Convert.ToDouble(input.Data.Span[idx]);
             double c = Math.Sqrt(2.0 / Math.PI);
             double inner = c * (x + 0.044715 * x * x * x);
             double tanh_inner = Math.Tanh(inner);
@@ -493,7 +495,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     {
         return gradient.Transform((g, idx) =>
         {
-            double s = Convert.ToDouble(output.Data[idx]);
+            double s = Convert.ToDouble(output.Data.Span[idx]);
             double grad = s * (1.0 - s);
             return NumOps.Multiply(g, NumOps.FromDouble(grad));
         });
@@ -506,7 +508,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -517,7 +519,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

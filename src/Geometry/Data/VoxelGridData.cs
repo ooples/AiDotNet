@@ -125,7 +125,7 @@ public sealed class VoxelGridData<T>
 
         int stride = includeOccupancyAsFeature ? 4 : 3;
         var points = new List<T>();
-        var data = Voxels.Data;
+        var data = Voxels.Data.Span;
 
         int channelStride = Channels;
         int sliceStride = Height * Width * channelStride;

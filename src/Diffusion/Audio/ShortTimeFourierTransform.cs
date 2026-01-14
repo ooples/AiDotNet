@@ -204,7 +204,7 @@ public class ShortTimeFourierTransform<T>
         }
 
         // Process 1D signal directly
-        return ForwardSingle(signal.Data);
+        return ForwardSingle(signal.Data.ToArray());
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public class ShortTimeFourierTransform<T>
             for (int f = 0; f < numFreqs; f++)
             {
                 int outputIdx = frame * numFreqs + f;
-                output.Data[outputIdx] = spectrum[f];
+                output.Data.Span[outputIdx] = spectrum[f];
             }
         }
 
@@ -283,7 +283,7 @@ public class ShortTimeFourierTransform<T>
             var singleSignal = new T[signalLength];
             for (int i = 0; i < signalLength; i++)
             {
-                singleSignal[i] = signals.Data[b * signalLength + i];
+                singleSignal[i] = signals.Data.Span[b * signalLength + i];
             }
 
             // Compute STFT
@@ -291,7 +291,7 @@ public class ShortTimeFourierTransform<T>
 
             // Copy to batched output
             int offset = b * numFrames * numFreqs;
-            Array.Copy(singleOutput.Data, 0, output.Data, offset, numFrames * numFreqs);
+            singleOutput.Data.Span.CopyTo(output.Data.Span.Slice(offset, numFrames * numFreqs));
         }
 
         return output;
@@ -355,7 +355,7 @@ public class ShortTimeFourierTransform<T>
             // Copy positive frequencies
             for (int f = 0; f < numFreqs; f++)
             {
-                spectrum[f] = spectrogram.Data[frame * numFreqs + f];
+                spectrum[f] = spectrogram.Data.Span[frame * numFreqs + f];
             }
 
             // Reconstruct negative frequencies (conjugate symmetry)
@@ -427,14 +427,14 @@ public class ShortTimeFourierTransform<T>
             // Extract single spectrogram
             var singleSpec = new Tensor<Complex<T>>(new[] { numFrames, numFreqs });
             int offset = b * numFrames * numFreqs;
-            Array.Copy(spectrograms.Data, offset, singleSpec.Data, 0, numFrames * numFreqs);
+            spectrograms.Data.Span.Slice(offset, numFrames * numFreqs).CopyTo(singleSpec.Data.Span);
 
             // Compute ISTFT
             var singleOutput = InverseSingle(singleSpec, outputLength);
 
             // Copy to batched output
             int outOffset = b * outputLength;
-            Array.Copy(singleOutput.Data, 0, output.Data, outOffset, outputLength);
+            singleOutput.Data.Span.CopyTo(output.Data.Span.Slice(outOffset, outputLength));
         }
 
         return output;
@@ -495,7 +495,7 @@ public class ShortTimeFourierTransform<T>
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            power.Data[i] = NumOps.Multiply(magnitude.Data[i], magnitude.Data[i]);
+            power.Data.Span[i] = NumOps.Multiply(magnitude.Data.Span[i], magnitude.Data.Span[i]);
         }
 
         return power;
@@ -544,7 +544,7 @@ public class ShortTimeFourierTransform<T>
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
-            magnitude.Data[i] = complex.Data[i].Magnitude;
+            magnitude.Data.Span[i] = complex.Data.Span[i].Magnitude;
         }
 
         return magnitude;
@@ -561,7 +561,7 @@ public class ShortTimeFourierTransform<T>
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
-            phase.Data[i] = complex.Data[i].Phase;
+            phase.Data.Span[i] = complex.Data.Span[i].Phase;
         }
 
         return phase;
@@ -582,7 +582,7 @@ public class ShortTimeFourierTransform<T>
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
-            complex.Data[i] = Complex<T>.FromPolarCoordinates(magnitude.Data[i], phase.Data[i]);
+            complex.Data.Span[i] = Complex<T>.FromPolarCoordinates(magnitude.Data.Span[i], phase.Data.Span[i]);
         }
 
         return complex;

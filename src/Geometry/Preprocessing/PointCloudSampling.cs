@@ -1,4 +1,4 @@
-﻿using AiDotNet.PointCloud.Data;
+using AiDotNet.PointCloud.Data;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;

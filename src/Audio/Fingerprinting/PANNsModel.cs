@@ -293,7 +293,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 int idx = start + i;
                 if (idx < numSamples && idx < rawAudio.Length)
                 {
-                    double sample = _numOps.ToDouble(rawAudio.Data[idx]);
+                    double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
                     // Hann window
                     double window = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (_windowSize - 1)));
                     frameData[i] = sample * window;
@@ -449,7 +449,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                         int idx = b * channels * height * width + c * height * width + h * width + w;
                         if (idx < current.Length)
                         {
-                            sum += _numOps.ToDouble(current.Data[idx]);
+                            sum += _numOps.ToDouble(current.Data.Span[idx]);
                         }
                     }
                 }
@@ -496,7 +496,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var results = new Dictionary<string, double>();
         for (int i = 0; i < _numClasses && i < logits.Length; i++)
         {
-            double prob = Sigmoid(_numOps.ToDouble(logits.Data[i]));
+            double prob = Sigmoid(_numOps.ToDouble(logits.Data.Span[i]));
             if (prob >= threshold && i < _classLabels.Length)
             {
                 results[_classLabels[i]] = prob;
@@ -521,7 +521,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var predictions = new List<(string Label, double Probability)>();
         for (int i = 0; i < _numClasses && i < logits.Length; i++)
         {
-            double prob = Sigmoid(_numOps.ToDouble(logits.Data[i]));
+            double prob = Sigmoid(_numOps.ToDouble(logits.Data.Span[i]));
             string label = i < _classLabels.Length ? _classLabels[i] : $"class_{i}";
             predictions.Add((label, prob));
         }
@@ -551,7 +551,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                     if (embIdx < embedding.Length && wIdx < _fcWeight.Length)
                     {
                         sum = _numOps.Add(sum, _numOps.Multiply(
-                            embedding.Data[embIdx],
+                            embedding.Data.Span[embIdx],
                             _fcWeight[wIdx]));
                     }
                 }
@@ -581,7 +581,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         return new AudioFingerprint<T>
         {
-            Data = embedding.Data,
+            Data = embedding.Data.ToArray(),
             Duration = duration,
             SampleRate = SampleRate,
             Algorithm = Name,
@@ -692,8 +692,8 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         for (int i = 0; i < len; i++)
         {
-            double p = Sigmoid(_numOps.ToDouble(predicted.Data[i]));
-            double t = _numOps.ToDouble(target.Data[i]);
+            double p = Sigmoid(_numOps.ToDouble(predicted.Data.Span[i]));
+            double t = _numOps.ToDouble(target.Data.Span[i]);
 
             // Binary cross-entropy
             p = Math.Max(1e-7, Math.Min(1 - 1e-7, p));
@@ -710,8 +710,8 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var outputGrad = new double[numClasses];
         for (int i = 0; i < numClasses; i++)
         {
-            double p = Sigmoid(_numOps.ToDouble(predicted.Data[i]));
-            double t = _numOps.ToDouble(target.Data[i]);
+            double p = Sigmoid(_numOps.ToDouble(predicted.Data.Span[i]));
+            double t = _numOps.ToDouble(target.Data.Span[i]);
             outputGrad[i] = (p - t) / numClasses; // dL/dz = sigmoid(z) - target
         }
 
@@ -1155,7 +1155,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                                             if (inputIdx < input.Length && weightIdx < _weight.Length)
                                             {
                                                 sum = _ops.Add(sum, _ops.Multiply(
-                                                    input.Data[inputIdx],
+                                                    input.Data.Span[inputIdx],
                                                     _weight[weightIdx]));
                                             }
                                         }

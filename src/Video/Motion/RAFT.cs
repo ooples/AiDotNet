@@ -209,7 +209,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
     {
         var predicted = Predict(input);
         var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
 
         BackwardPass(lossGradient);
 
@@ -403,8 +403,8 @@ public class RAFT<T> : NeuralNetworkBase<T>
         var hNew = ApplyTanh(_gruConvH!.Forward(gruInput));
 
         var oneMinusZ = z.Transform((v, _) => NumOps.Subtract(NumOps.One, v));
-        var term1 = hiddenState.Transform((v, idx) => NumOps.Multiply(oneMinusZ.Data[idx], v));
-        var term2 = hNew.Transform((v, idx) => NumOps.Multiply(z.Data[idx], v));
+        var term1 = hiddenState.Transform((v, idx) => NumOps.Multiply(oneMinusZ.Data.Span[idx], v));
+        var term2 = hNew.Transform((v, idx) => NumOps.Multiply(z.Data.Span[idx], v));
 
         return AddTensors(term1, term2);
     }
@@ -547,7 +547,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
@@ -558,7 +558,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -570,7 +570,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([c, h, w]);
-        Array.Copy(tensor.Data, result.Data, tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

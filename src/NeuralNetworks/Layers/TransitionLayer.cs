@@ -397,7 +397,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                     for (int ow = 0; ow < outW; ow++)
                     {
                         int outIdx = n * (channels * outH * outW) + c * (outH * outW) + oh * outW + ow;
-                        var gradVal = NumOps.Divide(outputGrad.Data[outIdx], divisor);
+                        var gradVal = NumOps.Divide(outputGrad.Data.Span[outIdx], divisor);
 
                         int hStart = oh * stride;
                         int wStart = ow * stride;
@@ -411,7 +411,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                                 if (ih < inH && iw < inW)
                                 {
                                     int inIdx = n * (channels * inH * inW) + c * (inH * inW) + ih * inW + iw;
-                                    inputGrad.Data[inIdx] = NumOps.Add(inputGrad.Data[inIdx], gradVal);
+                                    inputGrad.Data.Span[inIdx] = NumOps.Add(inputGrad.Data.Span[inIdx], gradVal);
                                 }
                             }
                         }
@@ -428,8 +428,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var result = new T[grad.Data.Length];
         for (int i = 0; i < grad.Data.Length; i++)
         {
-            result[i] = NumOps.GreaterThan(input.Data[i], NumOps.Zero)
-                ? grad.Data[i]
+            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero)
+                ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
         return new Tensor<T>(grad.Shape, new Vector<T>(result));

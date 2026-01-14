@@ -263,7 +263,7 @@ public static class InstantNGPOperations
 
         // Create new grid as copy
         var newGrid = new T[gridSize * gridSize * gridSize];
-        Array.Copy(occupancyGrid.Data, newGrid, newGrid.Length);
+        Array.Copy(occupancyGrid.ToArray(), newGrid, newGrid.Length);
 
         // Apply decay
         for (int i = 0; i < newGrid.Length; i++)

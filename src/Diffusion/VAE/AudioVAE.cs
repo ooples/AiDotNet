@@ -591,7 +591,7 @@ public class AudioVAE<T> : VAEModelBase<T>
             // Reshape to [1, samples]
             var audio = results[0];
             var result = new Tensor<T>(new[] { 1, audio.Shape[0] });
-            Array.Copy(audio.Data, result.Data, audio.Data.Length);
+            audio.Data.Span.CopyTo(result.Data.Span);
             return result;
         }
         else

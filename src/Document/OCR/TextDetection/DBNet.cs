@@ -319,7 +319,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 int srcIdx = h * width + w;
                 if (srcIdx < output.Data.Length)
                 {
-                    probMap[h, w] = output.Data[srcIdx];
+                    probMap[h, w] = output.Data.Span[srcIdx];
                 }
             }
         }
@@ -345,7 +345,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     int srcIdx = channelOffset + h * width + w;
                     if (srcIdx < output.Data.Length)
                     {
-                        threshMap[h, w] = output.Data[srcIdx];
+                        threshMap[h, w] = output.Data.Span[srcIdx];
                     }
                 }
             }
@@ -356,7 +356,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             T defaultThresh = NumOps.FromDouble(0.3);
             for (int i = 0; i < threshMap.Data.Length; i++)
             {
-                threshMap.Data[i] = defaultThresh;
+                threshMap.Data.Span[i] = defaultThresh;
             }
         }
 
@@ -370,10 +370,10 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
         for (int i = 0; i < probMap.Data.Length; i++)
         {
-            double p = NumOps.ToDouble(probMap.Data[i]);
-            double t = NumOps.ToDouble(threshMap.Data[i]);
+            double p = NumOps.ToDouble(probMap.Data.Span[i]);
+            double t = NumOps.ToDouble(threshMap.Data.Span[i]);
             double b = 1.0 / (1.0 + Math.Exp(-_thresholdK * (p - t)));
-            binaryMap.Data[i] = NumOps.FromDouble(b);
+            binaryMap.Data.Span[i] = NumOps.FromDouble(b);
         }
 
         return binaryMap;
@@ -538,8 +538,8 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data[idx]);
-                        normalized.Data[idx] = NumOps.FromDouble((value - mean) / std);
+                        double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
             }
