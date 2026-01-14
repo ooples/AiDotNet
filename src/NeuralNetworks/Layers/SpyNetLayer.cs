@@ -828,7 +828,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var image4D = image;
         if (!hasBatch)
         {
-            image4D = new Tensor<T>(new[] { 1, channels, height, width }, new Vector<T>(image.Data.ToArray()));
+            image4D = new Tensor<T>(new[] { 1, channels, height, width }, Vector<T>.FromMemory(image.Data));
         }
 
         // Use IEngine.GridSample for hardware-accelerated bilinear sampling
@@ -837,7 +837,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Remove batch dimension if input didn't have it
         if (!hasBatch && warped.Rank == 4)
         {
-            warped = new Tensor<T>(new[] { channels, height, width }, new Vector<T>(warped.Data.ToArray()));
+            warped = new Tensor<T>(new[] { channels, height, width }, Vector<T>.FromMemory(warped.Data));
         }
 
         return (warped, grid);

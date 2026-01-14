@@ -70,7 +70,7 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
                     $"Weight size mismatch for layer {layerIndex}. Expected {weights.Length}, got {weightData.Length}.");
             }
 
-            Array.Copy(weightData, weights.Data.ToArray(), weightData.Length);
+            weightData.AsSpan().CopyTo(weights.Data.Span);
         }
         else
         {
@@ -95,7 +95,7 @@ public class FromFileInitializationStrategy<T> : InitializationStrategyBase<T>
                     $"Bias size mismatch for layer {layerIndex}. Expected {biases.Length}, got {biasData.Length}.");
             }
 
-            Array.Copy(biasData, biases.Data.ToArray(), biasData.Length);
+            biasData.AsSpan().CopyTo(biases.Data.Span);
         }
         else
         {

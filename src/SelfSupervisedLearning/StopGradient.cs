@@ -52,7 +52,7 @@ public static class StopGradient<T>
 
         // Create a copy of the tensor data
         var dataCopy = new T[tensor.Length];
-        Array.Copy(tensor.Data.ToArray(), dataCopy, tensor.Length);
+        tensor.Data.Span.CopyTo(dataCopy);
 
         // Create new tensor with copied data (no gradient tracking)
         return new Tensor<T>(dataCopy, tensor.Shape);

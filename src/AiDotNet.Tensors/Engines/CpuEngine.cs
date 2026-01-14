@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -15014,34 +15015,37 @@ public class CpuEngine : IEngine
             // Use optimized fused operations for float type
             if (typeof(T) == typeof(float))
             {
-                // Cast arrays directly (boxing avoids generic constraint issues)
-                var inputArray = (float[])(object)input.ToArray();
-                var weightsArray = (float[])(object)weights.ToArray();
-                var biasArray = bias != null ? (float[])(object)bias.ToArray() : null;
+                // Try to get underlying arrays without copying using MemoryMarshal
+                var inputArray = GetUnderlyingArrayOrCopy<T, float>(input.Data);
+                var weightsArray = GetUnderlyingArrayOrCopy<T, float>(weights.Data);
+                var biasArray = bias != null ? GetUnderlyingArrayOrCopy<T, float>(bias.Data) : null;
                 var outputArray = new float[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                // Create result tensor from computed output array
-                return new Tensor<T>([M, N], new Vector<T>((T[])(object)outputArray));
+                // Reinterpret float[] as T[] using Unsafe.As (safe since T is float)
+                var typedOutput = Unsafe.As<float[], T[]>(ref outputArray);
+                return new Tensor<T>([M, N], new Vector<T>(typedOutput));
             }
 
             // Use optimized fused operations for double type
             if (typeof(T) == typeof(double))
             {
-                var inputArray = (double[])(object)input.ToArray();
-                var weightsArray = (double[])(object)weights.ToArray();
-                var biasArray = bias != null ? (double[])(object)bias.ToArray() : null;
+                // Try to get underlying arrays without copying using MemoryMarshal
+                var inputArray = GetUnderlyingArrayOrCopy<T, double>(input.Data);
+                var weightsArray = GetUnderlyingArrayOrCopy<T, double>(weights.Data);
+                var biasArray = bias != null ? GetUnderlyingArrayOrCopy<T, double>(bias.Data) : null;
                 var outputArray = new double[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                // Create result tensor from computed output array
-                return new Tensor<T>([M, N], new Vector<T>((T[])(object)outputArray));
+                // Reinterpret double[] as T[] using Unsafe.As (safe since T is double)
+                var typedOutput = Unsafe.As<double[], T[]>(ref outputArray);
+                return new Tensor<T>([M, N], new Vector<T>(typedOutput));
             }
         }
 
@@ -16923,6 +16927,38 @@ public class CpuEngine : IEngine
         }
 
         return new Tensor<T>([batch, channels, outputHeight, outputWidth], new Vector<T>(resultData));
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Gets the underlying array from a Memory without copying if possible.
+    /// Falls back to ToArray() if the Memory is not backed by an array at offset 0.
+    /// </summary>
+    /// <typeparam name="TSource">The source generic type parameter.</typeparam>
+    /// <typeparam name="TDest">The destination type (float or double).</typeparam>
+    /// <param name="memory">The memory to extract the array from.</param>
+    /// <returns>The underlying array or a copy.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static TDest[] GetUnderlyingArrayOrCopy<TSource, TDest>(Memory<TSource> memory)
+        where TDest : unmanaged
+    {
+        // Reinterpret the Memory<TSource> as Memory<TDest> using Unsafe.As
+        // This is safe when called after checking typeof(TSource) == typeof(TDest)
+        var destMemory = Unsafe.As<Memory<TSource>, Memory<TDest>>(ref memory);
+
+        // Try to get the underlying array without copying
+        if (MemoryMarshal.TryGetArray((ReadOnlyMemory<TDest>)destMemory, out var segment)
+            && segment.Offset == 0
+            && segment.Array != null)
+        {
+            return segment.Array;
+        }
+
+        // Fall back to creating a copy
+        return destMemory.ToArray();
     }
 
     #endregion
