@@ -360,7 +360,7 @@ namespace AiDotNet.NeuralNetworks
             }
 
             var embeddings = embeddingLayer.GetTokenEmbeddings(tokenIds);
-            
+
             var sumVector = new Vector<T>(_embeddingDimension);
             for (int s = 0; s < tokenIds.Count; s++)
             {
