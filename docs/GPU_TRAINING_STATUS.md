@@ -318,6 +318,8 @@ Additional loss functions that could be added in the future:
 | SpectralNormalizationLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Weight normalization |
 
 ### Recurrent Layers
+Note: GPU training requires a DirectGpu backend and a ForwardGpu pass in training mode before BackwardGpu.
+
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | BidirectionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Wraps recurrent layers |

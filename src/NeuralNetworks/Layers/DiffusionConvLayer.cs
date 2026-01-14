@@ -186,6 +186,11 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     private readonly bool? _preferSpectralDiffusion;
 
     /// <summary>
+    /// Synchronizes automatic eigenbasis computation.
+    /// </summary>
+    private readonly object _eigenbasisLock = new();
+
+    /// <summary>
     /// Cached gradients for diffusion time parameters from backward pass.      
     /// </summary>
     private T[]? _diffusionTimesGradient;
@@ -461,6 +466,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <para>
     /// If the eigenbasis is not precomputed, it will be derived from the Laplacian
     /// automatically unless the layer is configured to prefer the direct method.
+    /// Automatic eigenbasis computation ignores the mass matrix; provide an explicit
+    /// eigenbasis when massMatrix is required.
     /// </para>
     /// </remarks>
     public void SetLaplacian(Tensor<T> laplacian, Tensor<T>? massMatrix = null)
@@ -548,6 +555,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices)
     {
         var outputData = new T[batchSize * numVertices * OutputChannels];
+        if (_preferSpectralDiffusion != false && (_eigenvalues == null || _eigenvectors == null))
+        {
+            EnsureEigenbasisForExecution();
+        }
 
         Parallel.For(0, batchSize, b =>
         {
@@ -742,47 +753,59 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         if (_eigenvalues != null && _eigenvectors != null)
             return;
 
-        if (_laplacian == null)
+        lock (_eigenbasisLock)
         {
-            throw new InvalidOperationException(
-                "Execution requires an eigenbasis or Laplacian. Call SetEigenbasis or SetLaplacian before executing the layer.");
-        }
+            if (_eigenvalues != null && _eigenvectors != null)
+                return;
 
-        if (_laplacian.Rank != 2 || _laplacian.Shape[0] != _laplacian.Shape[1])
-        {
-            throw new InvalidOperationException("Laplacian must be a square 2D matrix.");
-        }
-
-        var laplacianMatrix = _laplacian.ToMatrix();
-        var decomposition = new EigenDecomposition<T>(laplacianMatrix, EigenAlgorithmType.Jacobi);
-
-        var eigenValues = decomposition.EigenValues;
-        var eigenVectors = decomposition.EigenVectors;
-        int size = eigenValues.Length;
-        var pairs = new (double value, int index)[size];
-        for (int i = 0; i < size; i++)
-        {
-            pairs[i] = (NumOps.ToDouble(eigenValues[i]), i);
-        }
-
-        Array.Sort(pairs, (a, b) => a.value.CompareTo(b.value));
-
-        int count = Math.Min(_numEigenvectors, size);
-        var selectedValues = new T[count];
-        var selectedVectors = new T[laplacianMatrix.Rows * count];
-
-        for (int col = 0; col < count; col++)
-        {
-            int srcIndex = pairs[col].index;
-            selectedValues[col] = eigenValues[srcIndex];
-            for (int row = 0; row < laplacianMatrix.Rows; row++)
+            if (_laplacian == null)
             {
-                selectedVectors[row * count + col] = eigenVectors[row, srcIndex];
+                throw new InvalidOperationException(
+                    "Execution requires an eigenbasis or Laplacian. Call SetEigenbasis or SetLaplacian before executing the layer.");
             }
-        }
 
-        _eigenvalues = selectedValues;
-        _eigenvectors = new Tensor<T>(selectedVectors, [laplacianMatrix.Rows, count]);
+            if (_massMatrix != null)
+            {
+                throw new InvalidOperationException(
+                    "Automatic eigenbasis computation does not support a mass matrix. Provide a precomputed eigenbasis via SetEigenbasis.");
+            }
+
+            if (_laplacian.Rank != 2 || _laplacian.Shape[0] != _laplacian.Shape[1])
+            {
+                throw new InvalidOperationException("Laplacian must be a square 2D matrix.");
+            }
+
+            var laplacianMatrix = _laplacian.ToMatrix();
+            var decomposition = new EigenDecomposition<T>(laplacianMatrix, EigenAlgorithmType.Jacobi);
+
+            var eigenValues = decomposition.EigenValues;
+            var eigenVectors = decomposition.EigenVectors;
+            int size = eigenValues.Length;
+            var pairs = new (double value, int index)[size];
+            for (int i = 0; i < size; i++)
+            {
+                pairs[i] = (NumOps.ToDouble(eigenValues[i]), i);
+            }
+
+            Array.Sort(pairs, (a, b) => a.value.CompareTo(b.value));
+
+            int count = Math.Min(_numEigenvectors, size);
+            var selectedValues = new T[count];
+            var selectedVectors = new T[laplacianMatrix.Rows * count];
+
+            for (int col = 0; col < count; col++)
+            {
+                int srcIndex = pairs[col].index;
+                selectedValues[col] = eigenValues[srcIndex];
+                for (int row = 0; row < laplacianMatrix.Rows; row++)
+                {
+                    selectedVectors[row * count + col] = eigenVectors[row, srcIndex];
+                }
+            }
+
+            _eigenvalues = selectedValues;
+            _eigenvectors = new Tensor<T>(selectedVectors, [laplacianMatrix.Rows, count]);
+        }
     }
 
     /// <summary>
@@ -885,11 +908,16 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // Allocate diffused output buffer [batchSize * numVertices, diffusedSize]
         var diffusedBuffer = backend.AllocateBuffer(batchSize * numVertices * diffusedSize);
         backend.Fill(diffusedBuffer, 0.0f, batchSize * numVertices * diffusedSize);
+        var diffusedRetained = false;
+        IGpuBuffer? preActivationBuffer = null;
+        var preActivationRetained = false;
 
-        // Process each time scale on GPU
-        for (int t = 0; t < NumTimeScales; t++)
+        try
         {
-            float time = (float)NumOps.ToDouble(DiffusionTimes[t]);
+            // Process each time scale on GPU
+            for (int t = 0; t < NumTimeScales; t++)
+            {
+                float time = (float)NumOps.ToDouble(DiffusionTimes[t]);
 
             // Compute decay factors: exp(-eigenvalue * time)
             var decayData = new float[numEig];
@@ -1004,59 +1032,67 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             backend.Copy(updatedDiffusedBuffer, diffusedBuffer, batchSize * numVertices * diffusedSize);
         }
 
-        if (IsTrainingMode)
-        {
-            _gpuDiffusedFeatures?.Dispose();
-            _gpuDiffusedFeatures = new GpuTensor<T>(backend, diffusedBuffer,
-                [batchSize * numVertices, diffusedSize], GpuTensorRole.Activation, ownsBuffer: true);
+            if (IsTrainingMode)
+            {
+                _gpuDiffusedFeatures?.Dispose();
+                _gpuDiffusedFeatures = new GpuTensor<T>(backend, diffusedBuffer,
+                    [batchSize * numVertices, diffusedSize], GpuTensorRole.Activation, ownsBuffer: true);
+                diffusedRetained = true;
+            }
+
+            // Upload weights and biases
+            using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
+            using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data));
+
+            // Transpose weights for GEMM: [outputChannels, diffusedSize]^T = [diffusedSize, outputChannels]
+            using var weightsTransposedBuffer = backend.AllocateBuffer(diffusedSize * OutputChannels);
+            backend.Transpose(weightsBuffer, weightsTransposedBuffer, OutputChannels, diffusedSize);
+
+            // Linear transform: output = diffused @ weights^T
+            // [batchSize * numVertices, diffusedSize] @ [diffusedSize, outputChannels] -> [batchSize * numVertices, outputChannels]
+            preActivationBuffer = backend.AllocateBuffer(batchSize * numVertices * OutputChannels);
+            backend.Gemm(diffusedBuffer, weightsTransposedBuffer, preActivationBuffer,
+                batchSize * numVertices, OutputChannels, diffusedSize);
+
+            // Add bias: broadcast [outputChannels] across rows
+            backend.BiasAdd(preActivationBuffer, biasBuffer, preActivationBuffer, batchSize * numVertices, OutputChannels);
+
+            // Apply activation on GPU using base class helper
+            var outputBuffer = backend.AllocateBuffer(batchSize * numVertices * OutputChannels);
+            var fusedActivation = GetFusedActivationType();
+            ApplyGpuActivation(backend, preActivationBuffer, outputBuffer, batchSize * numVertices * OutputChannels, fusedActivation);
+
+            // Create output shape
+            int[] outputShape = batchSize == 1
+                ? [numVertices, OutputChannels]
+                : [batchSize, numVertices, OutputChannels];
+
+            if (IsTrainingMode)
+            {
+                _gpuPreActivation?.Dispose();
+                _gpuPreActivation = new GpuTensor<T>(backend, preActivationBuffer,
+                    [batchSize * numVertices, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+                preActivationRetained = true;
+            }
+
+            var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            if (IsTrainingMode)
+                _gpuOutput = outputTensor;
+
+            return outputTensor;
         }
-
-        // Upload weights and biases
-        using var weightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weights.Data));
-        using var biasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biases.Data));
-
-        // Transpose weights for GEMM: [outputChannels, diffusedSize]^T = [diffusedSize, outputChannels]
-        using var weightsTransposedBuffer = backend.AllocateBuffer(diffusedSize * OutputChannels);
-        backend.Transpose(weightsBuffer, weightsTransposedBuffer, OutputChannels, diffusedSize);
-
-        // Linear transform: output = diffused @ weights^T
-        // [batchSize * numVertices, diffusedSize] @ [diffusedSize, outputChannels] -> [batchSize * numVertices, outputChannels]
-        var preActivationBuffer = backend.AllocateBuffer(batchSize * numVertices * OutputChannels);
-        backend.Gemm(diffusedBuffer, weightsTransposedBuffer, preActivationBuffer,
-            batchSize * numVertices, OutputChannels, diffusedSize);
-
-        // Add bias: broadcast [outputChannels] across rows
-        backend.BiasAdd(preActivationBuffer, biasBuffer, preActivationBuffer, batchSize * numVertices, OutputChannels);
-
-        // Apply activation on GPU using base class helper
-        var outputBuffer = backend.AllocateBuffer(batchSize * numVertices * OutputChannels);
-        var fusedActivation = GetFusedActivationType();
-        ApplyGpuActivation(backend, preActivationBuffer, outputBuffer, batchSize * numVertices * OutputChannels, fusedActivation);
-
-        // Create output shape
-        int[] outputShape = batchSize == 1
-            ? [numVertices, OutputChannels]
-            : [batchSize, numVertices, OutputChannels];
-
-        if (IsTrainingMode)
+        finally
         {
-            _gpuPreActivation?.Dispose();
-            _gpuPreActivation = new GpuTensor<T>(backend, preActivationBuffer,
-                [batchSize * numVertices, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+            if (!diffusedRetained)
+            {
+                diffusedBuffer.Dispose();
+            }
+
+            if (preActivationBuffer != null && !preActivationRetained)
+            {
+                preActivationBuffer.Dispose();
+            }
         }
-        else
-        {
-            preActivationBuffer.Dispose();
-        }
-
-        var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-        if (IsTrainingMode)
-            _gpuOutput = outputTensor;
-
-        if (!IsTrainingMode)
-            diffusedBuffer.Dispose();
-
-        return outputTensor;
     }
 
     #endregion
@@ -1213,7 +1249,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                 }
                 else
                 {
-                    backend.BatchedGemm(tiledEigTBuffer!, _gpuInput.Buffer, spectralCoeffsBuffer,
+                    var batchedEigTBuffer = tiledEigTBuffer
+                        ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
+                    backend.BatchedGemm(batchedEigTBuffer, _gpuInput.Buffer, spectralCoeffsBuffer,
                         numEig, inputChannels, numVertices, batchSize);
                 }
 
@@ -1255,7 +1293,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                     }
                     else
                     {
-                        backend.BatchedGemm(tiledEigTBuffer!, diffusedGradBuffer, spectralGradBuffer,
+                        var batchedEigTBuffer = tiledEigTBuffer
+                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
+                        backend.BatchedGemm(batchedEigTBuffer, diffusedGradBuffer, spectralGradBuffer,
                             numEig, inputChannels, numVertices, batchSize);
                     }
 
@@ -1285,7 +1325,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                     }
                     else
                     {
-                        backend.BatchedGemm(tiledEigBuffer!, spectralGradBuffer, spatialGradBuffer,
+                        var batchedEigBuffer = tiledEigBuffer
+                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
+                        backend.BatchedGemm(batchedEigBuffer, spectralGradBuffer, spatialGradBuffer,
                             numVertices, inputChannels, numEig, batchSize);
                     }
 
@@ -1319,7 +1361,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                     }
                     else
                     {
-                        backend.BatchedGemm(tiledEigBuffer!, derivCoeffsBuffer, spatialDerivBuffer,
+                        var batchedEigBuffer = tiledEigBuffer
+                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
+                        backend.BatchedGemm(batchedEigBuffer, derivCoeffsBuffer, spatialDerivBuffer,
                             numVertices, inputChannels, numEig, batchSize);
                     }
 
