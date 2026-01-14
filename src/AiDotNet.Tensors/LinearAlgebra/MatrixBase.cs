@@ -677,12 +677,14 @@ public abstract class MatrixBase<T>
         int N = other.Columns;
         int K = _cols;
 
-        // Initialize result to zero using vectorized Fill
-        _numOps.Fill(result.AsWritableSpan(), _numOps.Zero);
+        // Create output array for the recursive algorithm
+        var resultData = new T[M * N];
 
         // Use cache-oblivious recursive algorithm
-        // Note: ToArray() returns the underlying array if memory is backed by one, otherwise creates a copy
-        MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), result._memory.ToArray(), 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
+        MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), resultData, 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
+
+        // Copy result back to the result matrix
+        resultData.AsSpan().CopyTo(result.AsWritableSpan());
 
         return result;
     }

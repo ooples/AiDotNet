@@ -15018,13 +15018,14 @@ public class CpuEngine : IEngine
                 var inputArray = (float[])(object)input.ToArray();
                 var weightsArray = (float[])(object)weights.ToArray();
                 var biasArray = bias != null ? (float[])(object)bias.ToArray() : null;
-                var outputArray = (float[])(object)result.ToArray();
+                var outputArray = new float[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                return result;
+                // Create result tensor from computed output array
+                return new Tensor<T>([M, N], new Vector<T>((T[])(object)outputArray));
             }
 
             // Use optimized fused operations for double type
@@ -15033,13 +15034,14 @@ public class CpuEngine : IEngine
                 var inputArray = (double[])(object)input.ToArray();
                 var weightsArray = (double[])(object)weights.ToArray();
                 var biasArray = bias != null ? (double[])(object)bias.ToArray() : null;
-                var outputArray = (double[])(object)result.ToArray();
+                var outputArray = new double[M * N];
 
                 CpuFusedOperations.FusedGemmBiasActivation(
                     inputArray, weightsArray, biasArray, outputArray,
                     M, N, K, activation);
 
-                return result;
+                // Create result tensor from computed output array
+                return new Tensor<T>([M, N], new Vector<T>((T[])(object)outputArray));
             }
         }
 
