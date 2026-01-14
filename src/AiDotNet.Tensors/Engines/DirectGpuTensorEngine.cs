@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -451,6 +452,25 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// Gets a GPU buffer for Memory&lt;T&gt; data, using cache if available.
+    /// Uses MemoryMarshal.TryGetArray to extract underlying array for cache lookup and efficient upload.
+    /// </summary>
+    private OwnedBuffer GetOrAllocateBuffer<T>(IDirectGpuBackend backend, ReadOnlyMemory<T> memory)
+    {
+        // Try to get the underlying array for cache lookup
+        if (MemoryMarshal.TryGetArray(memory, out ArraySegment<T> segment) &&
+            segment.Offset == 0 && segment.Count == segment.Array!.Length)
+        {
+            // Memory is backed by a full array - use the array-based overload for caching
+            return GetOrAllocateBuffer(backend, segment.Array);
+        }
+
+        // Memory is a slice or not array-backed - must upload directly (no caching)
+        float[] floatData = DirectGpuEngine.ToFloatArray(memory.ToArray());
+        return new OwnedBuffer(backend.AllocateBuffer(floatData), ownsBuffer: true);
+    }
+
+    /// <summary>
     /// Caches the result buffer for potential reuse by the next layer.
     /// The result data array serves as the cache key.
     /// Thread-safe: uses lock to coordinate with cache lookups.
@@ -564,6 +584,26 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 return new OwnedBuffer(gpuBuffer, ownsBuffer: true);
             }
         }
+    }
+
+    /// <summary>
+    /// Gets a GPU buffer for weight/bias Memory&lt;T&gt; data, auto-caching if not already persistent.
+    /// Uses MemoryMarshal.TryGetArray to extract underlying array for cache lookup and efficient upload.
+    /// </summary>
+    private OwnedBuffer GetOrCacheWeightBuffer<T>(IDirectGpuBackend backend, ReadOnlyMemory<T> memory, PersistentTensorRole role)
+    {
+        // Try to get the underlying array for cache-friendly behavior
+        if (MemoryMarshal.TryGetArray(memory, out ArraySegment<T> segment) &&
+            segment.Offset == 0 && segment.Count == segment.Array!.Length)
+        {
+            // Memory is backed by a full array - use the array-based overload for caching
+            return GetOrCacheWeightBuffer(backend, segment.Array, role);
+        }
+
+        // Memory is a slice or not array-backed - upload without caching
+        // (We can't cache slices reliably since the key would be the slice, not the source)
+        float[] floatData = DirectGpuEngine.ToFloatArray(memory.ToArray());
+        return new OwnedBuffer(backend.AllocateBuffer(floatData), ownsBuffer: true);
     }
 
     /// <summary>

@@ -27,6 +27,12 @@ public abstract class VectorBase<T>
     protected readonly Memory<T> _memory;
 
     /// <summary>
+    /// Optional memory owner for pooled memory management.
+    /// When set, the vector's memory comes from a pool and should be returned when disposed.
+    /// </summary>
+    protected readonly IMemoryOwner<T>? _memoryOwner;
+
+    /// <summary>
     /// Provides operations for numeric types (addition, subtraction, etc.).
     /// </summary>
     /// <remarks>
@@ -69,6 +75,22 @@ public abstract class VectorBase<T>
     protected VectorBase(Memory<T> memory)
     {
         _memory = memory;
+    }
+
+    /// <summary>
+    /// Creates a new vector from a pooled memory owner.
+    /// </summary>
+    /// <param name="memoryOwner">The memory owner providing the pooled memory.</param>
+    /// <param name="length">The number of elements to use from the memory.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a vector that uses memory from a pool.
+    /// Memory pooling reduces garbage collection overhead by reusing memory buffers.</para>
+    /// <para><b>Issue #693:</b> Supports integration with TensorPool for efficient memory reuse.</para>
+    /// </remarks>
+    protected VectorBase(IMemoryOwner<T> memoryOwner, int length)
+    {
+        _memoryOwner = memoryOwner;
+        _memory = memoryOwner.Memory.Slice(0, length);
     }
 
     /// <summary>
