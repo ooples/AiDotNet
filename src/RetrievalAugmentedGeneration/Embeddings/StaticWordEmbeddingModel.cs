@@ -35,9 +35,9 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly bool _ignoreUnknown;
 
     public override int EmbeddingDimension => _dimension;
-    
+
     // Static models don't really have a token limit like transformers, but we set a reasonable default
-    public override int MaxTokens => 10000; 
+    public override int MaxTokens => 10000;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StaticWordEmbeddingModel{T}"/> class.
@@ -46,8 +46,8 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
     /// <param name="dimension">The dimension of the embedding vectors.</param>
     /// <param name="ignoreUnknown">If true, unknown words are skipped. If false, an unknown token vector is used.</param>
     public StaticWordEmbeddingModel(
-        Dictionary<string, Vector<T>> wordVectors, 
-        int dimension, 
+        Dictionary<string, Vector<T>> wordVectors,
+        int dimension,
         bool ignoreUnknown = true)
     {
         if (wordVectors == null || wordVectors.Count == 0)
@@ -83,12 +83,12 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
                 if (vocabLimit.HasValue && count >= vocabLimit.Value) break;
 
                 var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                
+
                 // Skip header lines if present (FastText sometimes has one)
                 if (parts.Length <= 2) continue;
 
                 var word = parts[0];
-                
+
                 // Determine dimension from first valid line
                 if (dimension == 0)
                 {
@@ -129,7 +129,7 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
     protected override Vector<T> EmbedCore(string text)
     {
         var words = Tokenize(text);
-        if (words.Count == 0) return new Vector<T>(_dimension); 
+        if (words.Count == 0) return new Vector<T>(_dimension);
 
         var sumVector = new Vector<T>(_dimension);
         int validWords = 0;
@@ -157,7 +157,7 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 
         // Compute mean
         var meanVector = sumVector.Divide(NumOps.FromDouble(validWords));
-        
+
         // Normalize
         return meanVector.Normalize();
     }
@@ -165,7 +165,7 @@ public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
     private List<string> Tokenize(string text)
     {
         // Simple whitespace tokenizer for static embeddings
-        return text.Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '"', '\'' }, 
+        return text.Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '"', '\'' },
             StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 }

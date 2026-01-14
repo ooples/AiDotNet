@@ -339,11 +339,11 @@ namespace AiDotNet.NeuralNetworks
 
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
-            
+
             // GloVe uses W (layer 0) and W_tilde (layer 1). Final vectors are often W + W_tilde.
             var w = Layers[0].Forward(inputTensor);
             var w_tilde = Layers[1].Forward(inputTensor);
-            
+
             var sumVector = new Vector<T>(_embeddingDimension);
             for (int s = 0; s < tokenIds.Count; s++)
             {

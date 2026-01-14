@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
 using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using Xunit;
 
 namespace AiDotNetTests.IntegrationTests.NeuralNetworks
 {
@@ -55,15 +55,15 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
                 outputSize: embeddingDim
             );
             var tokenizer = new MockTokenizer();
-            
+
             var model = new TransformerEmbeddingNetwork<double>(
-                architecture, 
+                architecture,
                 tokenizer,
                 optimizer: null,
                 vocabSize: vocabSize,
                 embeddingDimension: embeddingDim,
-                numLayers: 2, 
-                numHeads: 4, 
+                numLayers: 2,
+                numHeads: 4,
                 feedForwardDim: 128);
 
             // Act
@@ -88,14 +88,14 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             );
             var tokenizer = new MockTokenizer();
             var texts = new List<string> { "text 1", "text 2", "text 3" };
-            
+
             var model = new TransformerEmbeddingNetwork<double>(
-                architecture, 
+                architecture,
                 tokenizer,
                 optimizer: null,
                 vocabSize: vocabSize,
-                embeddingDimension: embeddingDim, 
-                numLayers: 1, 
+                embeddingDimension: embeddingDim,
+                numLayers: 1,
                 numHeads: 2);
 
             // Act
@@ -106,7 +106,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
             Assert.Equal(3, embeddings.Rows);
             Assert.Equal(embeddingDim, embeddings.Columns);
         }
-        
+
         [Fact]
         public void TransformerEmbeddingNetwork_PoolingStrategy_ClsToken_Works()
         {
@@ -120,14 +120,14 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks
                 outputSize: embeddingDim
             );
             var tokenizer = new MockTokenizer();
-            
+
             var model = new TransformerEmbeddingNetwork<double>(
-                architecture, 
+                architecture,
                 tokenizer,
                 optimizer: null,
                 vocabSize: vocabSize,
-                embeddingDimension: embeddingDim, 
-                numLayers: 1, 
+                embeddingDimension: embeddingDim,
+                numLayers: 1,
                 numHeads: 2,
                 poolingStrategy: TransformerEmbeddingNetwork<double>.PoolingStrategy.ClsToken);
 
