@@ -206,9 +206,17 @@ jobs:
 
       - name: Force push fixes
         if: steps.check-commits.outputs.needs_fix == 'true'
+        env:
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          BRANCH: ${{ github.head_ref }}
+        shell: bash
         run: |
-          BRANCH="${{ github.head_ref }}"
-          git push origin "HEAD:$BRANCH" --force-with-lease
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
+          else
+            echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
+            git push origin "HEAD:$BRANCH" --force-with-lease
+          fi
 
       - name: Comment on PR
         if: steps.check-commits.outputs.needs_fix == 'true'
@@ -312,9 +320,17 @@ jobs:
 
       - name: Force push fix
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
+        env:
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          BRANCH: ${{ github.head_ref }}
+        shell: bash
         run: |
-          BRANCH="${{ github.head_ref }}"
-          git push origin "HEAD:$BRANCH" --force-with-lease
+          if [ -n "$AUTOFIX_PAT" ]; then
+            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
+          else
+            echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
+            git push origin "HEAD:$BRANCH" --force-with-lease
+          fi
 
       - name: Comment on PR
         if: steps.check-needs-fix.outputs.needs_fix == 'true'
