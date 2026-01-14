@@ -1,4 +1,6 @@
 global using System.Text;
+using System.Buffers;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -16,9 +18,25 @@ namespace AiDotNet.Tensors.LinearAlgebra;
 public abstract class MatrixBase<T>
 {
     /// <summary>
-    /// The internal array storing matrix data in a flattened format.
+    /// The internal memory storing matrix data in a flattened row-major format.
     /// </summary>
-    protected readonly T[] _data;
+    /// <remarks>
+    /// <para><b>Migration Note:</b> This field replaces the previous T[] _data field.
+    /// Memory&lt;T&gt; provides zero-copy slicing, better Span&lt;T&gt; interop, and integration with memory pooling.</para>
+    /// </remarks>
+    protected readonly Memory<T> _memory;
+
+    /// <summary>
+    /// Gets the underlying array from the memory backing store.
+    /// </summary>
+    /// <remarks>
+    /// <para>This property provides backward compatibility for code that accessed the old T[] _data field.
+    /// When the memory is backed by an array (the common case), this returns the array directly.
+    /// Otherwise, it creates a copy.</para>
+    /// </remarks>
+    protected T[] _data => MemoryMarshal.TryGetArray<T>(_memory, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
+        ? segment.Array
+        : _memory.ToArray();
 
     /// <summary>
     /// The number of rows in the matrix.
@@ -61,7 +79,27 @@ public abstract class MatrixBase<T>
 
         this._rows = rows;
         this._cols = cols;
-        this._data = new T[rows * cols];
+        this._memory = new T[rows * cols];
+    }
+
+    /// <summary>
+    /// Creates a new matrix from an existing Memory&lt;T&gt; backing store.
+    /// </summary>
+    /// <param name="memory">The memory to use as the matrix's backing store.</param>
+    /// <param name="rows">Number of rows in the matrix.</param>
+    /// <param name="cols">Number of columns in the matrix.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a matrix that uses existing memory without copying.
+    /// This is useful for zero-copy operations and integration with memory pooling.</para>
+    /// </remarks>
+    protected MatrixBase(Memory<T> memory, int rows, int cols)
+    {
+        if (memory.Length != rows * cols)
+            throw new ArgumentException($"Memory length ({memory.Length}) must equal rows * cols ({rows * cols})");
+
+        this._rows = rows;
+        this._cols = cols;
+        this._memory = memory;
     }
 
     /// <summary>
@@ -96,7 +134,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("All rows must have at least one column.", nameof(values));
         }
 
-        this._data = new T[_rows * _cols];
+        this._memory = new T[_rows * _cols];
 
         for (int i = 0; i < _rows; i++)
         {
@@ -107,7 +145,7 @@ public abstract class MatrixBase<T>
             }
 
             // Use vectorized Copy operation to copy entire row at once
-            var destRow = new Span<T>(_data, i * _cols, _cols);
+            var destRow = _memory.Span.Slice(i * _cols, _cols);
             _numOps.Copy(new ReadOnlySpan<T>(row), destRow);
         }
     }
@@ -136,7 +174,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Data array cannot have zero rows or columns.", nameof(data));
         }
 
-        this._data = new T[_rows * _cols];
+        this._memory = new T[_rows * _cols];
 
         // Reuse a single buffer to avoid allocating a new array per row
         var sourceRow = new T[_cols];
@@ -148,7 +186,7 @@ public abstract class MatrixBase<T>
             {
                 sourceRow[j] = data[i, j];
             }
-            var destRow = new Span<T>(_data, i * _cols, _cols);
+            var destRow = _memory.Span.Slice(i * _cols, _cols);
             _numOps.Copy(new ReadOnlySpan<T>(sourceRow), destRow);
         }
     }
@@ -1142,7 +1180,7 @@ public abstract class MatrixBase<T>
     /// </remarks>
     public ReadOnlySpan<T> AsSpan()
     {
-        return new ReadOnlySpan<T>(_data);
+        return _memory.Span;
     }
 
     /// <summary>
@@ -1158,7 +1196,41 @@ public abstract class MatrixBase<T>
     /// </remarks>
     internal Span<T> AsWritableSpan()
     {
-        return new Span<T>(_data);
+        return _memory.Span;
+    }
+
+    /// <summary>
+    /// Gets a read-only memory view of the matrix's data without copying.
+    /// </summary>
+    /// <returns>A read-only memory over the matrix's elements in row-major order.</returns>
+    /// <remarks>
+    /// <para><b>Issue #693: Memory&lt;T&gt; Migration</b></para>
+    /// <para>
+    /// This method provides access to the underlying Memory&lt;T&gt; backing store.
+    /// Unlike Span&lt;T&gt;, Memory&lt;T&gt; can be stored in fields and passed across async boundaries.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you access to the matrix's data in a format
+    /// that can be stored and passed around, unlike Span which must be used immediately.</para>
+    /// </remarks>
+    public ReadOnlyMemory<T> AsMemory()
+    {
+        return _memory;
+    }
+
+    /// <summary>
+    /// Gets a writable memory view of the matrix's data without copying.
+    /// </summary>
+    /// <returns>A writable memory over the matrix's elements.</returns>
+    /// <remarks>
+    /// <para><b>Issue #693: Memory&lt;T&gt; Migration</b></para>
+    /// <para>
+    /// This method provides direct writable access to the underlying Memory&lt;T&gt; backing store.
+    /// </para>
+    /// <para><b>Warning:</b> Use with caution - modifications affect the matrix directly.</para>
+    /// </remarks>
+    internal Memory<T> AsWritableMemory()
+    {
+        return _memory;
     }
 
     /// <summary>

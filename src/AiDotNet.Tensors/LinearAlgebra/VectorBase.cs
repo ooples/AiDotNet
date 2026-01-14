@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -16,9 +18,25 @@ namespace AiDotNet.Tensors.LinearAlgebra;
 public abstract class VectorBase<T>
 {
     /// <summary>
-    /// The internal array that stores the vector's elements.
+    /// The internal memory that stores the vector's elements.
     /// </summary>
-    protected readonly T[] _data;
+    /// <remarks>
+    /// <para><b>Migration Note:</b> This field replaces the previous T[] _data field.
+    /// Memory&lt;T&gt; provides zero-copy slicing, better Span&lt;T&gt; interop, and integration with memory pooling.</para>
+    /// </remarks>
+    protected readonly Memory<T> _memory;
+
+    /// <summary>
+    /// Gets the underlying array from the memory backing store.
+    /// </summary>
+    /// <remarks>
+    /// <para>This property provides backward compatibility for code that accessed the old T[] _data field.
+    /// When the memory is backed by an array (the common case), this returns the array directly.
+    /// Otherwise, it creates a copy.</para>
+    /// </remarks>
+    protected T[] _data => MemoryMarshal.TryGetArray<T>(_memory, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
+        ? segment.Array
+        : _memory.ToArray();
 
     /// <summary>
     /// Provides operations for numeric types (addition, subtraction, etc.).
@@ -49,7 +67,20 @@ public abstract class VectorBase<T>
         if (length < 0)
             throw new ArgumentException("Length must be non-negative", nameof(length));
 
-        _data = new T[length];
+        _memory = new T[length];
+    }
+
+    /// <summary>
+    /// Creates a new vector from an existing Memory&lt;T&gt; backing store.
+    /// </summary>
+    /// <param name="memory">The memory to use as the vector's backing store.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a vector that uses existing memory without copying.
+    /// This is useful for zero-copy operations and integration with memory pooling.</para>
+    /// </remarks>
+    protected VectorBase(Memory<T> memory)
+    {
+        _memory = memory;
     }
 
     /// <summary>
@@ -62,7 +93,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     protected VectorBase(IEnumerable<T> values)
     {
-        _data = [.. values];
+        _memory = values.ToArray();
     }
 
     /// <summary>
@@ -72,7 +103,7 @@ public abstract class VectorBase<T>
     /// <para><b>For Beginners:</b> This tells you how many numbers are in your vector.
     /// For example, the vector [1,2,3] has a Length of 3.</para>
     /// </remarks>
-    public int Length => _data.Length;
+    public int Length => _memory.Length;
 
     /// <summary>
     /// Gets the underlying array that stores the vector's elements.
@@ -147,7 +178,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual T[] ToArray()
     {
-        return (T[])_data.Clone();
+        return _memory.ToArray();
     }
 
     /// <summary>
@@ -167,7 +198,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public ReadOnlySpan<T> AsSpan()
     {
-        return new ReadOnlySpan<T>(_data);
+        return _memory.Span;
     }
 
     /// <summary>
@@ -184,7 +215,41 @@ public abstract class VectorBase<T>
     /// </remarks>
     internal Span<T> AsWritableSpan()
     {
-        return new Span<T>(_data);
+        return _memory.Span;
+    }
+
+    /// <summary>
+    /// Gets a read-only memory view of the vector's data without copying.
+    /// </summary>
+    /// <returns>A read-only memory over the vector's elements.</returns>
+    /// <remarks>
+    /// <para><b>Issue #693: Memory&lt;T&gt; Migration</b></para>
+    /// <para>
+    /// This method provides access to the underlying Memory&lt;T&gt; backing store.
+    /// Unlike Span&lt;T&gt;, Memory&lt;T&gt; can be stored in fields and passed across async boundaries.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you access to the vector's data in a format
+    /// that can be stored and passed around, unlike Span which must be used immediately.</para>
+    /// </remarks>
+    public ReadOnlyMemory<T> AsMemory()
+    {
+        return _memory;
+    }
+
+    /// <summary>
+    /// Gets a writable memory view of the vector's data without copying.
+    /// </summary>
+    /// <returns>A writable memory over the vector's elements.</returns>
+    /// <remarks>
+    /// <para><b>Issue #693: Memory&lt;T&gt; Migration</b></para>
+    /// <para>
+    /// This method provides direct writable access to the underlying Memory&lt;T&gt; backing store.
+    /// </para>
+    /// <para><b>Warning:</b> Use with caution - modifications affect the vector directly.</para>
+    /// </remarks>
+    internal Memory<T> AsWritableMemory()
+    {
+        return _memory;
     }
 
     /// <summary>

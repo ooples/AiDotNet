@@ -148,6 +148,35 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the Vector class with the specified memory backing.
+    /// </summary>
+    /// <param name="memory">The memory to use as the vector's backing store.</param>
+    /// <param name="_">Dummy parameter to disambiguate from IEnumerable constructor.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a vector that uses existing memory without copying.
+    /// This is useful for zero-copy operations and integration with memory pooling.</para>
+    /// <para><b>Note:</b> This constructor is private to avoid ambiguity with the IEnumerable constructor
+    /// when passing arrays. Use <see cref="FromMemory"/> for public access.</para>
+    /// </remarks>
+    private Vector(Memory<T> memory, bool _) : base(memory)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new vector from an existing Memory&lt;T&gt; backing store.
+    /// </summary>
+    /// <param name="memory">The memory to use as the vector's backing store.</param>
+    /// <returns>A new vector using the provided memory.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a vector that uses existing memory without copying.
+    /// This is useful for zero-copy operations and integration with memory pooling.</para>
+    /// </remarks>
+    public static Vector<T> FromMemory(Memory<T> memory)
+    {
+        return new Vector<T>(memory, false);
+    }
+
+    /// <summary>
     /// Returns an enumerator that iterates through the vector.
     /// </summary>
     /// <returns>An enumerator that can be used to iterate through the vector.</returns>
@@ -157,7 +186,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public IEnumerator<T> GetEnumerator()
     {
-        return ((IEnumerable<T>)_data).GetEnumerator();
+        // Use Memory<T>.Span for efficient iteration
+        for (int i = 0; i < Length; i++)
+        {
+            yield return _memory.Span[i];
+        }
     }
 
     /// <summary>
