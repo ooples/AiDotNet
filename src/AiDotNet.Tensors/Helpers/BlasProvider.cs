@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace AiDotNet.Tensors.Helpers;
@@ -14,6 +15,10 @@ internal static class BlasProvider
     private static IntPtr _libraryHandle;
     private static CblasSgemm? _sgemm;
     private static CblasDgemm? _dgemm;
+    private static BlasSetNumThreads? _setNumThreads;
+    private static MklSetDynamic? _setDynamic;
+    private static readonly int? ThreadCountOverride = ReadEnvInt("AIDOTNET_BLAS_THREADS");
+    private static readonly bool PreferMkl = ReadEnvBool("AIDOTNET_BLAS_PREFER_MKL");
 
 #if NETFRAMEWORK
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -45,6 +50,12 @@ internal static class BlasProvider
         double* b, int ldb,
         double beta,
         double* c, int ldc);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void BlasSetNumThreads(int threads);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void MklSetDynamic(int enabled);
 
     internal static bool TryGemm(int m, int n, int k, float[] a, int aOffset, int lda, float[] b, int bOffset, int ldb, float[] c, int cOffset, int ldc)
     {
@@ -163,7 +174,39 @@ internal static class BlasProvider
     {
         _sgemm = TryLoadSymbol<CblasSgemm>("cblas_sgemm");
         _dgemm = TryLoadSymbol<CblasDgemm>("cblas_dgemm");
+        TryLoadThreadControls();
         return _sgemm != null || _dgemm != null;
+    }
+
+    private static void TryLoadThreadControls()
+    {
+        _setNumThreads = TryLoadSymbol<BlasSetNumThreads>("openblas_set_num_threads")
+            ?? TryLoadSymbol<BlasSetNumThreads>("mkl_set_num_threads");
+        _setDynamic = TryLoadSymbol<MklSetDynamic>("mkl_set_dynamic");
+        ApplyThreadSettings();
+    }
+
+    private static void ApplyThreadSettings()
+    {
+        if (_setNumThreads == null)
+        {
+            return;
+        }
+
+        if (!ThreadCountOverride.HasValue || ThreadCountOverride.Value <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _setDynamic?.Invoke(0);
+            _setNumThreads(ThreadCountOverride.Value);
+        }
+        catch
+        {
+            // Ignore failures to keep BLAS optional and non-fatal.
+        }
     }
 
     private static T? TryLoadSymbol<T>(string name) where T : class
@@ -199,7 +242,7 @@ internal static class BlasProvider
 
     private static string[] GetCandidateLibraryNames()
     {
-        return new[]
+        string[] openblas =
         {
             "openblas",
             "libopenblas",
@@ -207,12 +250,55 @@ internal static class BlasProvider
             "libopenblas.dll",
             "libopenblas.so",
             "libopenblas.so.0",
-            "libopenblas.dylib",
+            "libopenblas.dylib"
+        };
+
+        string[] mkl =
+        {
             "mkl_rt",
             "mkl_rt.dll",
             "libmkl_rt.so",
             "libmkl_rt.dylib"
         };
+
+        bool preferMkl = PreferMkl || RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var names = new List<string>(openblas.Length + mkl.Length);
+        if (preferMkl)
+        {
+            names.AddRange(mkl);
+            names.AddRange(openblas);
+        }
+        else
+        {
+            names.AddRange(openblas);
+            names.AddRange(mkl);
+        }
+
+        return names.ToArray();
+    }
+
+    private static int? ReadEnvInt(string name)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        return int.TryParse(raw, out var value) && value > 0 ? value : null;
+    }
+
+    private static bool ReadEnvBool(string name)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
 #if NETFRAMEWORK

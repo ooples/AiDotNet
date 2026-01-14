@@ -65,8 +65,13 @@ public sealed class HipBackend : IAsyncGpuBackend
     private IntPtr _specializedModule;
     private IntPtr _fp16Module;
     private IntPtr _spatialTransformerModule;
+    private IntPtr _hipblasHandle;
+    private bool _hipblasAvailable;
 
     private const int DefaultBlockSize = 256;
+    private const string GemmVendorImplEnvVar = "AIDOTNET_GPU_GEMM_IMPL";
+    private const string GemmVendorThresholdEnvVar = "AIDOTNET_GPU_GEMM_VENDOR_THRESHOLD";
+    private const long DefaultVendorGemmThreshold = 128L * 128L * 128L;
 
     public bool IsAvailable { get; }
     public string BackendName => $"HIP ({GetKernelTypeName()})";
@@ -203,6 +208,8 @@ public sealed class HipBackend : IAsyncGpuBackend
                 return;
             }
 
+            TryInitializeHipBlas();
+
             // Compile MFMA kernels
             CompileKernels();
 
@@ -259,6 +266,76 @@ public sealed class HipBackend : IAsyncGpuBackend
             return AmdGpuArchitecture.RDNA;
 
         return AmdGpuArchitecture.GCN;
+    }
+
+    private void TryInitializeHipBlas()
+    {
+        if (!HipBlasNative.IsAvailable)
+        {
+            return;
+        }
+
+        try
+        {
+            var status = HipBlasNative.hipblasCreate(ref _hipblasHandle);
+            if (status != HipBlasNative.HipBlasStatus.Success)
+            {
+                _hipblasHandle = IntPtr.Zero;
+                return;
+            }
+
+            status = HipBlasNative.hipblasSetStream(_hipblasHandle, _stream);
+            if (status != HipBlasNative.HipBlasStatus.Success)
+            {
+                HipBlasNative.hipblasDestroy(_hipblasHandle);
+                _hipblasHandle = IntPtr.Zero;
+                return;
+            }
+
+            _hipblasAvailable = true;
+        }
+        catch
+        {
+            _hipblasHandle = IntPtr.Zero;
+            _hipblasAvailable = false;
+        }
+    }
+
+    private static long GetEnvLong(string name, long defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return long.TryParse(value, out var parsed) && parsed > 0 ? parsed : defaultValue;
+    }
+
+    private static bool ShouldUseVendorGemm(int m, int n, int k)
+    {
+        string? mode = Environment.GetEnvironmentVariable(GemmVendorImplEnvVar);
+        if (IsVendorGemmDisabled(mode))
+        {
+            return false;
+        }
+
+        if (IsVendorGemmForced(mode))
+        {
+            return true;
+        }
+
+        long work = (long)m * n * k;
+        return work >= GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
+    }
+
+    private static bool IsVendorGemmForced(string? mode)
+    {
+        return string.Equals(mode, "vendor", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(mode, "hipblas", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsVendorGemmDisabled(string? mode)
+    {
+        return string.Equals(mode, "builtin", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(mode, "internal", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(mode, "kernel", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(mode, "custom", StringComparison.OrdinalIgnoreCase);
     }
 
     private void CompileKernels()
@@ -664,6 +741,11 @@ public sealed class HipBackend : IAsyncGpuBackend
 
     public void Gemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
     {
+        if (TryExecuteHipBlasGemm(A, B, C, M, N, K, alpha, beta))
+        {
+            return;
+        }
+
         var bufferA = (HipGpuBuffer)A;
         var bufferB = (HipGpuBuffer)B;
         var bufferC = (HipGpuBuffer)C;
@@ -764,6 +846,50 @@ public sealed class HipBackend : IAsyncGpuBackend
         // Synchronize
         var syncResult = HipNativeBindings.hipStreamSynchronize(_stream);
         HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
+    }
+
+    private bool TryExecuteHipBlasGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta)
+    {
+        if (!_hipblasAvailable || _hipblasHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (!ShouldUseVendorGemm(M, N, K))
+        {
+            return false;
+        }
+
+        var bufferA = (HipGpuBuffer)A;
+        var bufferB = (HipGpuBuffer)B;
+        var bufferC = (HipGpuBuffer)C;
+
+        float alphaVal = alpha;
+        float betaVal = beta;
+
+        var status = HipBlasNative.hipblasSgemm(
+            _hipblasHandle,
+            HipBlasNative.HipBlasOperation.None,
+            HipBlasNative.HipBlasOperation.None,
+            N, M, K,
+            ref alphaVal,
+            bufferB.Handle, N,
+            bufferA.Handle, K,
+            ref betaVal,
+            bufferC.Handle, N);
+
+        if (status != HipBlasNative.HipBlasStatus.Success)
+        {
+            if (EnableDiagnostics)
+            {
+                Console.WriteLine($"hipBLAS SGEMM failed with status: {status}");
+            }
+            return false;
+        }
+
+        var syncResult = HipNativeBindings.hipStreamSynchronize(_stream);
+        HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize (hipBLAS)");
+        return true;
     }
 
     private IntPtr SelectGemmKernel(int M, int N, int K)
@@ -9111,6 +9237,13 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             HipNativeBindings.hipModuleUnload(_fp16Module);
             _fp16Module = IntPtr.Zero;
+        }
+
+        if (_hipblasHandle != IntPtr.Zero)
+        {
+            HipBlasNative.hipblasDestroy(_hipblasHandle);
+            _hipblasHandle = IntPtr.Zero;
+            _hipblasAvailable = false;
         }
 
         if (_stream != IntPtr.Zero)

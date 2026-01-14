@@ -4,6 +4,7 @@ using System.Diagnostics;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNetBenchmarkTests;
@@ -88,6 +89,16 @@ internal static class GpuResidentQuickHarness
         {
             RunTimed("MatMul (GPU resident)", warmup, iterations, ctx, () =>
                 gpuEngine.MatMulGpuTensors(gpuMatrixA, gpuMatrixB));
+
+            if (backend is OpenClBackend opencl && OpenClBackend.IsClBlastAvailable)
+            {
+                using var clblastOutput = backend.AllocateBuffer(MatrixSize * MatrixSize);
+                RunTimed("MatMul (CLBlast library)", warmup, iterations, ctx, () =>
+                {
+                    opencl.GemmWithClBlast(gpuMatrixA.Buffer, gpuMatrixB.Buffer, clblastOutput, MatrixSize, MatrixSize, MatrixSize);
+                    return null;
+                });
+            }
 
             RunTimed("Add (GPU resident)", warmup, iterations, ctx, () =>
                 gpuEngine.AddGpu(gpuVectorA, gpuVectorB));

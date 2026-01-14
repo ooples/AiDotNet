@@ -49,7 +49,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private const string OfflineTuningProgressEnvVar = "AIDOTNET_GPU_TUNE_PROGRESS";
         private const string OfflineTuningResetEnvVar = "AIDOTNET_GPU_TUNE_RESET";
         private const string OfflineTuningHeartbeatEnvVar = "AIDOTNET_GPU_TUNE_HEARTBEAT";
+        private const string GemmVendorImplEnvVar = "AIDOTNET_GPU_GEMM_IMPL";
+        private const string GemmVendorThresholdEnvVar = "AIDOTNET_GPU_GEMM_VENDOR_THRESHOLD";
         private const int DefaultBayesianTrials = 500;
+        private const long DefaultVendorGemmThreshold = 128L * 128L * 128L;
         private readonly Dictionary<(int M, int N, int K), GemmConfig> _tunedConfigCache = new();
         private readonly object _tunedConfigLock = new();
         private bool _tuningDbResetDone;
@@ -606,6 +609,48 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
 
             return defaultValue;
+        }
+
+        private static long GetEnvLong(string name, long defaultValue)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            return long.TryParse(value, out var parsed) && parsed > 0 ? parsed : defaultValue;
+        }
+
+        private static bool ShouldUseVendorGemm(int m, int n, int k, bool offlineEnabled)
+        {
+            string? mode = Environment.GetEnvironmentVariable(GemmVendorImplEnvVar);
+            if (IsVendorGemmDisabled(mode))
+            {
+                return false;
+            }
+
+            if (IsVendorGemmForced(mode))
+            {
+                return true;
+            }
+
+            if (offlineEnabled)
+            {
+                return false;
+            }
+
+            long work = (long)m * n * k;
+            return work >= GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
+        }
+
+        private static bool IsVendorGemmForced(string? mode)
+        {
+            return string.Equals(mode, "vendor", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "clblast", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsVendorGemmDisabled(string? mode)
+        {
+            return string.Equals(mode, "builtin", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "internal", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "kernel", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "custom", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryGetOfflineTuningMode(out bool useExhaustive)
@@ -1760,6 +1805,26 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             // DIAGNOSTIC TRACING (always prints for debugging)
             bool traceEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TRACE") == "1";
+
+            if (ClBlastNative.IsAvailable && ShouldUseVendorGemm(M, N, K, offlineEnabled))
+            {
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying CLBlast library");
+
+                if (TryExecuteClBlastLibraryGemm(A, B, C, M, N, K, alpha, beta))
+                {
+                    if (traceEnabled)
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: CLBlast library executed");
+                    return;
+                }
+
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: CLBlast library FAILED");
+            }
+            else if (traceEnabled && !ClBlastNative.IsAvailable)
+            {
+                Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SKIP: CLBlast library not available");
+            }
 
             if (!offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
@@ -4062,13 +4127,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// Executes GEMM using the actual CLBlast library for head-to-head comparison.
         /// Returns the execution time in milliseconds, or -1 if CLBlast is not available.
         /// </summary>
-        public double GemmWithClBlast(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        private bool TryExecuteClBlastLibraryGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta)
         {
-            if (_context == null)
-                throw new InvalidOperationException("OpenCL context not available");
-
-            if (!ClBlastNative.IsAvailable)
-                return -1.0;
+            if (_context == null || !ClBlastNative.IsAvailable)
+                return false;
 
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
             var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
@@ -4076,7 +4138,6 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             IntPtr queue = _context.CommandQueue;
 
-            var sw = Stopwatch.StartNew();
             var status = ClBlastNative.Sgemm(
                 ClBlastNative.Layout.RowMajor,
                 ClBlastNative.Transpose.No,
@@ -4090,14 +4151,30 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 ref queue,
                 IntPtr.Zero);
 
+            if (status != ClBlastNative.StatusCode.Success)
+            {
+                if (EnableTuningDiagnostics)
+                {
+                    Console.WriteLine($"CLBlast SGEMM failed with status: {status}");
+                }
+                return false;
+            }
+
+            return true;
+        }
+
+        public double GemmWithClBlast(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var sw = Stopwatch.StartNew();
+            bool ok = TryExecuteClBlastLibraryGemm(A, B, C, M, N, K, alpha, beta);
             OpenClNativeBindings.Finish(_context.CommandQueue);
             sw.Stop();
 
-            if (status != ClBlastNative.StatusCode.Success)
-            {
-                Console.WriteLine($"CLBlast SGEMM failed with status: {status}");
+            if (!ok)
                 return -1.0;
-            }
 
             return sw.Elapsed.TotalMilliseconds;
         }
@@ -9399,4 +9476,3 @@ KERNEL VARIANTS (A/B testing):
         }
     }
 }
-
