@@ -226,7 +226,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         }
 
         var resultArray = new T[this.Length];
-        _numOps.Divide(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray));
+        _numOps.Divide(_memory.Span, other._memory.Span, new Span<T>(resultArray));
 
         return new Vector<T>(resultArray);
     }
@@ -258,7 +258,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<T> Where(Func<T, bool> predicate)
     {
-        return new Vector<T>(_data.Where(predicate));
+        return new Vector<T>(_memory.ToArray().Where(predicate));
     }
 
     /// <summary>
@@ -273,7 +273,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<TResult> Select<TResult>(Func<T, TResult> selector)
     {
-        return new Vector<TResult>(_data.Select(selector));
+        return new Vector<TResult>(_memory.ToArray().Select(selector));
     }
 
     /// <summary>
@@ -331,9 +331,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<TResult> Transform<TResult>(Func<T, TResult> function)
     {
         var resultArray = new TResult[Length];
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            resultArray[i] = function(_data[i]);
+            resultArray[i] = function(span[i]);
         }
         return new Vector<TResult>(resultArray);
     }
@@ -352,9 +353,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {
         var resultArray = new TResult[Length];
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            resultArray[i] = function(_data[i], i);
+            resultArray[i] = function(span[i], i);
         }
         return new Vector<TResult>(resultArray);
     }
@@ -415,7 +417,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
 
         Vector<T> subVector = new Vector<T>(length);
         // Use vectorized copy via Span slicing
-        _numOps.Copy(new ReadOnlySpan<T>(_data, startIndex, length), subVector.AsWritableSpan());
+        _numOps.Copy(_memory.Span.Slice(startIndex, length), subVector.AsWritableSpan());
         return subVector;
     }
 
@@ -468,7 +470,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (this.Length != other.Length)
             throw new ArgumentException("Vectors must have the same length for dot product.", nameof(other));
 
-        return _numOps.Dot(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data));
+        return _numOps.Dot(_memory.Span, other._memory.Span);
     }
 
     /// <summary>
@@ -485,7 +487,8 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public T Norm()
     {
         // Use vectorized dot product: ||x|| = sqrt(x . x)
-        T sumOfSquares = _numOps.Dot(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(_data));
+        var span = _memory.Span;
+        T sumOfSquares = _numOps.Dot(span, span);
         return _numOps.Sqrt(sumOfSquares);
     }
 
@@ -503,7 +506,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<T> Divide(T scalar)
     {
         var resultArray = new T[this.Length];
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(resultArray));
+        _numOps.DivideScalar(_memory.Span, scalar, new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -539,9 +542,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         writer.Write(Length);
 
         // Write each element as bytes
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            double value = _numOps.ToDouble(_data[i]);
+            double value = _numOps.ToDouble(span[i]);
             writer.Write(value);
         }
 
@@ -601,7 +605,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentException("Vectors must have the same length for element-wise multiplication.", nameof(other));
 
         var resultArray = new T[this.Length];
-        _numOps.Multiply(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray));
+        _numOps.Multiply(_memory.Span, other._memory.Span, new Span<T>(resultArray));
 
         return new Vector<T>(resultArray);
     }
@@ -961,9 +965,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         // Create a column matrix (Nx1) from this vector
         // In linear algebra, transposing a row vector (1xN) gives a column vector (Nx1)
         var result = new Matrix<T>(Length, 1);
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            result[i, 0] = _data[i];
+            result[i, 0] = span[i];
         }
         return result;
     }
@@ -1031,8 +1036,9 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentOutOfRangeException(nameof(index));
 
         var newData = new T[Length - 1];
-        Array.Copy(_data, 0, newData, 0, index);
-        Array.Copy(_data, index + 1, newData, index, Length - index - 1);
+        var sourceSpan = _memory.Span;
+        sourceSpan.Slice(0, index).CopyTo(newData.AsSpan());
+        sourceSpan.Slice(index + 1).CopyTo(newData.AsSpan(index));
 
         return new Vector<T>(newData);
     }
@@ -1083,7 +1089,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         foreach (var vector in vectors)
         {
             // Use vectorized copy for each vector segment
-            _numOps.Copy(new ReadOnlySpan<T>(vector._data), new Span<T>(result._data, offset, vector.Length));
+            _numOps.Copy(vector._memory.Span, result._memory.Span.Slice(offset, vector.Length));
             offset += vector.Length;
         }
 
@@ -1129,7 +1135,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentException("Vectors must have the same length");
 
         var resultArray = new T[Length];
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other.Data), new Span<T>(resultArray));
+        _numOps.Add(_memory.Span, other.AsSpan(), new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -1149,7 +1155,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentException("Vectors must have the same length");
 
         var resultArray = new T[Length];
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other.Data), new Span<T>(resultArray));
+        _numOps.Subtract(_memory.Span, other.AsSpan(), new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -1166,7 +1172,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<T> Multiply(T scalar)
     {
         var resultArray = new T[Length];
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(resultArray));
+        _numOps.MultiplyScalar(_memory.Span, scalar, new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -1204,7 +1210,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentNullException(nameof(vector));
 
         var resultArray = new T[vector.Length];
-        _numOps.AddScalar(new ReadOnlySpan<T>(vector._data), scalar, new Span<T>(resultArray));
+        _numOps.AddScalar(vector._memory.Span, scalar, new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -1227,7 +1233,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             throw new ArgumentNullException(nameof(vector));
 
         var resultArray = new T[vector.Length];
-        _numOps.SubtractScalar(new ReadOnlySpan<T>(vector._data), scalar, new Span<T>(resultArray));
+        _numOps.SubtractScalar(vector._memory.Span, scalar, new Span<T>(resultArray));
         return new Vector<T>(resultArray);
     }
 
@@ -1363,8 +1369,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     {
         if (list == null)
             throw new ArgumentNullException(nameof(list));
-        var vector = new Vector<T>(list.Count);
-        list.CopyTo(vector._data);
-        return vector;
+        return new Vector<T>(list);
     }
 }

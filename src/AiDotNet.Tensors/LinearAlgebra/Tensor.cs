@@ -107,10 +107,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
         // Use vectorized Copy operation to copy entire matrix data at once (5-10x faster than nested loops)
         // Matrix is stored in row-major order, which matches tensor storage
-        // CRITICAL: Use .Data to access the actual underlying array directly.
-        // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
-        // and returns a COPY, causing data to be written to a temporary array that gets discarded.
-        _numOps.Copy(matrix.AsSpan(), new Span<T>(_data.Data));
+        _numOps.Copy(matrix.AsSpan(), _data.AsWritableSpan());
     }
 
     /// <summary>
@@ -588,14 +585,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             var result = new Tensor<T>(this.Shape);
             int rowLength = this.Shape[1];
             // Use vectorized Add for each row (5-15x faster with AVX2)
-            // CRITICAL: Use .Data to access the actual underlying array directly.
-            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
-            // and returns a COPY, causing data to be written to a temporary array that gets discarded.
+            var srcSpan = _data.AsSpan();
+            var destSpan = result._data.AsWritableSpan();
             for (int i = 0; i < this.Shape[0]; i++)
             {
                 int offset = i * rowLength;
-                var sourceRow = new ReadOnlySpan<T>(_data.Data, offset, rowLength);
-                var destRow = new Span<T>(result._data.Data, offset, rowLength);
+                var sourceRow = srcSpan.Slice(offset, rowLength);
+                var destRow = destSpan.Slice(offset, rowLength);
                 _numOps.Add(sourceRow, vector.AsSpan(), destRow);
             }
             return result;
@@ -609,16 +605,15 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             int lastDimLength = this.Shape[2];
             int sliceSize = this.Shape[1] * this.Shape[2];
             // Use vectorized Add for each row in the last dimension (5-15x faster with AVX2)
-            // CRITICAL: Use .Data to access the actual underlying array directly.
-            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
-            // and returns a COPY, causing data to be written to a temporary array that gets discarded.
+            var srcSpan = _data.AsSpan();
+            var destSpan = result._data.AsWritableSpan();
             for (int i = 0; i < this.Shape[0]; i++)
             {
                 for (int j = 0; j < this.Shape[1]; j++)
                 {
                     int offset = i * sliceSize + j * lastDimLength;
-                    var sourceSlice = new ReadOnlySpan<T>(_data.Data, offset, lastDimLength);
-                    var destSlice = new Span<T>(result._data.Data, offset, lastDimLength);
+                    var sourceSlice = srcSpan.Slice(offset, lastDimLength);
+                    var destSlice = destSpan.Slice(offset, lastDimLength);
                     _numOps.Add(sourceSlice, vector.AsSpan(), destSlice);
                 }
             }
@@ -1839,14 +1834,13 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         if (startCol == 0 && endCol == sourceCols)
         {
             // Full width slice - use vectorized Copy per row (5-10x faster)
-            // CRITICAL: Use .Data to access the actual underlying array directly.
-            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
-            // and returns a COPY, causing data to be copied to a temporary array that gets discarded.
+            var srcSpan = _data.AsSpan();
+            var destSpan = result._data.AsWritableSpan();
             for (int i = 0; i < newRows; i++)
             {
                 int sourceOffset = (startRow + i) * sourceCols;
                 int destOffset = i * newCols;
-                _numOps.Copy(new ReadOnlySpan<T>(_data.Data, sourceOffset, newCols), new Span<T>(result._data.Data, destOffset, newCols));
+                _numOps.Copy(srcSpan.Slice(sourceOffset, newCols), destSpan.Slice(destOffset, newCols));
             }
         }
         else
@@ -2223,10 +2217,12 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
                 resultStrides[d] = resultStrides[d + 1] * newShape[d + 1];
         }
 
-        // Copy elements - use Data property to access underlying array directly,
-        // avoiding implicit conversion from Vector<T> to T[] which creates copies
+        // Copy elements into temporary array, then copy to result
+        int resultLength = newShape.Length > 0 ? newShape.Aggregate(1, (a, b) => a * b) : 1;
+        T[] destArray = new T[resultLength];
         int resultIdx = 0;
-        CopySliceRecursive(Data, result.Data, Shape, newShape, strides, dimension, index, 0, 0, ref resultIdx);
+        CopySliceRecursive(_data.ToArray(), destArray, Shape, newShape, strides, dimension, index, 0, 0, ref resultIdx);
+        result.CopyFromArray(destArray);
 
         return result;
     }
@@ -2702,9 +2698,12 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         {
             // Element-wise multiplication, not matrix multiplication
             var fastResult = new Tensor<T>(Shape);
+            var srcSpan = _data.AsSpan();
+            var otherSpan = other._data.AsSpan();
+            var destSpan = fastResult._data.AsWritableSpan();
             for (int i = 0; i < Length; i++)
             {
-                fastResult.Data[i] = _numOps.Multiply(this.Data[i], other.Data[i]);
+                destSpan[i] = _numOps.Multiply(srcSpan[i], otherSpan[i]);
             }
             return fastResult;
         }
@@ -2776,9 +2775,12 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         if (Shape.SequenceEqual(other.Shape))
         {
             var fastResult = new Tensor<T>(Shape);
+            var srcSpan = _data.AsSpan();
+            var otherSpan = other._data.AsSpan();
+            var destSpan = fastResult._data.AsWritableSpan();
             for (int i = 0; i < Length; i++)
             {
-                fastResult.Data[i] = _numOps.Divide(this.Data[i], other.Data[i]);
+                destSpan[i] = _numOps.Divide(srcSpan[i], otherSpan[i]);
             }
             return fastResult;
         }
@@ -3301,10 +3303,11 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             strides[d] = strides[d + 1] * Shape[d + 1];
 
         // Use recursive helper to copy elements
-        // Use Data property to access underlying T[] directly, avoiding implicit conversion
-        // from Vector<T> to T[] which creates copies and discards the writes
+        // Get data as array, modify it, then copy back
+        T[] destArray = _data.ToArray();
         int sliceIdx = 0;
-        SetSliceRecursive(Data, slice.Data, Shape, expectedSliceShape, strides, dimension, index, 0, 0, ref sliceIdx);
+        SetSliceRecursive(destArray, slice._data.ToArray(), Shape, expectedSliceShape, strides, dimension, index, 0, 0, ref sliceIdx);
+        CopyFromArray(destArray);
     }
 
     private void SetSliceRecursive(T[] dest, T[] source, int[] destShape, int[] sourceShape,

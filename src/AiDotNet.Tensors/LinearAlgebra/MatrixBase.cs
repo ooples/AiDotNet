@@ -26,17 +26,6 @@ public abstract class MatrixBase<T>
     /// </remarks>
     protected readonly Memory<T> _memory;
 
-    /// <summary>
-    /// Gets the underlying array from the memory backing store.
-    /// </summary>
-    /// <remarks>
-    /// <para>This property provides backward compatibility for code that accessed the old T[] _data field.
-    /// When the memory is backed by an array (the common case), this returns the array directly.
-    /// Otherwise, it creates a copy.</para>
-    /// </remarks>
-    protected T[] _data => MemoryMarshal.TryGetArray<T>(_memory, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
-        ? segment.Array
-        : _memory.ToArray();
 
     /// <summary>
     /// The number of rows in the matrix.
@@ -231,12 +220,12 @@ public abstract class MatrixBase<T>
         get
         {
             ValidateIndices(row, col);
-            return _data[row * _cols + col];
+            return _memory.Span[row * _cols + col];
         }
         set
         {
             ValidateIndices(row, col);
-            _data[row * _cols + col] = value;
+            _memory.Span[row * _cols + col] = value;
         }
     }
 
@@ -304,8 +293,8 @@ public abstract class MatrixBase<T>
         // Use vectorized Copy operation to copy entire rows at once
         for (int i = 0; i < rowCount; i++)
         {
-            var sourceRow = new ReadOnlySpan<T>(_data, (startRow + i) * _cols, _cols);
-            var destRow = new Span<T>(result._data, i * _cols, _cols);
+            var sourceRow = _memory.Span.Slice((startRow + i) * _cols, _cols);
+            var destRow = result._memory.Span.Slice(i * _cols, _cols);
             _numOps.Copy(sourceRow, destRow);
         }
 
@@ -355,7 +344,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Vector length must match matrix column count");
 
         // Use vectorized Copy operation to copy entire row at once
-        var destRow = new Span<T>(_data, rowIndex * _cols, _cols);
+        var destRow = _memory.Span.Slice(rowIndex * _cols, _cols);
         _numOps.Copy(vector.AsSpan(), destRow);
     }
 
@@ -388,7 +377,7 @@ public abstract class MatrixBase<T>
     {
         ValidateIndices(row, 0);
         var result = new Vector<T>(_cols);
-        var sourceRow = new ReadOnlySpan<T>(_data, row * _cols, _cols);
+        var sourceRow = _memory.Span.Slice(row * _cols, _cols);
         _numOps.Copy(sourceRow, result.AsWritableSpan());
         return result;
     }
@@ -409,9 +398,10 @@ public abstract class MatrixBase<T>
         ValidateIndices(0, col);
         var result = new Vector<T>(_rows);
         var destSpan = result.AsWritableSpan();
+        var srcSpan = _memory.Span;
         for (int i = 0; i < _rows; i++)
         {
-            destSpan[i] = _data[i * _cols + col];
+            destSpan[i] = srcSpan[i * _cols + col];
         }
         return result;
     }
@@ -540,7 +530,7 @@ public abstract class MatrixBase<T>
 
         // Use vectorized Dot product for SIMD acceleration (10-15x faster with AVX2)
         // Dot computes sum(x[i] * y[i]) which is exactly element-wise multiply and sum
-        return _numOps.Dot(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data));
+        return _numOps.Dot(_memory.Span, other._memory.Span);
     }
 
     /// <summary>
@@ -562,7 +552,7 @@ public abstract class MatrixBase<T>
 
         var result = CreateInstance(_rows, _cols);
         // Use vectorized Add operation for SIMD acceleration (5-15x faster with AVX2)
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Add(_memory.Span, other._memory.Span, result.AsWritableSpan());
 
         return result;
     }
@@ -583,7 +573,7 @@ public abstract class MatrixBase<T>
         if (_rows != other.Rows || _cols != other.Columns)
             throw new ArgumentException("Matrix dimensions must match for addition.");
 
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+        _numOps.Add(_memory.Span, other._memory.Span, _memory.Span);
     }
 
     /// <summary>
@@ -602,7 +592,7 @@ public abstract class MatrixBase<T>
         if (destination.Length < _rows * _cols)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
+        _numOps.Add(_memory.Span, other._memory.Span, destination);
     }
 
     /// <summary>
@@ -624,7 +614,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Matrix dimensions must match for subtraction.");
 
         var result = CreateInstance(_rows, _cols);
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Subtract(_memory.Span, other._memory.Span, result.AsWritableSpan());
         return result;
     }
 
@@ -641,7 +631,7 @@ public abstract class MatrixBase<T>
         if (_rows != other.Rows || _cols != other.Columns)
             throw new ArgumentException("Matrix dimensions must match for subtraction.");
 
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+        _numOps.Subtract(_memory.Span, other._memory.Span, _memory.Span);
     }
 
     /// <summary>
@@ -660,7 +650,7 @@ public abstract class MatrixBase<T>
         if (destination.Length < _rows * _cols)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
+        _numOps.Subtract(_memory.Span, other._memory.Span, destination);
     }
 
     /// <summary>
@@ -691,7 +681,8 @@ public abstract class MatrixBase<T>
         _numOps.Fill(result.AsWritableSpan(), _numOps.Zero);
 
         // Use cache-oblivious recursive algorithm
-        MultiplyRecursive(_data, other._data, result._data, 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
+        // Note: ToArray() returns the underlying array if memory is backed by one, otherwise creates a copy
+        MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), result._memory.ToArray(), 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
 
         return result;
     }
@@ -834,7 +825,7 @@ public abstract class MatrixBase<T>
         // Use vectorized dot product for each row (SIMD accelerated)
         for (int i = 0; i < _rows; i++)
         {
-            var rowSpan = new ReadOnlySpan<T>(_data, i * _cols, _cols);
+            var rowSpan = _memory.Span.Slice(i * _cols, _cols);
             result[i] = _numOps.Dot(rowSpan, vecSpan);
         }
 
@@ -855,7 +846,7 @@ public abstract class MatrixBase<T>
     public virtual MatrixBase<T> Multiply(T scalar)
     {
         var result = CreateInstance(_rows, _cols);
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
+        _numOps.MultiplyScalar(_memory.Span, scalar, result.AsWritableSpan());
         return result;
     }
 
@@ -868,7 +859,7 @@ public abstract class MatrixBase<T>
     /// </remarks>
     public virtual void MultiplyInPlace(T scalar)
     {
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+        _numOps.MultiplyScalar(_memory.Span, scalar, _memory.Span);
     }
 
     /// <summary>
@@ -885,7 +876,7 @@ public abstract class MatrixBase<T>
         if (destination.Length < _rows * _cols)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, destination);
+        _numOps.MultiplyScalar(_memory.Span, scalar, destination);
     }
 
     /// <summary>
@@ -904,8 +895,8 @@ public abstract class MatrixBase<T>
     public virtual MatrixBase<T> Transpose()
     {
         var result = CreateInstance(_cols, _rows);
-        var resultData = result._data;
-        var srcData = _data;
+        var resultSpan = result._memory.Span;
+        var srcSpan = _memory.Span;
         int rows = _rows;
         int cols = _cols;
 
@@ -917,13 +908,17 @@ public abstract class MatrixBase<T>
                 int srcOffset = i * cols;
                 for (int j = 0; j < cols; j++)
                 {
-                    resultData[j * rows + i] = srcData[srcOffset + j];
+                    resultSpan[j * rows + i] = srcSpan[srcOffset + j];
                 }
             }
             return result;
         }
 
         // For larger matrices, use cache-blocked transpose with parallel execution
+        // Get arrays for parallel processing (Memory<T>.Span can't be used across threads)
+        var resultData = result._memory.ToArray();
+        var srcData = _memory.ToArray();
+
         const int BlockSize = 32;
         const int ParallelThreshold = 16384; // 128x128 or larger
 
@@ -1019,6 +1014,7 @@ public abstract class MatrixBase<T>
             throw new InvalidOperationException("In-place transpose is only valid for square matrices.");
 
         int n = _rows;
+        var span = _memory.Span;
 
         // For small matrices, use simple approach
         if (n * n < 4096)
@@ -1029,13 +1025,16 @@ public abstract class MatrixBase<T>
                 {
                     int idx1 = i * n + j;
                     int idx2 = j * n + i;
-                    (_data[idx1], _data[idx2]) = (_data[idx2], _data[idx1]);
+                    (span[idx1], span[idx2]) = (span[idx2], span[idx1]);
                 }
             }
             return;
         }
 
         // For larger matrices, use cache-blocked transpose with parallel execution
+        // Get array for parallel processing (Memory<T>.Span can't be used across threads)
+        var data = _memory.ToArray();
+
         const int BlockSize = 32;
         const int ParallelThreshold = 16384;
 
@@ -1056,7 +1055,7 @@ public abstract class MatrixBase<T>
                     {
                         int idx1 = i * n + j;
                         int idx2 = j * n + i;
-                        (_data[idx1], _data[idx2]) = (_data[idx2], _data[idx1]);
+                        (data[idx1], data[idx2]) = (data[idx2], data[idx1]);
                     }
                 }
 
@@ -1072,7 +1071,7 @@ public abstract class MatrixBase<T>
                         {
                             int idx1 = i * n + j;
                             int idx2 = j * n + i;
-                            (_data[idx1], _data[idx2]) = (_data[idx2], _data[idx1]);
+                            (data[idx1], data[idx2]) = (data[idx2], data[idx1]);
                         }
                     }
                 }
@@ -1092,7 +1091,7 @@ public abstract class MatrixBase<T>
                     {
                         int idx1 = i * n + j;
                         int idx2 = j * n + i;
-                        (_data[idx1], _data[idx2]) = (_data[idx2], _data[idx1]);
+                        (data[idx1], data[idx2]) = (data[idx2], data[idx1]);
                     }
                 }
 
@@ -1107,7 +1106,7 @@ public abstract class MatrixBase<T>
                         {
                             int idx1 = i * n + j;
                             int idx2 = j * n + i;
-                            (_data[idx1], _data[idx2]) = (_data[idx2], _data[idx1]);
+                            (data[idx1], data[idx2]) = (data[idx2], data[idx1]);
                         }
                     }
                 }
@@ -1129,7 +1128,7 @@ public abstract class MatrixBase<T>
     {
         var result = CreateInstance(_rows, _cols);
         // Use vectorized Copy operation to copy entire matrix at once
-        _numOps.Copy(new ReadOnlySpan<T>(_data), result.AsWritableSpan());
+        _numOps.Copy(_memory.Span, result.AsWritableSpan());
 
         return result;
     }

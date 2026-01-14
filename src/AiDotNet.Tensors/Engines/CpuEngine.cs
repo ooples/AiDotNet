@@ -3684,7 +3684,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         // Calculate strides for the dimension
@@ -3734,8 +3734,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -3798,7 +3798,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -3852,8 +3852,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -3926,7 +3926,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -3978,8 +3978,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -4045,7 +4045,7 @@ public class CpuEngine : IEngine
         var outputShape = input.Shape.ToArray();
         outputShape[actualDim] = halfSize;
 
-        var inputData = input.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
         var outputData = new T[inputData.Length / 2];
 
         int innerSize = 1;
@@ -4096,8 +4096,8 @@ public class CpuEngine : IEngine
         int dimSize = input.Shape[actualDim];
         int halfSize = dimSize / 2;
 
-        var inputData = input.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var inputData = input.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
         var gradInputData = new T[inputData.Length];
 
         int innerSize = 1;
@@ -9232,8 +9232,8 @@ public class CpuEngine : IEngine
 
         // Compute attention scores: Q @ K^T -> [batch, heads, seqQ, seqK]
         var scoresData = new T[batch * heads * seqQ * seqK];
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
 
         Parallel.For(0, batch * heads, bh =>
         {
@@ -9307,7 +9307,7 @@ public class CpuEngine : IEngine
 
         // Compute output: weights @ V -> [batch, heads, seqQ, d_v]
         var outputData = new T[batch * heads * seqQ * d_v];
-        var valueData = value.ToVector().Data;
+        var valueData = value.ToVector().ToArray();
 
         Parallel.For(0, batch * heads, bh =>
         {
@@ -9370,11 +9370,11 @@ public class CpuEngine : IEngine
 
         T scaleFactor = numOps.FromDouble(scale);
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var weightsData = attentionWeights.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var weightsData = attentionWeights.ToVector().ToArray();
 
         var gradVData = new T[batch * heads * seqK * d_v];
         var gradQData = new T[batch * heads * seqQ * d_k];
@@ -9508,9 +9508,9 @@ public class CpuEngine : IEngine
         const int BLOCK_Q = 64;
         const int BLOCK_KV = 64;
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
 
         // Output and statistics
         var outputData = new T[batch * heads * seqQ * headDim];
@@ -9675,12 +9675,12 @@ public class CpuEngine : IEngine
         const int BLOCK_Q = 64;
         const int BLOCK_KV = 64;
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var outputData = output.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
-        var statsData = softmaxStats.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var outputData = output.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var statsData = softmaxStats.ToVector().ToArray();
 
         var gradQData = new T[batch * heads * seqQ * headDim];
         var gradKData = new T[batch * heads * seqK * headDim];
@@ -9836,9 +9836,9 @@ public class CpuEngine : IEngine
         T scaleFactor = numOps.FromDouble(scaleValue);
         T negInf = numOps.FromDouble(double.NegativeInfinity);
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
 
         var outputData = new T[batch * numQHeads * seqQ * headDim];
         var weightsData = new T[batch * numQHeads * seqQ * seqK];
@@ -9957,11 +9957,11 @@ public class CpuEngine : IEngine
 
         T scaleFactor = numOps.FromDouble(scale);
 
-        var queryData = query.ToVector().Data;
-        var keyData = key.ToVector().Data;
-        var valueData = value.ToVector().Data;
-        var weightsData = attentionWeights.ToVector().Data;
-        var gradOutData = gradOutput.ToVector().Data;
+        var queryData = query.ToVector().ToArray();
+        var keyData = key.ToVector().ToArray();
+        var valueData = value.ToVector().ToArray();
+        var weightsData = attentionWeights.ToVector().ToArray();
+        var gradOutData = gradOutput.ToVector().ToArray();
 
         var gradQData = new T[batch * numQHeads * seqQ * headDim];
         var gradKData = new T[batch * numKVHeads * seqK * headDim];
@@ -10525,7 +10525,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Invalid dimension {dim} for tensor with rank {source.Rank}");
 
         // Determine output size along scatter dimension
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10537,7 +10537,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
 
         // Initialize to zero
@@ -10589,8 +10589,8 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var indicesData = indices.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var indicesData = indices.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         int innerSize = 1;
@@ -10638,7 +10638,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10649,7 +10649,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[outputShape.Aggregate(1, (a, b) => a * b)];
         var countData = new int[outDimSize];
 
@@ -10723,9 +10723,9 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var indicesData = indices.ToVector().Data;
-        var countsData = counts.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var indicesData = indices.ToVector().ToArray();
+        var countsData = counts.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         int innerSize = 1;
@@ -10775,7 +10775,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10786,7 +10786,7 @@ public class CpuEngine : IEngine
         var outputShape = source.Shape.ToArray();
         outputShape[actualDim] = outDimSize;
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         int outputLength = outputShape.Aggregate(1, (a, b) => a * b);
         var outputData = new T[outputLength];
         var argmaxData = new int[outputLength];
@@ -10849,8 +10849,8 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? sourceShape.Length + dim : dim;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var argmaxData = argmax.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var argmaxData = argmax.ToVector().ToArray();
         var gradInputData = new T[sourceShape.Aggregate(1, (a, b) => a * b)];
 
         // Initialize to zero
@@ -10903,7 +10903,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? source.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -10911,7 +10911,7 @@ public class CpuEngine : IEngine
         }
         int numGroups = outputSize ?? (maxIndex + 1);
 
-        var sourceData = source.ToVector().Data;
+        var sourceData = source.ToVector().ToArray();
         var outputData = new T[sourceData.Length];
 
         int innerSize = 1;
@@ -10992,7 +10992,7 @@ public class CpuEngine : IEngine
 
         int actualDim = dim < 0 ? output.Rank + dim : dim;
 
-        var indicesData = indices.ToVector().Data;
+        var indicesData = indices.ToVector().ToArray();
         int maxIndex = 0;
         for (int i = 0; i < indicesData.Length; i++)
         {
@@ -11000,8 +11000,8 @@ public class CpuEngine : IEngine
         }
         int numGroups = maxIndex + 1;
 
-        var gradOutData = gradOutput.ToVector().Data;
-        var outData = output.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().ToArray();
+        var outData = output.ToVector().ToArray();
         var gradInputData = new T[gradOutData.Length];
 
         int innerSize = 1;

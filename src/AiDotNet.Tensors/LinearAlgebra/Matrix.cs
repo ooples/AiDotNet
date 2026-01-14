@@ -671,7 +671,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
 
         Matrix<T> result = new(Rows, Columns);
         // Use vectorized Subtract operation for SIMD acceleration (5-15x faster with AVX2)
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Subtract(_memory.Span, other._memory.Span, result.AsWritableSpan());
 
         return result;
     }
@@ -692,9 +692,10 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     {
         var result = new Vector<T>(length);
         var destSpan = result.AsWritableSpan();
+        var srcSpan = _memory.Span;
         for (int i = 0; i < length; i++)
         {
-            destSpan[i] = _data[(startRow + i) * _cols + columnIndex];
+            destSpan[i] = srcSpan[(startRow + i) * _cols + columnIndex];
         }
         return result;
     }
@@ -715,7 +716,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     public Vector<T> GetRowSegment(int rowIndex, int startColumn, int length)
     {
         var result = new Vector<T>(length);
-        var sourceSpan = new ReadOnlySpan<T>(_data, rowIndex * _cols + startColumn, length);
+        var sourceSpan = _memory.Span.Slice(rowIndex * _cols + startColumn, length);
         _numOps.Copy(sourceSpan, result.AsWritableSpan());
         return result;
     }
@@ -794,7 +795,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     public Vector<T> ToRowVector()
     {
         Vector<T> result = new(Rows * Columns);
-        _numOps.Copy(new ReadOnlySpan<T>(_data), result.AsWritableSpan());
+        _numOps.Copy(_memory.Span, result.AsWritableSpan());
         return result;
     }
 
@@ -818,7 +819,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
         }
 
         var result = new Matrix<T>(Rows, Columns);
-        _numOps.Add(new ReadOnlySpan<T>(_data), tensor.AsSpan(), result.AsWritableSpan());
+        _numOps.Add(_memory.Span, tensor.AsSpan(), result.AsWritableSpan());
         return result;
     }
 
@@ -895,7 +896,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     public static Matrix<T> FromVector(Vector<T> vector)
     {
         var matrix = new Matrix<T>(vector.Length, 1);
-        _numOps.Copy(vector.AsSpan(), new Span<T>(matrix._data));
+        _numOps.Copy(vector.AsSpan(), matrix.AsWritableSpan());
         return matrix;
     }
 
@@ -1040,7 +1041,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     public Matrix<T> Divide(T scalar)
     {
         Matrix<T> result = new(Rows, Columns);
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
+        _numOps.DivideScalar(_memory.Span, scalar, result.AsWritableSpan());
         return result;
     }
 
@@ -1053,7 +1054,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public void DivideInPlace(T scalar)
     {
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+        _numOps.DivideScalar(_memory.Span, scalar, _memory.Span);
     }
 
     /// <summary>
@@ -1076,7 +1077,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
 
         Matrix<T> result = new(Rows, Columns);
         // Use vectorized Divide operation for SIMD acceleration (5-15x faster with AVX2)
-        _numOps.Divide(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Divide(_memory.Span, other._memory.Span, result.AsWritableSpan());
 
         return result;
     }
@@ -1391,7 +1392,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
         if (rowIndex < 0 || rowIndex >= Rows)
             throw new ArgumentOutOfRangeException(nameof(rowIndex));
         int startIndex = rowIndex * Columns;
-        return _data.AsSpan(startIndex, Columns);
+        return _memory.Span.Slice(startIndex, Columns);
     }
 
     /// <summary>
@@ -1409,7 +1410,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
         if (rowIndex < 0 || rowIndex >= Rows)
             throw new ArgumentOutOfRangeException(nameof(rowIndex));
         int startIndex = rowIndex * Columns;
-        return _data.AsSpan(startIndex, Columns);
+        return _memory.Span.Slice(startIndex, Columns);
     }
 
     /// <summary>

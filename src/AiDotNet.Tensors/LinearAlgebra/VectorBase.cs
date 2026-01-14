@@ -21,22 +21,10 @@ public abstract class VectorBase<T>
     /// The internal memory that stores the vector's elements.
     /// </summary>
     /// <remarks>
-    /// <para><b>Migration Note:</b> This field replaces the previous T[] _data field.
-    /// Memory&lt;T&gt; provides zero-copy slicing, better Span&lt;T&gt; interop, and integration with memory pooling.</para>
+    /// <para><b>Issue #693:</b> Memory&lt;T&gt; provides zero-copy slicing, better Span&lt;T&gt; interop,
+    /// and integration with memory pooling.</para>
     /// </remarks>
     protected readonly Memory<T> _memory;
-
-    /// <summary>
-    /// Gets the underlying array from the memory backing store.
-    /// </summary>
-    /// <remarks>
-    /// <para>This property provides backward compatibility for code that accessed the old T[] _data field.
-    /// When the memory is backed by an array (the common case), this returns the array directly.
-    /// Otherwise, it creates a copy.</para>
-    /// </remarks>
-    protected T[] _data => MemoryMarshal.TryGetArray<T>(_memory, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
-        ? segment.Array
-        : _memory.ToArray();
 
     /// <summary>
     /// Provides operations for numeric types (addition, subtraction, etc.).
@@ -106,18 +94,6 @@ public abstract class VectorBase<T>
     public int Length => _memory.Length;
 
     /// <summary>
-    /// Gets the underlying array that stores the vector's elements.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This property exists for performance-sensitive internal code paths (e.g., kernels and SIMD routines) that require direct array access.
-    /// External consumers should use ToArray() to get a copy of the data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This exposes the raw list of numbers inside the vector for internal use only.</para>
-    /// </remarks>
-    internal T[] Data => _data;
-
-    /// <summary>
     /// Gets a value indicating whether the vector contains no elements.
     /// </summary>
     /// <remarks>
@@ -142,12 +118,12 @@ public abstract class VectorBase<T>
         get
         {
             ValidateIndex(index);
-            return _data[index];
+            return _memory.Span[index];
         }
         set
         {
             ValidateIndex(index);
-            _data[index] = value;
+            _memory.Span[index] = value;
         }
     }
 
@@ -262,7 +238,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual VectorBase<T> Clone()
     {
-        return CreateInstance(_data);
+        return CreateInstance(_memory.ToArray());
     }
 
     /// <summary>
@@ -320,7 +296,7 @@ public abstract class VectorBase<T>
 
         VectorBase<T> subVector = CreateInstance(length);
         // Use vectorized Copy for efficient memory transfer
-        _numOps.Copy(new ReadOnlySpan<T>(_data, startIndex, length), subVector.AsWritableSpan());
+        _numOps.Copy(_memory.Span.Slice(startIndex, length), subVector.AsWritableSpan());
 
         return subVector;
     }
@@ -421,7 +397,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual T Sum()
     {
-        return _numOps.Sum(new ReadOnlySpan<T>(_data));
+        return _numOps.Sum(_memory.Span);
     }
 
     /// <summary>
@@ -437,7 +413,8 @@ public abstract class VectorBase<T>
     public virtual T L2Norm()
     {
         // Use vectorized Dot product (sum of squares) then Sqrt - 10-15x faster with AVX2
-        T sumOfSquares = _numOps.Dot(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(_data));
+        var span = _memory.Span;
+        T sumOfSquares = _numOps.Dot(span, span);
 
         return _numOps.Sqrt(sumOfSquares);
     }
@@ -457,9 +434,10 @@ public abstract class VectorBase<T>
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, TResult> function)
     {
         var result = CreateInstance<TResult>(Length);
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            result[i] = function(_data[i]);
+            result[i] = function(span[i]);
         }
 
         return result;
@@ -480,9 +458,10 @@ public abstract class VectorBase<T>
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {
         var result = CreateInstance<TResult>(Length);
+        var span = _memory.Span;
         for (int i = 0; i < Length; i++)
         {
-            result[i] = function(_data[i], i);
+            result[i] = function(span[i], i);
         }
 
         return result;
@@ -582,7 +561,7 @@ public abstract class VectorBase<T>
             throw new ArgumentException("Vectors must have the same length");
 
         var result = CreateInstance(Length);
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Add(_memory.Span, other._memory.Span, result.AsWritableSpan());
         return result;
     }
 
@@ -603,7 +582,7 @@ public abstract class VectorBase<T>
         if (Length != other.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+        _numOps.Add(_memory.Span, other._memory.Span, _memory.Span);
     }
 
     /// <summary>
@@ -624,7 +603,7 @@ public abstract class VectorBase<T>
         if (destination.Length < Length)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
+        _numOps.Add(_memory.Span, other._memory.Span, destination);
     }
 
     /// <summary>
@@ -646,7 +625,7 @@ public abstract class VectorBase<T>
             throw new ArgumentException("Vectors must have the same length");
 
         var result = CreateInstance(Length);
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        _numOps.Subtract(_memory.Span, other._memory.Span, result.AsWritableSpan());
         return result;
     }
 
@@ -666,7 +645,7 @@ public abstract class VectorBase<T>
         if (Length != other.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+        _numOps.Subtract(_memory.Span, other._memory.Span, _memory.Span);
     }
 
     /// <summary>
@@ -685,7 +664,7 @@ public abstract class VectorBase<T>
         if (destination.Length < Length)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
+        _numOps.Subtract(_memory.Span, other._memory.Span, destination);
     }
 
     /// <summary>
@@ -703,7 +682,7 @@ public abstract class VectorBase<T>
     public virtual VectorBase<T> Multiply(T scalar)
     {
         var result = CreateInstance(Length);
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
+        _numOps.MultiplyScalar(_memory.Span, scalar, result.AsWritableSpan());
         return result;
     }
 
@@ -718,7 +697,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual void MultiplyInPlace(T scalar)
     {
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+        _numOps.MultiplyScalar(_memory.Span, scalar, _memory.Span);
     }
 
     /// <summary>
@@ -735,7 +714,7 @@ public abstract class VectorBase<T>
         if (destination.Length < Length)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, destination);
+        _numOps.MultiplyScalar(_memory.Span, scalar, destination);
     }
 
     /// <summary>
@@ -753,7 +732,7 @@ public abstract class VectorBase<T>
     public virtual VectorBase<T> Divide(T scalar)
     {
         var result = CreateInstance(Length);
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
+        _numOps.DivideScalar(_memory.Span, scalar, result.AsWritableSpan());
         return result;
     }
 
@@ -766,7 +745,7 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual void DivideInPlace(T scalar)
     {
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+        _numOps.DivideScalar(_memory.Span, scalar, _memory.Span);
     }
 
     /// <summary>
@@ -783,7 +762,7 @@ public abstract class VectorBase<T>
         if (destination.Length < Length)
             throw new ArgumentException("Destination span is too small", nameof(destination));
 
-        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, destination);
+        _numOps.DivideScalar(_memory.Span, scalar, destination);
     }
 
     /// <summary>
@@ -797,6 +776,6 @@ public abstract class VectorBase<T>
     /// </remarks>
     public override string ToString()
     {
-        return $"[{string.Join(", ", _data)}]";
+        return $"[{string.Join(", ", _memory.ToArray())}]";
     }
 }

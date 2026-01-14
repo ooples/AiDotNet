@@ -187,8 +187,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         var normParams = _norm.GetParameters();
 
         var result = new T[projParams.Length + normParams.Length];
-        Array.Copy(projParams.Data, 0, result, 0, projParams.Length);
-        Array.Copy(normParams.Data, 0, result, projParams.Length, normParams.Length);
+        projParams.AsSpan().CopyTo(result.AsSpan(0, projParams.Length));
+        normParams.AsSpan().CopyTo(result.AsSpan(projParams.Length, normParams.Length));
 
         return new Vector<T>(result);
     }
@@ -202,8 +202,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         var projParams = new T[projCount];
         var normParams = new T[normCount];
 
-        Array.Copy(parameters.Data, 0, projParams, 0, projCount);
-        Array.Copy(parameters.Data, projCount, normParams, 0, normCount);
+        parameters.AsSpan().Slice(0, projCount).CopyTo(projParams);
+        parameters.AsSpan().Slice(projCount, normCount).CopyTo(normParams);
 
         _projection.SetParameters(new Vector<T>(projParams));
         _norm.SetParameters(new Vector<T>(normParams));
@@ -216,8 +216,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         var normGrads = _norm.GetParameterGradients();
 
         var result = new T[projGrads.Length + normGrads.Length];
-        Array.Copy(projGrads.Data, 0, result, 0, projGrads.Length);
-        Array.Copy(normGrads.Data, 0, result, projGrads.Length, normGrads.Length);
+        projGrads.AsSpan().CopyTo(result.AsSpan(0, projGrads.Length));
+        normGrads.AsSpan().CopyTo(result.AsSpan(projGrads.Length, normGrads.Length));
 
         return new Vector<T>(result);
     }
