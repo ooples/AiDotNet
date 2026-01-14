@@ -244,6 +244,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
+    /// Gets a value indicating whether this layer supports GPU training.
+    /// </summary>
+    public override bool SupportsGpuTraining => true;
+
+    /// <summary>
     /// Initializes a new instance of the ConvLSTMLayer class.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor [batchSize, timeSteps, height, width, channels].</param>
@@ -641,9 +646,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// The ConvLSTM gates are computed using GPU convolutions and element-wise operations.
     /// </para>
     /// <para>
-    /// Note: During training (IsTrainingMode == true), this method falls back to the CPU Forward path
-    /// because the backward pass requires CPU-side state that ForwardGpu doesn't populate.
-    /// See GitHub issue #700 for plans to implement full GPU backward support.
+    /// During training (IsTrainingMode == true), this method caches gate values and state buffers
+    /// needed by BackwardGpu to perform full BPTT on GPU.
     /// </para>
     /// </remarks>
     public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)

@@ -180,8 +180,8 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | gru_cell_forward | ✅ | ✅ | ✅ | Single GRU step |
 | gru_cell_backward | ✅ | ✅ | ✅ | Single GRU backward |
 | **ConvLSTM** |
-| convlstm_forward | ❌ | ❌ | ❌ | ConvLSTMLayer |
-| convlstm_backward | ❌ | ❌ | ❌ | ConvLSTMLayer (Issue #700) |
+| convlstm_forward | ⚠️ | ⚠️ | ⚠️ | ConvLSTMLayer (composed from Conv2D + element-wise ops) |
+| convlstm_backward | ⚠️ | ⚠️ | ⚠️ | ConvLSTMLayer (GPU BPTT via Conv2D ops) |
 
 ## 11. Utility Kernels
 
@@ -228,8 +228,8 @@ This document tracks all GPU kernels needed for full GPU-resident training acros
 | scatter_max | ❌ | ❌ | ❌ | Graph aggregation |
 | scatter_mean | ❌ | ❌ | ❌ | Graph aggregation |
 | edge_softmax | ❌ | ❌ | ❌ | GAT attention |
-| diffusion_conv_forward | ❌ | ❌ | ❌ | DiffusionConvLayer |
-| diffusion_conv_backward | ❌ | ❌ | ❌ | DiffusionConvLayer (Issue #700) |
+| diffusion_conv_forward | ⚠️ | ⚠️ | ⚠️ | DiffusionConvLayer (spectral via GEMM/Exp) |
+| diffusion_conv_backward | ⚠️ | ⚠️ | ⚠️ | DiffusionConvLayer (spectral backward via GEMM/Exp) |
 
 ## 14. 3D/Mesh Kernels
 
@@ -283,7 +283,7 @@ These must be implemented first to enable any GPU training:
 2. ❌ lstm_backward (full sequence BPTT)
 3. ❌ gru_forward (full sequence)
 4. ❌ gru_backward (full sequence BPTT)
-5. ❌ convlstm_forward/backward
+5. ⚠️ convlstm_forward/backward (composed kernels)
 
 **Status: PARTIAL** - Cell kernels exist, sequence-level BPTT kernels needed
 
