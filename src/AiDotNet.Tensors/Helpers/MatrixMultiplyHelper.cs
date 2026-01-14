@@ -21,6 +21,7 @@ internal static class MatrixMultiplyHelper
     private static readonly long? ParallelThresholdOverride = ReadEnvLong("AIDOTNET_MATMUL_PARALLEL_THRESHOLD");
     private static readonly int? PackedMaxDimOverride = ReadEnvInt("AIDOTNET_MATMUL_PACKED_MAX_DIM");
     private static readonly long? PackedMaxElementsOverride = ReadEnvLong("AIDOTNET_MATMUL_PACKED_MAX_ELEMENTS");
+    private static readonly bool TraceEnabled = ReadEnvBool("AIDOTNET_MATMUL_TRACE");
 
     internal static bool TryGemm<T>(ReadOnlyMemory<T> a, int aOffset, ReadOnlyMemory<T> b, int bOffset, Memory<T> c, int cOffset, int m, int k, int n)
     {
@@ -145,6 +146,16 @@ internal static class MatrixMultiplyHelper
 
         long work = (long)m * k * n;
         return work >= GetBlockedWorkThreshold();
+    }
+
+    internal static void TraceMatmul(string path, int m, int n, int k)
+    {
+        if (!TraceEnabled)
+        {
+            return;
+        }
+
+        Console.WriteLine($"[MATMUL-TRACE CPU] {m}x{n}x{k} {path}");
     }
 
     private static bool ShouldUsePacked<T>(int m, int k, int n)
@@ -357,6 +368,19 @@ internal static class MatrixMultiplyHelper
         }
 
         return value > max ? max : value;
+    }
+
+    private static bool ReadEnvBool(string name)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int? ReadEnvInt(string name)

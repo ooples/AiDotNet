@@ -700,21 +700,25 @@ public abstract class MatrixBase<T>
 
         if (MatrixMultiplyHelper.TryGemm(_memory, 0, other._memory, 0, result._memory, 0, M, K, N))
         {
+            MatrixMultiplyHelper.TraceMatmul("BLAS", M, N, K);
             return result;
         }
 
         if (MatrixMultiplyHelper.TryMultiplyPacked(_numOps, _memory, other, result._memory, M, K, N))
         {
+            MatrixMultiplyHelper.TraceMatmul("PACKED", M, N, K);
             return result;
         }
 
         if (MatrixMultiplyHelper.ShouldUseBlocked<T>(M, K, N))
         {
+            MatrixMultiplyHelper.TraceMatmul("BLOCKED", M, N, K);
             MatrixMultiplyHelper.MultiplyBlocked(_numOps, _memory, other._memory, result._memory, M, K, N, K, N, N);
             return result;
         }
 
         // Use cache-oblivious recursive algorithm
+        MatrixMultiplyHelper.TraceMatmul("RECURSIVE", M, N, K);
         var resultData = new T[M * N];
         MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), resultData, 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
 
