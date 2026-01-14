@@ -130,7 +130,7 @@ namespace AiDotNet.NeuralNetworks
             if (tokens.Count == 0) tokens.Add(0);
 
             var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
-            
+
             // For SPLADE, the last layer is a DenseLayer projecting to vocabSize with ReLU activation
             var tokenExpansions = Predict(inputTensor); // [1, seqLen, vocabSize]
 

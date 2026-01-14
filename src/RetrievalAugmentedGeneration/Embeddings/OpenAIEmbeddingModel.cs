@@ -51,7 +51,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             _maxTokens = maxTokens;
             _ownsHttpClient = httpClient == null;
             _httpClient = httpClient ?? new HttpClient();
-            
+
             if (_ownsHttpClient)
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);

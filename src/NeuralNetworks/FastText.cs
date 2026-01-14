@@ -277,10 +277,10 @@ namespace AiDotNet.NeuralNetworks
 
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
-            
+
             // FastText uses word embeddings (layer 0) and n-gram embeddings (layer 1)
             var wordEmbeds = Layers[0].Forward(inputTensor);
-            
+
             var sumVector = new Vector<T>(_embeddingDimension);
             int totalComponents = 0;
 
@@ -338,7 +338,7 @@ namespace AiDotNet.NeuralNetworks
         {
             var ngrams = new List<string>();
             string decoratedWord = "<" + word + ">";
-            
+
             for (int n = minN; n <= maxN; n++)
             {
                 for (int i = 0; i <= decoratedWord.Length - n; i++)

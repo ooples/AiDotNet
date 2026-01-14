@@ -581,9 +581,9 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputHeight: inputShape[0],
             inputWidth: inputShape[1],
             outputSize: 768);
-        
+
         var network = new SiameseNeuralNetwork<float>(architecture);
-        
+
         // SiameseNeuralNetwork expects [batchSize, seqLen] for simple embedding lookup
         var input = Tensor<float>.CreateRandom([1, 32]);
         for (int i = 0; i < input.Length; i++) input.SetFlat(i, (float)Math.Floor(input.GetFlat(i) * 100));
@@ -607,7 +607,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputHeight: inputShape[0],
             inputWidth: inputShape[1],
             outputSize: 768);
-        
+
         var network = new SiameseNeuralNetwork<float>(architecture);
 
         // Act
