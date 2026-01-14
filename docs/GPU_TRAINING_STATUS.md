@@ -321,7 +321,7 @@ Additional loss functions that could be added in the future:
 | Layer | ForwardGpu | BackwardGpu | UpdateGpu | GPU Weights | Notes |
 |-------|------------|-------------|-----------|-------------|-------|
 | BidirectionalLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Wraps recurrent layers |
-| ConvLSTMLayer | ✅ | ✅ | ❌ | ❌ | BPTT through spatial gates |
+| ConvLSTMLayer | ✅ | ✅ | ✅ | ✅ | BPTT through spatial gates |
 | GRULayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
 | LSTMLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** BPTT through gates |
 | RecurrentLayer | ✅ | ✅ | ✅ | ✅ | **COMPLETE** Simple RNN |
