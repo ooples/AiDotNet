@@ -214,8 +214,8 @@ jobs:
           if [ -n "$AUTOFIX_PAT" ]; then
             git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
           else
-            git push origin "HEAD:$BRANCH" --force-with-lease
             echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
+            git push origin "HEAD:$BRANCH" --force-with-lease
           fi
 
       - name: Comment on PR
@@ -328,8 +328,8 @@ jobs:
           if [ -n "$AUTOFIX_PAT" ]; then
             git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
           else
-            git push origin "HEAD:$BRANCH" --force-with-lease
             echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
+            git push origin "HEAD:$BRANCH" --force-with-lease
           fi
 
       - name: Comment on PR
