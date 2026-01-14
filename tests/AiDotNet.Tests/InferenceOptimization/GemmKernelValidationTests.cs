@@ -20,7 +20,7 @@ public class GemmKernelValidationTests
         var expected = NaiveGemm(a, b);
 
         Assert.Equal(expected.Shape, actual.Shape);
-        Assert.Equal(expected.Data, actual.Data);
+        Assert.Equal(expected.Data.ToArray(), actual.Data.ToArray());
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class GemmKernelValidationTests
         var expected = NaiveGemmTransposeB(a, b);
 
         Assert.Equal(expected.Shape, actual.Shape);
-        Assert.Equal(expected.Data, actual.Data);
+        Assert.Equal(expected.Data.ToArray(), actual.Data.ToArray());
     }
 
     private static Tensor<float> NaiveGemm(Tensor<float> a, Tensor<float> b)

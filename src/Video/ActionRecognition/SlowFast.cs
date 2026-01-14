@@ -363,7 +363,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             {
                 int srcOffset = b * totalChannels * h * w + srcFrame * channelsPerFrame * h * w;
                 int dstOffset = b * subsampledChannels * h * w + dstFrame * channelsPerFrame * h * w;
-                Array.Copy(input.Data.ToArray(), srcOffset, result.Data.ToArray(), dstOffset, Math.Min(srcFrameSize, dstFrameSize));
+                int copyLen = Math.Min(srcFrameSize, dstFrameSize);
+                input.Data.Span.Slice(srcOffset, copyLen).CopyTo(result.Data.Span.Slice(dstOffset, copyLen));
                 dstFrame++;
             }
         }
@@ -397,8 +398,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         for (int bi = 0; bi < batch; bi++)
         {
-            Array.Copy(a.Data.ToArray(), bi * aSliceSize, result.Data.ToArray(), bi * resultSliceSize, aSliceSize);
-            Array.Copy(b.Data.ToArray(), bi * bSliceSize, result.Data.ToArray(), bi * resultSliceSize + aSliceSize, bSliceSize);
+            a.Data.Span.Slice(bi * aSliceSize, aSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize, aSliceSize));
+            b.Data.Span.Slice(bi * bSliceSize, bSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize + aSliceSize, bSliceSize));
         }
 
         return result;
@@ -533,8 +534,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         for (int bi = 0; bi < batch; bi++)
         {
-            Array.Copy(fusedGradient.Data.ToArray(), bi * totalSliceSize, slowGrad.Data.ToArray(), bi * slowSliceSize, slowSliceSize);
-            Array.Copy(fusedGradient.Data.ToArray(), bi * totalSliceSize + slowSliceSize, fastGrad.Data.ToArray(), bi * fastSliceSize, fastSliceSize);
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize, slowSliceSize).CopyTo(slowGrad.Data.Span.Slice(bi * slowSliceSize, slowSliceSize));
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize + slowSliceSize, fastSliceSize).CopyTo(fastGrad.Data.Span.Slice(bi * fastSliceSize, fastSliceSize));
         }
 
         return (slowGrad, fastGrad);

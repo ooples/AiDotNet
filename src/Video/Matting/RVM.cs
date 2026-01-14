@@ -155,10 +155,10 @@ public class RVM<T> : NeuralNetworkBase<T>
         var foreground = new Tensor<T>([1, 3, h, w]);
 
         // First channel is alpha
-        Array.Copy(output.Data.ToArray(), 0, alpha.Data.ToArray(), 0, h * w);
+        output.Data.Span.Slice(0, h * w).CopyTo(alpha.Data.Span);
 
         // Remaining 3 channels are foreground RGB
-        Array.Copy(output.Data.ToArray(), h * w, foreground.Data.ToArray(), 0, 3 * h * w);
+        output.Data.Span.Slice(h * w, 3 * h * w).CopyTo(foreground.Data.Span);
 
         return (alpha, foreground);
     }
@@ -259,7 +259,7 @@ public class RVM<T> : NeuralNetworkBase<T>
 
         // Update hidden state for next frame
         _hiddenState = new Tensor<T>(result.Shape);
-        Array.Copy(result.Data.ToArray(), _hiddenState.Data.ToArray(), result.Length);
+        result.Data.Span.CopyTo(_hiddenState.Data.Span);
 
         return result;
     }

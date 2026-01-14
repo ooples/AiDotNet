@@ -347,7 +347,7 @@ public class FLAVR<T> : NeuralNetworkBase<T>
 
         var stacked = new Tensor<T>([1, c * frames.Count, h, w]);
         for (int f = 0; f < frames.Count; f++)
-            Array.Copy(frames[f].Data.ToArray(), 0, stacked.Data.ToArray(), f * c * h * w, c * h * w);
+            frames[f].Data.Span.Slice(0, c * h * w).CopyTo(stacked.Data.Span.Slice(f * c * h * w, c * h * w));
         return stacked;
     }
 

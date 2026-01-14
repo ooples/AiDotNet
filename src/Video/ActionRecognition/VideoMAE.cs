@@ -678,7 +678,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([1, t, c, h, w]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -691,7 +691,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

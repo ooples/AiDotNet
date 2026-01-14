@@ -877,7 +877,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
             int sourceOffset = tokenId * _decoderHiddenDim;
             int destinationOffset = i * _decoderHiddenDim;
-            Array.Copy(_tokenEmbeddings.Data.ToArray(), sourceOffset, input.Data.ToArray(), destinationOffset, _decoderHiddenDim);
+            _tokenEmbeddings.Data.Span.Slice(sourceOffset, _decoderHiddenDim).CopyTo(input.Data.Span.Slice(destinationOffset, _decoderHiddenDim));
         }
 
         return input;

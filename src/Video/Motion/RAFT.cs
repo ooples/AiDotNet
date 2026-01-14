@@ -558,7 +558,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -570,7 +570,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[3];
 
         var result = new Tensor<T>([c, h, w]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

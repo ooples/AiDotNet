@@ -644,7 +644,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         {
             int srcOffset = b * latents.Shape[1] * sliceSize + frameIndex * sliceSize;
             int dstOffset = b * sliceSize;
-            Array.Copy(latents.Data.ToArray(), srcOffset, slice.Data.ToArray(), dstOffset, sliceSize);
+            latents.Data.Span.Slice(srcOffset, sliceSize).CopyTo(slice.Data.Span.Slice(dstOffset, sliceSize));
         }
 
         return slice;
@@ -812,7 +812,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
             int batch = textEmbedding.Shape[0];
             int dim = textEmbedding.Shape[1];
             var reshaped = new Tensor<T>([batch, dim, 1, 1]);
-            Array.Copy(textEmbedding.Data.ToArray(), reshaped.Data.ToArray(), textEmbedding.Data.Length);
+            textEmbedding.Data.Span.CopyTo(reshaped.Data.Span);
             textEmbedding = reshaped;
         }
 
@@ -1153,7 +1153,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int w = tensor.Shape[2];
 
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -1166,7 +1166,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

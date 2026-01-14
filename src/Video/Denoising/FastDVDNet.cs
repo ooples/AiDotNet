@@ -345,13 +345,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         {
             // Only copy single-frame data (first batch if batched input)
             // This handles 2D [H,W], 3D [C,H,W] and 4D [N,C,H,W] inputs correctly
-            Array.Copy(frame.Data.ToArray(), 0, stacked.Data.ToArray(), offset, frameSize);
+            frame.Data.Span.Slice(0, frameSize).CopyTo(stacked.Data.Span.Slice(offset, frameSize));
             offset += frameSize;
         }
 
         // Add noise map (single channel, same H x W)
         int noiseMapSize = h * w;
-        Array.Copy(noiseMap.Data.ToArray(), 0, stacked.Data.ToArray(), offset, noiseMapSize);
+        noiseMap.Data.Span.Slice(0, noiseMapSize).CopyTo(stacked.Data.Span.Slice(offset, noiseMapSize));
 
         return stacked;
     }

@@ -537,7 +537,7 @@ public class MelSpectrogram<T>
     public Tensor<T> GetFilterbank()
     {
         var copy = new Tensor<T>(_melFilterbank.Shape);
-        Array.Copy(_melFilterbank.Data.ToArray(), copy.Data.ToArray(), _melFilterbank.Data.Length);
+        _melFilterbank.Data.Span.CopyTo(copy.Data.Span);
         return copy;
     }
 

@@ -233,8 +233,8 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         int w = frame1.Rank == 4 ? frame1.Shape[3] : frame1.Shape[2];
 
         var concat = new Tensor<T>([1, c * 2, h, w]);
-        Array.Copy(frame1.Data.ToArray(), 0, concat.Data.ToArray(), 0, frame1.Data.Length);
-        Array.Copy(frame2.Data.ToArray(), 0, concat.Data.ToArray(), frame1.Data.Length, frame2.Data.Length);
+        frame1.Data.Span.CopyTo(concat.Data.Span.Slice(0, frame1.Data.Length));
+        frame2.Data.Span.CopyTo(concat.Data.Span.Slice(frame1.Data.Length, frame2.Data.Length));
         return concat;
     }
 

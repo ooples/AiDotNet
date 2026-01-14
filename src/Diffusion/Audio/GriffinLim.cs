@@ -411,7 +411,7 @@ public class GriffinLim<T>
     private static Tensor<T> ClonePhase(Tensor<T> phase)
     {
         var clone = new Tensor<T>(phase.Shape);
-        Array.Copy(phase.Data.ToArray(), clone.Data.ToArray(), phase.Data.Length);
+        phase.Data.Span.CopyTo(clone.Data.Span);
         return clone;
     }
 
@@ -420,7 +420,7 @@ public class GriffinLim<T>
     /// </summary>
     private static void CopyPhase(Tensor<T> source, Tensor<T> dest)
     {
-        Array.Copy(source.Data.ToArray(), dest.Data.ToArray(), source.Data.Length);
+        source.Data.Span.CopyTo(dest.Data.Span);
     }
 
     /// <summary>

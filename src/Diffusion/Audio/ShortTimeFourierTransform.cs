@@ -291,7 +291,7 @@ public class ShortTimeFourierTransform<T>
 
             // Copy to batched output
             int offset = b * numFrames * numFreqs;
-            Array.Copy(singleOutput.Data.ToArray(), 0, output.Data.ToArray(), offset, numFrames * numFreqs);
+            singleOutput.Data.Span.CopyTo(output.Data.Span.Slice(offset, numFrames * numFreqs));
         }
 
         return output;
@@ -427,14 +427,14 @@ public class ShortTimeFourierTransform<T>
             // Extract single spectrogram
             var singleSpec = new Tensor<Complex<T>>(new[] { numFrames, numFreqs });
             int offset = b * numFrames * numFreqs;
-            Array.Copy(spectrograms.Data.ToArray(), offset, singleSpec.Data.ToArray(), 0, numFrames * numFreqs);
+            spectrograms.Data.Span.Slice(offset, numFrames * numFreqs).CopyTo(singleSpec.Data.Span);
 
             // Compute ISTFT
             var singleOutput = InverseSingle(singleSpec, outputLength);
 
             // Copy to batched output
             int outOffset = b * outputLength;
-            Array.Copy(singleOutput.Data.ToArray(), 0, output.Data.ToArray(), outOffset, outputLength);
+            singleOutput.Data.Span.CopyTo(output.Data.Span.Slice(outOffset, outputLength));
         }
 
         return output;

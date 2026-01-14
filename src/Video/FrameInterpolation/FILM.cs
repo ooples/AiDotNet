@@ -630,7 +630,7 @@ public class FILM<T> : NeuralNetworkBase<T>
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
         var result = new Tensor<T>([1, c, h, w]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -640,7 +640,7 @@ public class FILM<T> : NeuralNetworkBase<T>
         for (int i = 0; i < newShape.Length; i++)
             newShape[i] = tensor.Shape[i + 1];
         var result = new Tensor<T>(newShape);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

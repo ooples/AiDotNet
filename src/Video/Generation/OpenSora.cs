@@ -501,7 +501,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
             int batch = textEmbedding.Shape[0];
             int dim = textEmbedding.Shape[1];
             var reshaped = new Tensor<T>([batch, dim, 1, 1]);
-            Array.Copy(textEmbedding.Data.ToArray(), reshaped.Data.ToArray(), textEmbedding.Data.Length);
+            textEmbedding.Data.Span.CopyTo(reshaped.Data.Span);
             textEmbedding = reshaped;
         }
 
@@ -1054,7 +1054,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 

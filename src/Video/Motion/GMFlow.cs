@@ -245,8 +245,8 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         int frameSize = channels * height * width;
         for (int b = 0; b < batchSize; b++)
         {
-            Array.Copy(input.Data.ToArray(), b * 2 * frameSize, frame1.Data.ToArray(), b * frameSize, frameSize);
-            Array.Copy(input.Data.ToArray(), b * 2 * frameSize + frameSize, frame2.Data.ToArray(), b * frameSize, frameSize);
+            input.Data.Span.Slice(b * 2 * frameSize, frameSize).CopyTo(frame1.Data.Span.Slice(b * frameSize, frameSize));
+            input.Data.Span.Slice(b * 2 * frameSize + frameSize, frameSize).CopyTo(frame2.Data.Span.Slice(b * frameSize, frameSize));
         }
 
         return EstimateFlow(frame1, frame2);
@@ -619,14 +619,14 @@ public class GMFlow<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), result.Data.Length);
+        tensor.Data.Span.Slice(0, result.Data.Length).CopyTo(result.Data.Span);
         return result;
     }
 

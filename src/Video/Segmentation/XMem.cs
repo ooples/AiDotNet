@@ -585,14 +585,14 @@ public class XMem<T> : NeuralNetworkBase<T>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), tensor.Data.Length);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        Array.Copy(tensor.Data.ToArray(), result.Data.ToArray(), result.Data.Length);
+        tensor.Data.Span.Slice(0, result.Data.Length).CopyTo(result.Data.Span);
         return result;
     }
 

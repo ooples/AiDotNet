@@ -403,7 +403,7 @@ public class AudioProcessor<T>
         T pad = padValue;
 
         int copyLength = Math.Min(audio.Data.Length, targetLength);
-        Array.Copy(audio.Data.ToArray(), result.Data.ToArray(), copyLength);
+        audio.Data.Span.Slice(0, copyLength).CopyTo(result.Data.Span);
 
         // Pad if needed
         for (int i = copyLength; i < targetLength; i++)
