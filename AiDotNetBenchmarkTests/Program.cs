@@ -1,4 +1,4 @@
-using System.Linq;
+using System.Collections.Generic;
 using System.Reflection;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
@@ -17,7 +17,7 @@ internal class Program
         //   dotnet run -c Release -- --list flat
         //   dotnet run -c Release -- --gpu-harness --warmup 1 --iterations 3
         var switcher = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly());
-        var argList = args.ToList();
+        var argList = new List<string>(args);
 
         if (RemoveFlag(argList, "--gpu-harness"))
         {

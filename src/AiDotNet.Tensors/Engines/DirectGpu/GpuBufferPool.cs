@@ -44,7 +44,6 @@ internal sealed class GpuBufferPool<TBuffer> : IDisposable where TBuffer : class
             return true;
         }
 
-        buffer = null;
         return false;
     }
 
@@ -58,6 +57,12 @@ internal sealed class GpuBufferPool<TBuffer> : IDisposable where TBuffer : class
 
         var bucket = _buckets.GetOrAdd(buffer.Size, _ => new Bucket());
         int count = Interlocked.Increment(ref bucket.Count);
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            Interlocked.Decrement(ref bucket.Count);
+            buffer.Release();
+            return;
+        }
         if (count > _maxPerSize)
         {
             Interlocked.Decrement(ref bucket.Count);

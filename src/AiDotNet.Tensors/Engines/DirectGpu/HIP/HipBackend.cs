@@ -552,6 +552,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
+            // HIP driver API calls are required for kernel dispatch.
             var result = HipNativeBindings.hipModuleLaunchKernel(
                 kernel, gridX, gridY, 1, blockX, blockY, 1,
                 sharedMem, stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
@@ -573,6 +574,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
+            // HIP driver API calls are required for kernel dispatch.
             var result = HipNativeBindings.hipModuleLaunchKernel(
                 kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
                 sharedMem, stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
@@ -620,9 +622,11 @@ public sealed class HipBackend : IAsyncGpuBackend
                 handles[6].AddrOfPinnedObject()
             };
 
+            // HIP kernel launch uses unmanaged interop with the driver API.
             LaunchKernel2DOnStream(kernel, gridX, gridY, TILE_SIZE, TILE_SIZE, args, stream);
             if (synchronize)
             {
+                // HIP stream synchronization requires unmanaged interop.
                 var syncResult = HipNativeBindings.hipStreamSynchronize(stream);
                 HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize");
             }

@@ -1348,7 +1348,7 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             case FusedActivationType.SELU:
                 // SELU: scale * (x if x > 0, else alpha * (exp(x) - 1))
                 // Standard parameters: scale ≈ 1.0507, alpha ≈ 1.6733
-                backend.Selu(input, output, 1.6732632423543772f, 1.05070098735554805f, size);
+                backend.Selu(input, output, 1.6732632423543772f, 1.0507010f, size);
                 break;
             case FusedActivationType.Softplus:
                 backend.Softplus(input, output, size);
@@ -1366,7 +1366,13 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
                 backend.Hardtanh(input, output, -1.0f, 1.0f, size);
                 break;
             case FusedActivationType.None:
+                if (!ReferenceEquals(input, output))
+                {
+                    backend.Copy(input, 0, output, 0, size);
+                }
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(activation), activation, "Unsupported activation.");
         }
     }
 
@@ -7040,17 +7046,9 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
             }
             else
             {
-                IGpuBuffer? transposedBuffer = null;
-                try
-                {
-                    transposedBuffer = backend.AllocateBuffer(outerSize * innerSize);
-                    backend.Transpose(input.Buffer, transposedBuffer, outerSize, innerSize);
-                    backend.SumAxis(transposedBuffer, outputBuffer, innerSize, outerSize);
-                }
-                finally
-                {
-                    transposedBuffer?.Dispose();
-                }
+                using var transposedBuffer = backend.AllocateBuffer(outerSize * innerSize);
+                backend.Transpose(input.Buffer, transposedBuffer, outerSize, innerSize);
+                backend.SumAxis(transposedBuffer, outputBuffer, innerSize, outerSize);
             }
         }
         else

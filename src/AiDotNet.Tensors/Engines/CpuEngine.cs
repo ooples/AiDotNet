@@ -3503,8 +3503,10 @@ public class CpuEngine : IEngine
             return false;
         }
 
+        // Avoid Im2Col packing overhead for small workloads.
+        const long im2ColWorkThreshold = 1_000_000;
         long work = colRowsLong * colColsLong * outChannels;
-        if (work < 1_000_000)
+        if (work < im2ColWorkThreshold)
         {
             return false;
         }
@@ -3516,6 +3518,26 @@ public class CpuEngine : IEngine
 
         long colSizeLong = colRowsLong * colColsLong;
         if (colSizeLong > int.MaxValue)
+        {
+            return false;
+        }
+
+        // Guard against large temporary buffers from Im2Col.
+        const long maxScratchBytes = 512L * 1024 * 1024;
+        int elementSize = typeof(T) == typeof(double) ? 8 : 4;
+        int parallelBatches = Math.Min(batch, Environment.ProcessorCount);
+        long kernelElems = (long)outChannels * colColsLong;
+        long perBatchElems = colSizeLong + ((long)outChannels * colRowsLong);
+        long approxScratchBytes;
+        try
+        {
+            approxScratchBytes = checked((kernelElems + (perBatchElems * parallelBatches)) * elementSize);
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+        if (approxScratchBytes > maxScratchBytes)
         {
             return false;
         }

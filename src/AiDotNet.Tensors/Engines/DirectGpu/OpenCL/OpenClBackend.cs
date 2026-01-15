@@ -2643,6 +2643,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 throw new InvalidOperationException("OpenCL context not available");
 
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            // Kernel lookup happens before clamping to honor kernel work-group constraints.
             var kernel = _kernelCache["reduce_sum"];
             int localSize = CalculateOptimalWorkGroupSize1D(size);
             localSize = ClampLocalSizeForKernel(kernel, localSize, sizeof(float));

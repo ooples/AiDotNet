@@ -329,6 +329,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
             throw new ArgumentOutOfRangeException(nameof(data), "Buffer size must be positive.");
         ulong byteSize = (ulong)size * sizeof(float);
 
+        // CUDA driver API calls are required for device memory operations.
         using var _ = PushContext();
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {
@@ -375,6 +376,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "Buffer size must be positive.");
 
+        // CUDA driver API calls are required for device memory operations.
         using var _ = PushContext();
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {

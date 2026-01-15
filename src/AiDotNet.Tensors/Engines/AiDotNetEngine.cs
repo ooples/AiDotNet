@@ -189,6 +189,11 @@ public static class AiDotNetEngine
     /// <returns>The function result.</returns>
     public static TResult WithGpuContext<TResult>(Func<GpuExecutionContext, TResult> func, Func<TResult> fallback, GpuExecutionOptions? options = null)
     {
+        if (func is null)
+            throw new ArgumentNullException(nameof(func));
+        if (fallback is null)
+            throw new ArgumentNullException(nameof(fallback));
+
         if (Current is DirectGpuTensorEngine gpuEngine)
         {
             return gpuEngine.WithGpuContext(func, fallback, options);

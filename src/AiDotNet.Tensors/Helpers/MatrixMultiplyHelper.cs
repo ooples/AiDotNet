@@ -25,6 +25,11 @@ internal static class MatrixMultiplyHelper
 
     internal static bool TryGemm<T>(ReadOnlyMemory<T> a, int aOffset, ReadOnlyMemory<T> b, int bOffset, Memory<T> c, int cOffset, int m, int k, int n)
     {
+        if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
+        {
+            return false;
+        }
+
         long work = (long)m * k * n;
         if (work < GetBlasWorkThreshold())
         {
@@ -265,19 +270,13 @@ internal static class MatrixMultiplyHelper
 
     private static bool TryGemmFromArray<T>(T[] a, int aOffset, T[] b, int bOffset, T[] c, int cOffset, int m, int k, int n)
     {
-        if (typeof(T) == typeof(float))
+        if (typeof(T) == typeof(float) && a is float[] af && b is float[] bf && c is float[] cf)
         {
-            if (a is float[] af && b is float[] bf && c is float[] cf)
-            {
-                return BlasProvider.TryGemm(m, n, k, af, aOffset, k, bf, bOffset, n, cf, cOffset, n);
-            }
+            return BlasProvider.TryGemm(m, n, k, af, aOffset, k, bf, bOffset, n, cf, cOffset, n);
         }
-        else if (typeof(T) == typeof(double))
+        else if (typeof(T) == typeof(double) && a is double[] ad && b is double[] bd && c is double[] cd)
         {
-            if (a is double[] ad && b is double[] bd && c is double[] cd)
-            {
-                return BlasProvider.TryGemm(m, n, k, ad, aOffset, k, bd, bOffset, n, cd, cOffset, n);
-            }
+            return BlasProvider.TryGemm(m, n, k, ad, aOffset, k, bd, bOffset, n, cd, cOffset, n);
         }
 
         return false;
@@ -291,7 +290,7 @@ internal static class MatrixMultiplyHelper
         }
 
         int elementSize = typeof(T) == typeof(double) ? 8 : 4;
-        int l1 = PlatformDetector.Capabilities.L1CacheSize;
+        int l1 = PlatformDetector.Capabilities?.L1CacheSize ?? 0;
         if (l1 <= 0)
         {
             l1 = 32 * 1024;

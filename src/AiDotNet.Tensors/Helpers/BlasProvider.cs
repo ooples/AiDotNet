@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace AiDotNet.Tensors.Helpers;
@@ -150,21 +151,26 @@ internal static class BlasProvider
         string? explicitPath = Environment.GetEnvironmentVariable("AIDOTNET_BLAS_PATH");
         if (!string.IsNullOrWhiteSpace(explicitPath) && TryLoadNativeLibrary(explicitPath, out _libraryHandle))
         {
-            return TryLoadSymbols();
+            if (TryLoadSymbols())
+            {
+                return true;
+            }
+
+            FreeNativeLibrary(_libraryHandle);
+            _libraryHandle = IntPtr.Zero;
+            return false;
         }
 
-        foreach (var candidate in GetCandidateLibraryNames())
+        foreach (var candidate in GetCandidateLibraryNames()
+            .Where(name => TryLoadNativeLibrary(name, out _libraryHandle)))
         {
-            if (TryLoadNativeLibrary(candidate, out _libraryHandle))
+            if (TryLoadSymbols())
             {
-                if (TryLoadSymbols())
-                {
-                    return true;
-                }
-
-                FreeNativeLibrary(_libraryHandle);
-                _libraryHandle = IntPtr.Zero;
+                return true;
             }
+
+            FreeNativeLibrary(_libraryHandle);
+            _libraryHandle = IntPtr.Zero;
         }
 
         return false;
