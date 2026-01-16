@@ -453,6 +453,11 @@ public sealed class HipBackend : IAsyncGpuBackend
         LaunchKernelOnStream(kernel, gridX, blockSize, args, _stream, sharedMem);
     }
 
+    private unsafe void LaunchKernelWithSharedMem(IntPtr kernel, uint gridX, uint blockSize, uint sharedMemBytes, IntPtr[] args)
+    {
+        LaunchKernelOnStream(kernel, gridX, blockSize, args, _stream, sharedMemBytes);
+    }
+
     private unsafe void LaunchKernelOnStream(IntPtr kernel, uint gridX, uint blockSize, IntPtr[] args, IntPtr stream, uint sharedMem = 0)
     {
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
@@ -9139,7 +9144,7 @@ public sealed class HipBackend : IAsyncGpuBackend
     public void GruBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
-        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
         int seqLen, int batch, int inputSize, int hiddenSize)
     {
@@ -9149,7 +9154,10 @@ public sealed class HipBackend : IAsyncGpuBackend
         int totalThreads = batch * hiddenSize;
         uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
 
-        var handles = new GCHandle[16];
+        // Shared memory size for accumulated hidden gradients (one float per thread)
+        uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+
+        var handles = new GCHandle[17];
         try
         {
             handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
@@ -9160,19 +9168,20 @@ public sealed class HipBackend : IAsyncGpuBackend
             handles[5] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
             handles[6] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
             handles[7] = GCHandle.Alloc(gradHInit.Handle, GCHandleType.Pinned);
-            handles[8] = GCHandle.Alloc(gradWeightsIh.Handle, GCHandleType.Pinned);
-            handles[9] = GCHandle.Alloc(gradWeightsHh.Handle, GCHandleType.Pinned);
-            handles[10] = GCHandle.Alloc(gradBiasIh.Handle, GCHandleType.Pinned);
-            handles[11] = GCHandle.Alloc(gradBiasHh.Handle, GCHandleType.Pinned);
-            handles[12] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
-            handles[13] = GCHandle.Alloc(batch, GCHandleType.Pinned);
-            handles[14] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
-            handles[15] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(dHBuffer.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(gradWeightsIh.Handle, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(gradWeightsHh.Handle, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(gradBiasIh.Handle, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(gradBiasHh.Handle, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
 
-            var args = new IntPtr[16];
-            for (int i = 0; i < 16; i++) args[i] = handles[i].AddrOfPinnedObject();
+            var args = new IntPtr[17];
+            for (int i = 0; i < 17; i++) args[i] = handles[i].AddrOfPinnedObject();
 
-            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            LaunchKernelWithSharedMem(kernel, grid, DefaultBlockSize, sharedMemSize, args);
             Synchronize();
         }
         finally

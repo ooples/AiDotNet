@@ -2397,7 +2397,7 @@ public interface IDirectGpuBackend : IDisposable
     void GruBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
-        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
         int seqLen, int batch, int inputSize, int hiddenSize);
 

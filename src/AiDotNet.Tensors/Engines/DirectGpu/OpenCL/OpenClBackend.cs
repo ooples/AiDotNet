@@ -9263,7 +9263,7 @@ KERNEL VARIANTS (A/B testing):
         public void GruBackwardSequence(
             IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
             IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
-            IGpuBuffer gradInput, IGpuBuffer gradHInit,
+            IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
             IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
             int seqLen, int batch, int inputSize, int hiddenSize)
         {
@@ -9281,14 +9281,15 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(5u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
             kernel.SetArg(6u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
             kernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradHInit).Buffer.Handle);
-            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
-            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
-            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
-            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
-            kernel.SetArg(12u, seqLen);
-            kernel.SetArg(13u, batch);
-            kernel.SetArg(14u, inputSize);
-            kernel.SetArg(15u, hiddenSize);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)dHBuffer).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
+            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
+            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
+            kernel.SetArg(12u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
+            kernel.SetArg(13u, seqLen);
+            kernel.SetArg(14u, batch);
+            kernel.SetArg(15u, inputSize);
+            kernel.SetArg(16u, hiddenSize);
 
             int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
             kernel.Execute1D(globalSize, localSize);

@@ -7794,7 +7794,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
     public unsafe void GruBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
-        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
         int seqLen, int batch, int inputSize, int hiddenSize)
     {
@@ -7806,6 +7806,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
         int totalThreads = batch * hiddenSize;
         uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
 
+        // Shared memory size for accumulated hidden gradients (one float per thread)
+        uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr allHPtr = allH.Handle;
         IntPtr cacheGatesPtr = cacheGates.Handle;
@@ -7814,12 +7817,13 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr inputPtr = input.Handle;
         IntPtr gradInputPtr = gradInput.Handle;
         IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr dHBufferPtr = dHBuffer.Handle;
         IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
         IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
         IntPtr gradBiasIhPtr = gradBiasIh.Handle;
         IntPtr gradBiasHhPtr = gradBiasHh.Handle;
 
-        void** args = stackalloc void*[16];
+        void** args = stackalloc void*[17];
         args[0] = &gradOutputPtr;
         args[1] = &allHPtr;
         args[2] = &cacheGatesPtr;
@@ -7828,16 +7832,17 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[5] = &inputPtr;
         args[6] = &gradInputPtr;
         args[7] = &gradHInitPtr;
-        args[8] = &gradWeightsIhPtr;
-        args[9] = &gradWeightsHhPtr;
-        args[10] = &gradBiasIhPtr;
-        args[11] = &gradBiasHhPtr;
-        args[12] = &seqLen;
-        args[13] = &batch;
-        args[14] = &inputSize;
-        args[15] = &hiddenSize;
+        args[8] = &dHBufferPtr;
+        args[9] = &gradWeightsIhPtr;
+        args[10] = &gradWeightsHhPtr;
+        args[11] = &gradBiasIhPtr;
+        args[12] = &gradBiasHhPtr;
+        args[13] = &seqLen;
+        args[14] = &batch;
+        args[15] = &inputSize;
+        args[16] = &hiddenSize;
 
-        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        LaunchKernelWithSharedMem(kernel, grid, DefaultBlockSize, sharedMemSize, args);
     }
 
     #endregion

@@ -381,7 +381,9 @@ __kernel void gru_backward_prevh(
 // ===========================================================================
 // GRU BACKWARD SEQUENCE KERNEL
 // ===========================================================================
-// Processes backward pass through entire sequence.
+// GRU backward pass for entire sequence with full BPTT
+// Uses local memory to store accumulated hidden gradients so all threads
+// can access each other's dH values for proper reset-gate gradient computation.
 
 __kernel void gru_backward_sequence(
     __global const float* gradOutput,  // [seqLen, batch, hidden_size]
@@ -391,6 +393,7 @@ __kernel void gru_backward_sequence(
     __global const float* weightsHh,   // [3 * hidden_size, hidden_size]
     __global float* gradInput,         // [seqLen, batch, input_size]
     __global float* gradHInit,         // [batch, hidden_size]
+    __global float* dH_buffer,         // [batch, hidden_size] - workspace for accumulated gradients
     __global float* gradWeightsIh,     // [3 * hidden_size, input_size] - accumulated
     __global float* gradWeightsHh,     // [3 * hidden_size, hidden_size] - accumulated
     __global float* gradBiasIh,        // [3 * hidden_size] - accumulated
@@ -399,73 +402,119 @@ __kernel void gru_backward_sequence(
     const int seqLen,
     const int batch,
     const int inputSize,
-    const int hiddenSize)
+    const int hiddenSize,
+    __local float* local_dH)           // Local memory for shared gradient access
 {
     int gid = get_global_id(0);
+    int lid = get_local_id(0);
+    int local_size = get_local_size(0);
+    int group_id = get_group_id(0);
     int totalElements = batch * hiddenSize;
 
-    if (gid >= totalElements) return;
+    // Use active-flag pattern to prevent barrier deadlock
+    int isActive = (gid < totalElements) ? 1 : 0;
 
-    int b = gid / hiddenSize;
-    int h = gid % hiddenSize;
+    int b = isActive ? (gid / hiddenSize) : 0;
+    int h = isActive ? (gid % hiddenSize) : 0;
 
-    // Initialize gradients
-    float dH = 0.0f;  // Gradient w.r.t. hidden state (accumulated from next timestep)
+    // Initialize gradient for recurrence
+    float dH = 0.0f;
 
-    // Process timesteps in reverse
+    // Process timesteps in reverse (BPTT)
     for (int t = seqLen - 1; t >= 0; t--) {
-        // Add gradient from output at this timestep
-        int outIdx = t * batch * hiddenSize + gid;
-        dH += gradOutput[outIdx];
+        // Phase 1: Add gradient from output and compute basic gradients
+        float r = 0.0f, z = 0.0f, n = 0.0f, hPrev = 0.0f;
+        float dN = 0.0f, dZ = 0.0f;
+        int gateIdx = 0;
 
-        // Load cached gate values
-        int gateIdx = (t * batch * hiddenSize + gid) * 3;
-        float r = cacheGates[gateIdx + 0];
-        float z = cacheGates[gateIdx + 1];
-        float n = cacheGates[gateIdx + 2];
+        if (isActive) {
+            // Add gradient from output at this timestep
+            dH += gradOutput[t * batch * hiddenSize + gid];
 
-        // Load hidden state
-        int prevStateIdx = t * batch * hiddenSize + gid;
-        float hPrev = allH[prevStateIdx];
+            // Load cached gate values
+            gateIdx = (t * batch * hiddenSize + gid) * 3;
+            r = cacheGates[gateIdx + 0];
+            z = cacheGates[gateIdx + 1];
+            n = cacheGates[gateIdx + 2];
 
-        // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
-        float dZ = dH * (hPrev - n) * sigmoid_derivative(z);
-        float dN = dH * (1.0f - z) * tanh_derivative(n);
+            // Load hidden state
+            hPrev = allH[t * batch * hiddenSize + gid];
 
-        // Gradient to previous hidden state from z path
-        float dHPrev = dH * z;
+            // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
+            dZ = dH * (hPrev - n) * sigmoid_derivative(z);
+            dN = dH * (1.0f - z) * tanh_derivative(n);
 
-        // Compute dR: gradient through reset gate from n gate
-        // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev))
-        // dn/dr = tanh_derivative(n) * (Wn_hh @ h_prev) - but dN already includes tanh_derivative
-        // So dR = dN * (Wn_hh @ h_prev)[h] * sigmoid_derivative(r)
-        float Wn_h_prev_dot = 0.0f;
-        for (int j = 0; j < hiddenSize; j++) {
-            // Get h_prev for position j
-            float hPrevJ = allH[t * batch * hiddenSize + b * hiddenSize + j];
-            // Wn_hh has shape [hidden, hidden] starting at offset 2*hiddenSize
-            Wn_h_prev_dot += hPrevJ * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
-        }
-        float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
+            // Store accumulated dH to local memory for other threads to read
+            local_dH[lid] = dH;
 
-        // Gradient through n gate to previous hidden (via reset gate)
-        // dh_prev[j] += dN * r * Wn_hh[h, j] for each source hidden unit j
-        for (int hh = 0; hh < hiddenSize; hh++) {
-            dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
+            // Also write to global buffer for cross-workgroup access
+            dH_buffer[gid] = dH;
         }
 
-        // Gradient through r and z to previous hidden
-        for (int hh = 0; hh < hiddenSize; hh++) {
-            dHPrev += dR * weightsHh[hh * hiddenSize + h];
-            dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
+        // Barrier to ensure all threads have written their dH values
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+        // Phase 2: Compute reset gate gradient using accumulated hidden gradients
+        float dR = 0.0f;
+        if (isActive) {
+            // Full BPTT: dR[h] = sum_k(dN_k * Wn_hh[k,h]) * hPrev[h] * sigmoid'(r[h])
+            // where dN_k uses the ACCUMULATED gradient dH_k, not just gradOutput
+            float dR_sum = 0.0f;
+            for (int k = 0; k < hiddenSize; k++) {
+                // Get cached gate values for output k
+                int k_gateIdx = (t * batch * hiddenSize + b * hiddenSize + k) * 3;
+                float z_k = cacheGates[k_gateIdx + 1];
+                float n_k = cacheGates[k_gateIdx + 2];
+                float hPrev_k = allH[t * batch * hiddenSize + b * hiddenSize + k];
+
+                // Get accumulated hidden gradient for position k
+                // Try local memory first (same workgroup), fall back to global buffer
+                float dH_k;
+                int k_gid = b * hiddenSize + k;
+                int k_local_idx = k_gid - (group_id * local_size);
+                if (k_local_idx >= 0 && k_local_idx < local_size) {
+                    // Same workgroup - use local memory
+                    dH_k = local_dH[k_local_idx];
+                } else {
+                    // Different workgroup - use global buffer
+                    dH_k = dH_buffer[k_gid];
+                }
+
+                // Compute dN for output k using accumulated gradient
+                float dN_k = dH_k * (1.0f - z_k) * tanh_derivative(n_k);
+                dR_sum += dN_k * weightsHh[(2 * hiddenSize + k) * hiddenSize + h];
+            }
+            dR = dR_sum * hPrev * sigmoid_derivative(r);
         }
 
-        // Update for next iteration
-        dH = dHPrev;
+        // Phase 3: Compute gradient to previous hidden state (full BPTT)
+        if (isActive) {
+            // Gradient to previous hidden state from z path
+            float dHPrev = dH * z;
+
+            // Gradient through n gate to previous hidden (via reset gate)
+            for (int hh = 0; hh < hiddenSize; hh++) {
+                dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
+            }
+
+            // Gradient through r and z to previous hidden
+            for (int hh = 0; hh < hiddenSize; hh++) {
+                dHPrev += dR * weightsHh[hh * hiddenSize + h];
+                dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
+            }
+
+            // Update for next iteration
+            dH = dHPrev;
+        }
+
+        // Barrier before next timestep to ensure all threads complete
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
     }
 
     // Store initial state gradient
-    gradHInit[gid] = dH;
+    if (isActive) {
+        gradHInit[gid] = dH;
+    }
 }
 
 // ===========================================================================

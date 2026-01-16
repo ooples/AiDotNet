@@ -188,7 +188,9 @@ extern ""C"" __global__ void lstm_forward_sequence(
         gates[gateOffset + 2 * hiddenSize + h_idx] = c_candidate;
         gates[gateOffset + 3 * hiddenSize + h_idx] = o;
 
-        __syncthreads();
+        // Note: No __syncthreads() needed here - each thread operates independently
+        // on its own (batch, hidden) element with no shared memory dependencies.
+        // Having __syncthreads() with early return causes deadlock for partial blocks.
     }
 }
 

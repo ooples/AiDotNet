@@ -2174,6 +2174,7 @@ public class GRULayer<T> : LayerBase<T>
         // Allocate output gradient buffers
         var gradInputBuffer = backend.AllocateBuffer(inputGradientSize);
         var gradHInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var dHBuffer = backend.AllocateBuffer(hiddenBufferSize);  // Workspace for accumulated gradients in full BPTT
         var gradWeightsIhBuffer = backend.AllocateBuffer(weightsIhSize);
         var gradWeightsHhBuffer = backend.AllocateBuffer(weightsHhSize);
         var gradBiasIhBuffer = backend.AllocateBuffer(biasSize);
@@ -2185,7 +2186,7 @@ public class GRULayer<T> : LayerBase<T>
             backend.GruBackwardSequence(
                 outputGradient.Buffer, _gpuFusedAllH, _gpuFusedCacheGates,
                 _gpuStackedWeightsIh, _gpuStackedWeightsHh, _gpuLastInput.Buffer,
-                gradInputBuffer, gradHInitBuffer,
+                gradInputBuffer, gradHInitBuffer, dHBuffer,
                 gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer, gradBiasHhBuffer,
                 timeSteps, batchSize, _inputSize, _hiddenSize);
 
@@ -2218,8 +2219,9 @@ public class GRULayer<T> : LayerBase<T>
             _gpuBrGradient = new GpuTensor<T>(backend, dBrBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
             _gpuBhGradient = new GpuTensor<T>(backend, dBhBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
 
-            // Cleanup temporary buffers (stacked gradient buffers)
+            // Cleanup temporary buffers (stacked gradient buffers and workspace)
             gradHInitBuffer.Dispose();
+            dHBuffer.Dispose();
             gradWeightsIhBuffer.Dispose();
             gradWeightsHhBuffer.Dispose();
             gradBiasIhBuffer.Dispose();
@@ -2231,6 +2233,7 @@ public class GRULayer<T> : LayerBase<T>
         {
             gradInputBuffer.Dispose();
             gradHInitBuffer.Dispose();
+            dHBuffer.Dispose();
             gradWeightsIhBuffer.Dispose();
             gradWeightsHhBuffer.Dispose();
             gradBiasIhBuffer.Dispose();
