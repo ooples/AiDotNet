@@ -198,6 +198,32 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _edgeWeightsGradient;
 #pragma warning restore CS0169
 
+    // GPU cache fields for backward pass
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuBuffer? _gpuEdgeSrcIndices;
+    private IGpuBuffer? _gpuEdgeTgtIndices;
+    private IGpuBuffer? _gpuEdgeConcatCache;
+    private IGpuBuffer? _gpuMsgHiddenCache;
+    private IGpuBuffer? _gpuMsgCache;
+    private IGpuBuffer? _gpuAggregatedCache;
+    private IGpuBuffer? _gpuResetGateCache;
+    private IGpuBuffer? _gpuUpdateGateCache;
+    private int _gpuNumEdges;
+    private int _gpuNumNodes;
+    private int _gpuBatchSize;
+
+    // GPU gradient fields
+    private IGpuBuffer? _gpuMsgWeights1Gradient;
+    private IGpuBuffer? _gpuMsgWeights2Gradient;
+    private IGpuBuffer? _gpuMsgBias1Gradient;
+    private IGpuBuffer? _gpuMsgBias2Gradient;
+    private IGpuBuffer? _gpuUpdateWeightsGradient;
+    private IGpuBuffer? _gpuUpdateMsgWeightsGradient;
+    private IGpuBuffer? _gpuUpdateBiasGradient;
+    private IGpuBuffer? _gpuResetWeightsGradient;
+    private IGpuBuffer? _gpuResetMsgWeightsGradient;
+    private IGpuBuffer? _gpuResetBiasGradient;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -1108,6 +1134,54 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _resetWeightsGradient = null;
         _resetMessageWeightsGradient = null;
         _resetBiasGradient = null;
+
+        // Clear GPU cache
+        ClearGpuCache();
+    }
+
+    /// <summary>
+    /// Clears GPU cache tensors and gradients.
+    /// </summary>
+    private void ClearGpuCache()
+    {
+        _gpuLastInput = null;
+        _gpuEdgeSrcIndices?.Dispose();
+        _gpuEdgeSrcIndices = null;
+        _gpuEdgeTgtIndices?.Dispose();
+        _gpuEdgeTgtIndices = null;
+        _gpuEdgeConcatCache?.Dispose();
+        _gpuEdgeConcatCache = null;
+        _gpuMsgHiddenCache?.Dispose();
+        _gpuMsgHiddenCache = null;
+        _gpuMsgCache?.Dispose();
+        _gpuMsgCache = null;
+        _gpuAggregatedCache?.Dispose();
+        _gpuAggregatedCache = null;
+        _gpuResetGateCache?.Dispose();
+        _gpuResetGateCache = null;
+        _gpuUpdateGateCache?.Dispose();
+        _gpuUpdateGateCache = null;
+
+        _gpuMsgWeights1Gradient?.Dispose();
+        _gpuMsgWeights1Gradient = null;
+        _gpuMsgWeights2Gradient?.Dispose();
+        _gpuMsgWeights2Gradient = null;
+        _gpuMsgBias1Gradient?.Dispose();
+        _gpuMsgBias1Gradient = null;
+        _gpuMsgBias2Gradient?.Dispose();
+        _gpuMsgBias2Gradient = null;
+        _gpuUpdateWeightsGradient?.Dispose();
+        _gpuUpdateWeightsGradient = null;
+        _gpuUpdateMsgWeightsGradient?.Dispose();
+        _gpuUpdateMsgWeightsGradient = null;
+        _gpuUpdateBiasGradient?.Dispose();
+        _gpuUpdateBiasGradient = null;
+        _gpuResetWeightsGradient?.Dispose();
+        _gpuResetWeightsGradient = null;
+        _gpuResetMsgWeightsGradient?.Dispose();
+        _gpuResetMsgWeightsGradient = null;
+        _gpuResetBiasGradient?.Dispose();
+        _gpuResetBiasGradient = null;
     }
 
     /// <summary>
@@ -1418,7 +1492,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
-        // Clean up GRU buffers
+        // Clean up GRU buffers (always dispose - not needed for backward)
         onesBuffer.Dispose();
         oneMinusZBuffer.Dispose();
         hiddenTermBuffer.Dispose();
@@ -1431,35 +1505,300 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
         }
 
-        // Clean up
-        srcIdxBuffer.Dispose();
-        tgtIdxBuffer.Dispose();
-        msgW1Buffer.Dispose();
-        msgW2Buffer.Dispose();
-        msgB1Buffer.Dispose();
-        msgB2Buffer.Dispose();
-        updateWBuffer.Dispose();
-        updateMsgWBuffer.Dispose();
-        updateBBuffer.Dispose();
-        resetWBuffer.Dispose();
-        resetMsgWBuffer.Dispose();
-        resetBBuffer.Dispose();
-        edgeSrcFeatBuffer.Dispose();
-        edgeTgtFeatBuffer.Dispose();
-        edgeConcatBuffer.Dispose();
-        edgeMsgHiddenBuffer.Dispose();
-        edgeMsgBuffer.Dispose();
-        aggregatedBuffer.Dispose();
-        resetGateBuffer.Dispose();
-        updateGateBuffer.Dispose();
-        tempBuffer.Dispose();
-        nodeOutputBuffer.Dispose();
+        // Cache or clean up based on training mode
+        if (IsTrainingMode)
+        {
+            // Clear previous cache first
+            ClearGpuCache();
+
+            // Cache tensors needed for backward pass
+            _gpuLastInput = input;
+            _gpuEdgeSrcIndices = srcIdxBuffer;
+            _gpuEdgeTgtIndices = tgtIdxBuffer;
+            _gpuEdgeConcatCache = edgeConcatBuffer;
+            _gpuMsgHiddenCache = edgeMsgHiddenBuffer;
+            _gpuMsgCache = edgeMsgBuffer;
+            _gpuAggregatedCache = aggregatedBuffer;
+            _gpuResetGateCache = resetGateBuffer;
+            _gpuUpdateGateCache = updateGateBuffer;
+            _gpuNumEdges = numEdges;
+            _gpuNumNodes = numNodes;
+            _gpuBatchSize = batchSize;
+
+            // Dispose buffers not needed for backward
+            msgW1Buffer.Dispose();
+            msgW2Buffer.Dispose();
+            msgB1Buffer.Dispose();
+            msgB2Buffer.Dispose();
+            updateWBuffer.Dispose();
+            updateMsgWBuffer.Dispose();
+            updateBBuffer.Dispose();
+            resetWBuffer.Dispose();
+            resetMsgWBuffer.Dispose();
+            resetBBuffer.Dispose();
+            edgeSrcFeatBuffer.Dispose();
+            edgeTgtFeatBuffer.Dispose();
+            tempBuffer.Dispose();
+            nodeOutputBuffer.Dispose();
+        }
+        else
+        {
+            // Clean up all buffers (inference mode)
+            srcIdxBuffer.Dispose();
+            tgtIdxBuffer.Dispose();
+            msgW1Buffer.Dispose();
+            msgW2Buffer.Dispose();
+            msgB1Buffer.Dispose();
+            msgB2Buffer.Dispose();
+            updateWBuffer.Dispose();
+            updateMsgWBuffer.Dispose();
+            updateBBuffer.Dispose();
+            resetWBuffer.Dispose();
+            resetMsgWBuffer.Dispose();
+            resetBBuffer.Dispose();
+            edgeSrcFeatBuffer.Dispose();
+            edgeTgtFeatBuffer.Dispose();
+            edgeConcatBuffer.Dispose();
+            edgeMsgHiddenBuffer.Dispose();
+            edgeMsgBuffer.Dispose();
+            aggregatedBuffer.Dispose();
+            resetGateBuffer.Dispose();
+            updateGateBuffer.Dispose();
+            tempBuffer.Dispose();
+            nodeOutputBuffer.Dispose();
+        }
 
         int[] outputShape = rank == 2
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+    }
+
+    /// <summary>
+    /// GPU-accelerated backward pass for Message Passing Neural Network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes gradients through the MPNN:
+    /// 1. Backward through GRU-style update (sigmoid derivatives)
+    /// 2. Backward through aggregation (scatter-add backward = gather)
+    /// 3. Backward through message MLP (layer 2, ReLU, layer 1)
+    /// 4. Accumulate gradients for all weight matrices
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        if (_gpuLastInput == null || _gpuEdgeSrcIndices == null || _gpuEdgeTgtIndices == null ||
+            _gpuEdgeConcatCache == null || _gpuMsgHiddenCache == null || _gpuMsgCache == null ||
+            _gpuAggregatedCache == null || _gpuResetGateCache == null || _gpuUpdateGateCache == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
+        }
+
+        int numNodes = _gpuNumNodes;
+        int numEdges = _gpuNumEdges;
+        int batchSize = _gpuBatchSize;
+        int messageInputDim = 2 * _inputFeatures;
+
+        // Upload weights to GPU for backward computation (transposed for backward pass)
+        // msgW1: [messageInputDim, _messageFeatures] -> need transpose [_messageFeatures, messageInputDim]
+        var msgW1TData = new float[_messageFeatures * messageInputDim];
+        for (int i = 0; i < messageInputDim; i++)
+            for (int j = 0; j < _messageFeatures; j++)
+                msgW1TData[j * messageInputDim + i] = (float)NumOps.ToDouble(_messageWeights1[i, j]);
+        using var msgW1TBuffer = backend.AllocateBuffer(msgW1TData);
+
+        var msgW2TData = new float[_messageFeatures * _messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+            for (int j = 0; j < _messageFeatures; j++)
+                msgW2TData[j * _messageFeatures + i] = (float)NumOps.ToDouble(_messageWeights2[i, j]);
+        using var msgW2TBuffer = backend.AllocateBuffer(msgW2TData);
+
+        var updateWTData = new float[_outputFeatures * _inputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+            for (int j = 0; j < _outputFeatures; j++)
+                updateWTData[j * _inputFeatures + i] = (float)NumOps.ToDouble(_updateWeights[i, j]);
+        using var updateWTBuffer = backend.AllocateBuffer(updateWTData);
+
+        var updateMsgWTData = new float[_outputFeatures * _messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+            for (int j = 0; j < _outputFeatures; j++)
+                updateMsgWTData[j * _messageFeatures + i] = (float)NumOps.ToDouble(_updateMessageWeights[i, j]);
+        using var updateMsgWTBuffer = backend.AllocateBuffer(updateMsgWTData);
+
+        // Allocate gradient buffers
+        int gradInputSize = batchSize * numNodes * _inputFeatures;
+        var gradInputBuffer = backend.AllocateBuffer(gradInputSize);
+        backend.Fill(gradInputBuffer, 0.0f, gradInputSize);
+
+        // Allocate weight gradient buffers
+        _gpuMsgWeights1Gradient = backend.AllocateBuffer(messageInputDim * _messageFeatures);
+        _gpuMsgWeights2Gradient = backend.AllocateBuffer(_messageFeatures * _messageFeatures);
+        _gpuMsgBias1Gradient = backend.AllocateBuffer(_messageFeatures);
+        _gpuMsgBias2Gradient = backend.AllocateBuffer(_messageFeatures);
+        _gpuUpdateWeightsGradient = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
+        _gpuUpdateMsgWeightsGradient = backend.AllocateBuffer(_messageFeatures * _outputFeatures);
+        _gpuUpdateBiasGradient = backend.AllocateBuffer(_outputFeatures);
+        _gpuResetWeightsGradient = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
+        _gpuResetMsgWeightsGradient = backend.AllocateBuffer(_messageFeatures * _outputFeatures);
+        _gpuResetBiasGradient = backend.AllocateBuffer(_outputFeatures);
+
+        backend.Fill(_gpuMsgWeights1Gradient, 0.0f, messageInputDim * _messageFeatures);
+        backend.Fill(_gpuMsgWeights2Gradient, 0.0f, _messageFeatures * _messageFeatures);
+        backend.Fill(_gpuMsgBias1Gradient, 0.0f, _messageFeatures);
+        backend.Fill(_gpuMsgBias2Gradient, 0.0f, _messageFeatures);
+        backend.Fill(_gpuUpdateWeightsGradient, 0.0f, _inputFeatures * _outputFeatures);
+        backend.Fill(_gpuUpdateMsgWeightsGradient, 0.0f, _messageFeatures * _outputFeatures);
+        backend.Fill(_gpuUpdateBiasGradient, 0.0f, _outputFeatures);
+        backend.Fill(_gpuResetWeightsGradient, 0.0f, _inputFeatures * _outputFeatures);
+        backend.Fill(_gpuResetMsgWeightsGradient, 0.0f, _messageFeatures * _outputFeatures);
+        backend.Fill(_gpuResetBiasGradient, 0.0f, _outputFeatures);
+
+        // Temporary buffers for backward computation
+        using var gradAggregatedBuffer = backend.AllocateBuffer(numNodes * _messageFeatures);
+        using var gradMsgBuffer = backend.AllocateBuffer(numEdges * _messageFeatures);
+        using var gradMsgHiddenBuffer = backend.AllocateBuffer(numEdges * _messageFeatures);
+        using var gradConcatBuffer = backend.AllocateBuffer(numEdges * messageInputDim);
+        using var tempGradBuffer1 = backend.AllocateBuffer(numNodes * _outputFeatures);
+        using var tempGradBuffer2 = backend.AllocateBuffer(numNodes * _outputFeatures);
+        using var onesBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        backend.Fill(onesBuffer, 1.0f, numNodes * _outputFeatures);
+
+        // Step 1: Backward through GRU-style update
+        // h' = (1 - z) * h + z * m
+        // dz = (m - h) * dh'
+        // dm = z * dh'
+        // dh = (1 - z) * dh'
+        backend.Fill(gradAggregatedBuffer, 0.0f, numNodes * _messageFeatures);
+
+        // For single batch processing
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Get output gradient for this batch
+            int gradOffset = b * numNodes * _outputFeatures;
+            IGpuBuffer batchGradOutput;
+            bool ownsBatchGrad = false;
+
+            if (batchSize == 1)
+            {
+                batchGradOutput = outputGradient.Buffer;
+            }
+            else
+            {
+                var fullGrad = backend.DownloadBuffer(outputGradient.Buffer);
+                var batchGrad = new float[numNodes * _outputFeatures];
+                Array.Copy(fullGrad, gradOffset, batchGrad, 0, numNodes * _outputFeatures);
+                batchGradOutput = backend.AllocateBuffer(batchGrad);
+                ownsBatchGrad = true;
+            }
+
+            // Backward through update gate sigmoid
+            using var gradUpdateGatePre = backend.AllocateBuffer(numNodes * _outputFeatures);
+            if (_messageFeatures >= _outputFeatures && _inputFeatures == _outputFeatures)
+            {
+                // dz = (m - h) * dh'
+                using var mMinusH = backend.AllocateBuffer(numNodes * _outputFeatures);
+                backend.Subtract(_gpuAggregatedCache, _gpuLastInput.Buffer, mMinusH, numNodes * _outputFeatures);
+                backend.Multiply(mMinusH, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
+                backend.SigmoidBackward(tempGradBuffer1, _gpuUpdateGateCache, gradUpdateGatePre, numNodes * _outputFeatures);
+            }
+            else
+            {
+                backend.Fill(gradUpdateGatePre, 0.0f, numNodes * _outputFeatures);
+            }
+
+            // Update bias gradient: sum over nodes using SumAxis
+            backend.SumAxis(gradUpdateGatePre, _gpuUpdateBiasGradient, numNodes, _outputFeatures);
+
+            // Gradient to aggregated from update gate: gradUpdateGatePre @ W_T
+            // Using pre-transposed weight: gradUpdateGatePre[nodes,output] @ updateMsgWT[output,msg]
+            backend.Gemm(gradUpdateGatePre, updateMsgWTBuffer, tempGradBuffer2, numNodes, _messageFeatures, _outputFeatures);
+            backend.Add(gradAggregatedBuffer, tempGradBuffer2, gradAggregatedBuffer, numNodes * _messageFeatures);
+
+            // Gradient to input from update gate: gradUpdateGatePre @ updateWT
+            using var tempInputGrad = backend.AllocateBuffer(numNodes * _inputFeatures);
+            backend.Gemm(gradUpdateGatePre, updateWTBuffer, tempInputGrad, numNodes, _inputFeatures, _outputFeatures);
+            backend.Add(gradInputBuffer, tempInputGrad, gradInputBuffer, numNodes * _inputFeatures);
+
+            // Gradient to aggregated from output: dm = z * dh'
+            if (_messageFeatures >= _outputFeatures)
+            {
+                backend.Multiply(_gpuUpdateGateCache, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
+                backend.Add(gradAggregatedBuffer, tempGradBuffer1, gradAggregatedBuffer, numNodes * _messageFeatures);
+            }
+
+            // Gradient to input from output: dh = (1 - z) * dh'
+            if (_inputFeatures == _outputFeatures)
+            {
+                backend.Subtract(onesBuffer, _gpuUpdateGateCache, tempGradBuffer1, numNodes * _outputFeatures);
+                backend.Multiply(tempGradBuffer1, batchGradOutput, tempGradBuffer2, numNodes * _outputFeatures);
+                backend.Add(gradInputBuffer, tempGradBuffer2, gradInputBuffer, numNodes * _inputFeatures);
+            }
+
+            if (ownsBatchGrad)
+            {
+                batchGradOutput.Dispose();
+            }
+        }
+
+        // Step 2: Backward through aggregation (scatter-add backward = gather)
+        backend.Gather(gradAggregatedBuffer, _gpuEdgeTgtIndices, gradMsgBuffer, numEdges, _messageFeatures);
+
+        // Step 3: Backward through message MLP layer 2
+        // gradHidden = gradMsg @ W2^T (using pre-transposed W2T)
+        backend.Gemm(gradMsgBuffer, msgW2TBuffer, gradMsgHiddenBuffer, numEdges, _messageFeatures, _messageFeatures);
+
+        // Bias gradient: sum over edges
+        backend.SumAxis(gradMsgBuffer, _gpuMsgBias2Gradient, numEdges, _messageFeatures);
+
+        // Step 4: Backward through ReLU
+        using var gradPreRelu = backend.AllocateBuffer(numEdges * _messageFeatures);
+        backend.ReluBackward(gradMsgHiddenBuffer, _gpuMsgHiddenCache, gradPreRelu, numEdges * _messageFeatures);
+
+        // Step 5: Backward through message MLP layer 1
+        // gradConcat = gradPreRelu @ W1^T (using pre-transposed W1T)
+        backend.Gemm(gradPreRelu, msgW1TBuffer, gradConcatBuffer, numEdges, messageInputDim, _messageFeatures);
+
+        // Bias gradient: sum over edges
+        backend.SumAxis(gradPreRelu, _gpuMsgBias1Gradient, numEdges, _messageFeatures);
+
+        // Step 6: Backward through edge feature gathering
+        // Split gradConcat into gradSrc and gradTgt, then scatter to input gradient
+        using var gradEdgeSrc = backend.AllocateBuffer(numEdges * _inputFeatures);
+        using var gradEdgeTgt = backend.AllocateBuffer(numEdges * _inputFeatures);
+
+        // Extract first half (source features gradient)
+        backend.Copy(gradConcatBuffer, 0, gradEdgeSrc, 0, numEdges * _inputFeatures);
+
+        // Extract second half (target features gradient) - download, extract, upload
+        var concatData = backend.DownloadBuffer(gradConcatBuffer);
+        var tgtGradData = new float[numEdges * _inputFeatures];
+        for (int e = 0; e < numEdges; e++)
+        {
+            Array.Copy(concatData, e * messageInputDim + _inputFeatures, tgtGradData, e * _inputFeatures, _inputFeatures);
+        }
+        var tgtGradBuffer = backend.AllocateBuffer(tgtGradData);
+        backend.Copy(tgtGradBuffer, gradEdgeTgt, numEdges * _inputFeatures);
+        tgtGradBuffer.Dispose();
+
+        // Scatter-add gradients back to input
+        backend.ScatterAdd(gradEdgeSrc, _gpuEdgeSrcIndices, gradInputBuffer, numEdges * _inputFeatures, numNodes * _inputFeatures);
+        backend.ScatterAdd(gradEdgeTgt, _gpuEdgeTgtIndices, gradInputBuffer, numEdges * _inputFeatures, numNodes * _inputFeatures);
+
+        // Return input gradient
+        int[] gradInputShape = _gpuLastInput.Shape.Length == 2
+            ? [numNodes, _inputFeatures]
+            : [batchSize, numNodes, _inputFeatures];
+
+        return new GpuTensor<T>(backend, gradInputBuffer, gradInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <inheritdoc/>
