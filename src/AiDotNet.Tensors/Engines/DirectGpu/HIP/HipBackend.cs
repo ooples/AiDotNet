@@ -93,6 +93,17 @@ public sealed class HipBackend : IAsyncGpuBackend
     public long GlobalMemoryBytes { get; }
     public long LocalMemoryBytes { get; }
 
+    private void ReturnBufferToPool(HipGpuBuffer buffer)
+    {
+        if (_disposed)
+        {
+            buffer.Release();
+            return;
+        }
+
+        _bufferPool.Return(buffer);
+    }
+
     /// <summary>
     /// Gets the detected AMD GPU architecture.
     /// </summary>
@@ -277,20 +288,17 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         try
         {
-            // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
-            var status = HipBlasNative.hipblasCreate(ref _hipblasHandle);
+            var status = HipBlasNative.hipblasCreate(ref _hipblasHandle); // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
             if (status != HipBlasNative.HipBlasStatus.Success)
             {
                 _hipblasHandle = IntPtr.Zero;
                 return;
             }
 
-            // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
-            status = HipBlasNative.hipblasSetStream(_hipblasHandle, _stream);
+            status = HipBlasNative.hipblasSetStream(_hipblasHandle, _stream); // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
             if (status != HipBlasNative.HipBlasStatus.Success)
             {
-                // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
-                HipBlasNative.hipblasDestroy(_hipblasHandle);
+                HipBlasNative.hipblasDestroy(_hipblasHandle); // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
                 _hipblasHandle = IntPtr.Zero;
                 return;
             }
@@ -338,8 +346,14 @@ public sealed class HipBackend : IAsyncGpuBackend
             return true;
         }
 
-        long work = (long)m * n * k;
-        return work >= GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
+        if (m <= 0 || n <= 0 || k <= 0)
+        {
+            return false;
+        }
+
+        ulong work = (ulong)m * (ulong)n * (ulong)k;
+        ulong threshold = (ulong)GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
+        return work >= threshold;
     }
 
     private static bool IsVendorGemmForced(string? mode)
@@ -669,12 +683,11 @@ public sealed class HipBackend : IAsyncGpuBackend
             GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
-                // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
                 var result = HipNativeBindings.hipMemcpy(
                     pooled.Handle,
                     handle.AddrOfPinnedObject(),
                     size,
-                    HipMemcpyKind.HostToDevice);
+                    HipMemcpyKind.HostToDevice); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
                 HipNativeBindings.CheckError(result, "hipMemcpy H2D");
             }
             finally
@@ -685,19 +698,18 @@ public sealed class HipBackend : IAsyncGpuBackend
             return pooled;
         }
 
-        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, size);
+        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, size); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
         HipNativeBindings.CheckError(allocResult, "hipMalloc");
 
         // Copy data to device
         GCHandle allocHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
         try
         {
-            // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             var copyResult = HipNativeBindings.hipMemcpy(
                 devicePtr,
                 allocHandle.AddrOfPinnedObject(),
                 size,
-                HipMemcpyKind.HostToDevice);
+                HipMemcpyKind.HostToDevice); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             HipNativeBindings.CheckError(copyResult, "hipMemcpy H2D");
         }
         finally
@@ -705,7 +717,7 @@ public sealed class HipBackend : IAsyncGpuBackend
             allocHandle.Free();
         }
 
-        return new HipGpuBuffer(devicePtr, data.Length, _bufferPool.Return);
+        return new HipGpuBuffer(devicePtr, data.Length, ReturnBufferToPool);
     }
 
     public IGpuBuffer AllocateBuffer(int size)
@@ -715,21 +727,19 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {
-            // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
-            var zeroResult = HipNativeBindings.hipMemset(pooled.Handle, 0, sizeBytes);
+            var zeroResult = HipNativeBindings.hipMemset(pooled.Handle, 0, sizeBytes); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             HipNativeBindings.CheckError(zeroResult, "hipMemset");
             return pooled;
         }
 
-        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes);
+        var allocResult = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
         HipNativeBindings.CheckError(allocResult, "hipMalloc");
 
         // Zero-initialize
-        // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
-        var memsetResult = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes);
+        var memsetResult = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
         HipNativeBindings.CheckError(memsetResult, "hipMemset");
 
-        return new HipGpuBuffer(devicePtr, size, _bufferPool.Return);
+        return new HipGpuBuffer(devicePtr, size, ReturnBufferToPool);
     }
 
     public float[] DownloadBuffer(IGpuBuffer buffer)
@@ -893,7 +903,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         float alphaVal = alpha;
         float betaVal = beta;
 
-        // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
+        // hipBLAS uses column-major; swap A/B and M/N so C^T = B^T * A^T for row-major inputs.
         var status = HipBlasNative.hipblasSgemm(
             _hipblasHandle,
             HipBlasNative.HipBlasOperation.None,
@@ -903,7 +913,7 @@ public sealed class HipBackend : IAsyncGpuBackend
             bufferB.Handle, N,
             bufferA.Handle, K,
             ref betaVal,
-            bufferC.Handle, N);
+            bufferC.Handle, N); // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
 
         if (status != HipBlasNative.HipBlasStatus.Success)
         {
@@ -914,7 +924,7 @@ public sealed class HipBackend : IAsyncGpuBackend
             return false;
         }
 
-        var syncResult = HipNativeBindings.hipStreamSynchronize(_stream);
+        var syncResult = HipNativeBindings.hipStreamSynchronize(_stream); // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
         HipNativeBindings.CheckError(syncResult, "hipStreamSynchronize (hipBLAS)");
         return true;
     }
@@ -9178,6 +9188,7 @@ public sealed class HipBackend : IAsyncGpuBackend
     public void Dispose()
     {
         if (_disposed) return;
+        _disposed = true;
 
         // Dispose the default stream wrapper (does not destroy underlying stream)
         _defaultStream?.Dispose();
@@ -9269,7 +9280,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         if (_hipblasHandle != IntPtr.Zero)
         {
-            HipBlasNative.hipblasDestroy(_hipblasHandle);
+            HipBlasNative.hipblasDestroy(_hipblasHandle); // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
             _hipblasHandle = IntPtr.Zero;
             _hipblasAvailable = false;
         }
@@ -9281,7 +9292,6 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
 
         _kernelCache.Clear();
-        _disposed = true;
     }
 
     #region Optimizer Operations
@@ -9886,7 +9896,14 @@ internal sealed class HipGpuBuffer : IGpuBuffer, IPoolableGpuBuffer
         if (Interlocked.CompareExchange(ref _poolState, 1, 0) != 0)
             return;
 
-        _returnToPool(this);
+        try
+        {
+            _returnToPool(this);
+        }
+        catch
+        {
+            Release();
+        }
     }
 }
 

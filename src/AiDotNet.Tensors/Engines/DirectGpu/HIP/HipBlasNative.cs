@@ -9,8 +9,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
 internal static class HipBlasNative
 {
     private const string HipBlasLibrary = "hipblas";
-    private static bool _isAvailable;
-    private static bool _checkedAvailability;
+    private static volatile bool _isAvailable;
+    private static volatile bool _checkedAvailability;
     private static readonly object AvailabilityLock = new object();
 
     internal enum HipBlasStatus
@@ -56,19 +56,15 @@ internal static class HipBlasNative
         }
     }
 
-    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasCreate")]
-    internal static extern HipBlasStatus hipblasCreate(ref IntPtr handle);
+    internal static extern HipBlasStatus hipblasCreate(ref IntPtr handle); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasDestroy")]
-    internal static extern HipBlasStatus hipblasDestroy(IntPtr handle);
+    internal static extern HipBlasStatus hipblasDestroy(IntPtr handle); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasSetStream")]
-    internal static extern HipBlasStatus hipblasSetStream(IntPtr handle, IntPtr stream);
+    internal static extern HipBlasStatus hipblasSetStream(IntPtr handle, IntPtr stream); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasSgemm")]
     internal static extern HipBlasStatus hipblasSgemm(
         IntPtr handle,
@@ -84,7 +80,7 @@ internal static class HipBlasNative
         int ldb,
         ref float beta,
         IntPtr C,
-        int ldc);
+        int ldc); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
     private static bool TryLoadLibrary()
     {

@@ -338,8 +338,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 fixed (float* src = data)
                 {
                     CuBlasNative.CheckCudaResult(
-                        // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
-                        CuBlasNative.cuMemcpyHtoD(pooled.Handle, (IntPtr)src, byteSize),
+                        CuBlasNative.cuMemcpyHtoD(pooled.Handle, (IntPtr)src, byteSize), // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
                         "cuMemcpyHtoD");
                 }
             }
@@ -382,8 +381,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {
             CuBlasNative.CheckCudaResult(
-                // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
-                CuBlasNative.cuMemsetD32(pooled.Handle, 0, (ulong)size),
+                CuBlasNative.cuMemsetD32(pooled.Handle, 0, (ulong)size), // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
                 "cuMemsetD32");
             return pooled;
         }
@@ -7859,7 +7857,14 @@ public sealed class CudaBackend : IAsyncGpuBackend
             if (Interlocked.CompareExchange(ref _poolState, 1, 0) != 0)
                 return;
 
-            _returnToPool(this);
+            try
+            {
+                _returnToPool(this);
+            }
+            catch
+            {
+                Release();
+            }
         }
 
         ~CudaGpuBuffer()

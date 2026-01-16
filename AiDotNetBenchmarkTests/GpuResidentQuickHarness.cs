@@ -69,6 +69,10 @@ internal static class GpuResidentQuickHarness
 
         if (gpuMatrixA == null || gpuMatrixB == null || gpuVectorA == null || gpuVectorB == null)
         {
+            gpuMatrixA?.Dispose();
+            gpuMatrixB?.Dispose();
+            gpuVectorA?.Dispose();
+            gpuVectorB?.Dispose();
             Console.WriteLine("GPU upload failed; skipping.");
             return;
         }
