@@ -7845,6 +7845,67 @@ public sealed class CudaBackend : IAsyncGpuBackend
         LaunchKernelWithSharedMem(kernel, grid, DefaultBlockSize, sharedMemSize, args);
     }
 
+    public unsafe void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize)
+    {
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        // Step 1: Call gru_cell_backward_unified to compute gate gradients and partial gradPrevH
+        if (!_kernelCache.TryGetValue("gru_cell_backward_unified", out var cellBackwardKernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_cell_backward_unified");
+
+        IntPtr gradHPtr = gradH.Handle;
+        IntPtr gateRPtr = gateR.Handle;
+        IntPtr gateZPtr = gateZ.Handle;
+        IntPtr gateNPtr = gateN.Handle;
+        IntPtr prevHPtr = prevH.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr gradPrevHPtr = gradPrevH.Handle;
+        IntPtr gradGateRPtr = gradGateR.Handle;
+        IntPtr gradGateZPtr = gradGateZ.Handle;
+        IntPtr gradGateNPtr = gradGateN.Handle;
+
+        void** args1 = stackalloc void*[12];
+        args1[0] = &gradHPtr;
+        args1[1] = &gateRPtr;
+        args1[2] = &gateZPtr;
+        args1[3] = &gateNPtr;
+        args1[4] = &prevHPtr;
+        args1[5] = &weightsHhPtr;
+        args1[6] = &gradPrevHPtr;
+        args1[7] = &gradGateRPtr;
+        args1[8] = &gradGateZPtr;
+        args1[9] = &gradGateNPtr;
+        args1[10] = &batch;
+        args1[11] = &hiddenSize;
+
+        LaunchKernel(cellBackwardKernel, grid, DefaultBlockSize, args1);
+
+        // Step 2: Call gru_backward_prevh_unified to compute full gradPrevH using all gate gradients
+        if (!_kernelCache.TryGetValue("gru_backward_prevh_unified", out var prevhKernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_backward_prevh_unified");
+
+        void** args2 = stackalloc void*[10];
+        args2[0] = &gradGateRPtr;
+        args2[1] = &gradGateZPtr;
+        args2[2] = &gradGateNPtr;
+        args2[3] = &gradHPtr;
+        args2[4] = &gateRPtr;
+        args2[5] = &gateZPtr;
+        args2[6] = &weightsHhPtr;
+        args2[7] = &gradPrevHPtr;
+        args2[8] = &batch;
+        args2[9] = &hiddenSize;
+
+        LaunchKernel(prevhKernel, grid, DefaultBlockSize, args2);
+    }
+
     #endregion
 
 

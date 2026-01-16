@@ -9295,6 +9295,54 @@ KERNEL VARIANTS (A/B testing):
             kernel.Execute1D(globalSize, localSize);
         }
 
+        public void GruCellBackward(
+            IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+            IGpuBuffer weightsHh,
+            IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+            int batch, int hiddenSize)
+        {
+            // Step 1: Call gru_cell_backward to compute gate gradients and partial gradPrevH (direct path only)
+            if (!_kernelCache.TryGetValue("gru_cell_backward", out var cellBackwardKernel))
+                throw new InvalidOperationException("OpenCL kernel not found: gru_cell_backward");
+
+            int totalThreads = batch * hiddenSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+            int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
+
+            cellBackwardKernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradH).Buffer.Handle);
+            cellBackwardKernel.SetArg(1u, ((DirectOpenClGpuBuffer)gateR).Buffer.Handle);
+            cellBackwardKernel.SetArg(2u, ((DirectOpenClGpuBuffer)gateZ).Buffer.Handle);
+            cellBackwardKernel.SetArg(3u, ((DirectOpenClGpuBuffer)gateN).Buffer.Handle);
+            cellBackwardKernel.SetArg(4u, ((DirectOpenClGpuBuffer)prevH).Buffer.Handle);
+            cellBackwardKernel.SetArg(5u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            cellBackwardKernel.SetArg(6u, ((DirectOpenClGpuBuffer)gradPrevH).Buffer.Handle);
+            cellBackwardKernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradGateR).Buffer.Handle);
+            cellBackwardKernel.SetArg(8u, ((DirectOpenClGpuBuffer)gradGateZ).Buffer.Handle);
+            cellBackwardKernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradGateN).Buffer.Handle);
+            cellBackwardKernel.SetArg(10u, batch);
+            cellBackwardKernel.SetArg(11u, hiddenSize);
+
+            cellBackwardKernel.Execute1D(globalSize, localSize);
+
+            // Step 2: Call gru_backward_prevh to compute full gradPrevH using all gate gradients
+            // This overwrites the partial result from step 1 with the complete gradient
+            if (!_kernelCache.TryGetValue("gru_backward_prevh", out var prevhKernel))
+                throw new InvalidOperationException("OpenCL kernel not found: gru_backward_prevh");
+
+            prevhKernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradGateR).Buffer.Handle);
+            prevhKernel.SetArg(1u, ((DirectOpenClGpuBuffer)gradGateZ).Buffer.Handle);
+            prevhKernel.SetArg(2u, ((DirectOpenClGpuBuffer)gradGateN).Buffer.Handle);
+            prevhKernel.SetArg(3u, ((DirectOpenClGpuBuffer)gradH).Buffer.Handle);
+            prevhKernel.SetArg(4u, ((DirectOpenClGpuBuffer)gateR).Buffer.Handle);
+            prevhKernel.SetArg(5u, ((DirectOpenClGpuBuffer)gateZ).Buffer.Handle);
+            prevhKernel.SetArg(6u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            prevhKernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradPrevH).Buffer.Handle);
+            prevhKernel.SetArg(8u, batch);
+            prevhKernel.SetArg(9u, hiddenSize);
+
+            prevhKernel.Execute1D(globalSize, localSize);
+        }
+
         #endregion
 
         public void Dispose()

@@ -1501,6 +1501,15 @@ public class DelegatingGpuBackend : IDirectGpuBackend
             gradInput, gradHInit, dHBuffer, gradWeightsIh, gradWeightsHh, gradBiasIh, gradBiasHh,
             seqLen, batch, inputSize, hiddenSize);
 
+    /// <inheritdoc/>
+    public virtual void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize)
+        => Inner.GruCellBackward(gradH, gateR, gateZ, gateN, prevH, weightsHh,
+            gradPrevH, gradGateR, gradGateZ, gradGateN, batch, hiddenSize);
+
     #endregion
 
     #region IDisposable

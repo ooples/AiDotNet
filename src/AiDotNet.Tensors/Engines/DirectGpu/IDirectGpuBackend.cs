@@ -2402,6 +2402,29 @@ public interface IDirectGpuBackend : IDisposable
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
         int seqLen, int batch, int inputSize, int hiddenSize);
 
+    /// <summary>
+    /// Backward pass for a single GRU cell - computes gate gradients and gradient to previous hidden state.
+    /// This method internally calls gru_cell_backward followed by gru_backward_prevh to ensure
+    /// the full gradient computation including contributions from all hidden positions.
+    /// </summary>
+    /// <param name="gradH">Gradient from next layer [batch * hiddenSize].</param>
+    /// <param name="gateR">Cached reset gate values from forward [batch * hiddenSize].</param>
+    /// <param name="gateZ">Cached update gate values from forward [batch * hiddenSize].</param>
+    /// <param name="gateN">Cached candidate values from forward [batch * hiddenSize].</param>
+    /// <param name="prevH">Previous hidden state [batch * hiddenSize].</param>
+    /// <param name="weightsHh">Hidden-to-hidden weights [3 * hiddenSize * hiddenSize].</param>
+    /// <param name="gradPrevH">Output: gradient for previous hidden state [batch * hiddenSize].</param>
+    /// <param name="gradGateR">Output: gradient for reset gate [batch * hiddenSize].</param>
+    /// <param name="gradGateZ">Output: gradient for update gate [batch * hiddenSize].</param>
+    /// <param name="gradGateN">Output: gradient for candidate [batch * hiddenSize].</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="hiddenSize">Hidden state size.</param>
+    void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize);
+
     #endregion
 }
 

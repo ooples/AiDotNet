@@ -9190,6 +9190,76 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    public void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize)
+    {
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        // Step 1: Call gru_cell_backward_unified to compute gate gradients and partial gradPrevH
+        if (!_kernelCache.TryGetValue("gru_cell_backward_unified", out var cellBackwardKernel))
+            throw new InvalidOperationException("HIP kernel not found: gru_cell_backward_unified");
+
+        var handles1 = new GCHandle[12];
+        try
+        {
+            handles1[0] = GCHandle.Alloc(gradH.Handle, GCHandleType.Pinned);
+            handles1[1] = GCHandle.Alloc(gateR.Handle, GCHandleType.Pinned);
+            handles1[2] = GCHandle.Alloc(gateZ.Handle, GCHandleType.Pinned);
+            handles1[3] = GCHandle.Alloc(gateN.Handle, GCHandleType.Pinned);
+            handles1[4] = GCHandle.Alloc(prevH.Handle, GCHandleType.Pinned);
+            handles1[5] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles1[6] = GCHandle.Alloc(gradPrevH.Handle, GCHandleType.Pinned);
+            handles1[7] = GCHandle.Alloc(gradGateR.Handle, GCHandleType.Pinned);
+            handles1[8] = GCHandle.Alloc(gradGateZ.Handle, GCHandleType.Pinned);
+            handles1[9] = GCHandle.Alloc(gradGateN.Handle, GCHandleType.Pinned);
+            handles1[10] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles1[11] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args1 = new IntPtr[12];
+            for (int i = 0; i < 12; i++) args1[i] = handles1[i].AddrOfPinnedObject();
+
+            LaunchKernel(cellBackwardKernel, grid, DefaultBlockSize, args1);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles1) if (h.IsAllocated) h.Free();
+        }
+
+        // Step 2: Call gru_backward_prevh_unified to compute full gradPrevH using all gate gradients
+        if (!_kernelCache.TryGetValue("gru_backward_prevh_unified", out var prevhKernel))
+            throw new InvalidOperationException("HIP kernel not found: gru_backward_prevh_unified");
+
+        var handles2 = new GCHandle[10];
+        try
+        {
+            handles2[0] = GCHandle.Alloc(gradGateR.Handle, GCHandleType.Pinned);
+            handles2[1] = GCHandle.Alloc(gradGateZ.Handle, GCHandleType.Pinned);
+            handles2[2] = GCHandle.Alloc(gradGateN.Handle, GCHandleType.Pinned);
+            handles2[3] = GCHandle.Alloc(gradH.Handle, GCHandleType.Pinned);
+            handles2[4] = GCHandle.Alloc(gateR.Handle, GCHandleType.Pinned);
+            handles2[5] = GCHandle.Alloc(gateZ.Handle, GCHandleType.Pinned);
+            handles2[6] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles2[7] = GCHandle.Alloc(gradPrevH.Handle, GCHandleType.Pinned);
+            handles2[8] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles2[9] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args2 = new IntPtr[10];
+            for (int i = 0; i < 10; i++) args2[i] = handles2[i].AddrOfPinnedObject();
+
+            LaunchKernel(prevhKernel, grid, DefaultBlockSize, args2);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles2) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     public void Dispose()

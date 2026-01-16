@@ -614,6 +614,124 @@ extern ""C"" __global__ void gru_backward_sequence(
         dH_init[gid] = dH;
     }
 }
+
+// ===========================================================================
+// UNIFIED GRU CELL BACKWARD KERNEL
+// ===========================================================================
+// Matches the OpenCL interface for cross-backend compatibility.
+// Computes gate gradients and partial prevH (direct path only).
+// Must be followed by gru_backward_prevh_unified for full BPTT gradient.
+
+extern ""C"" __global__ void gru_cell_backward_unified(
+    const float* gradH,       // [batch, hiddenSize] - gradient from next layer
+    const float* gateR,       // [batch, hiddenSize] - reset gate values
+    const float* gateZ,       // [batch, hiddenSize] - update gate values
+    const float* gateN,       // [batch, hiddenSize] - candidate values
+    const float* prevH,       // [batch, hiddenSize] - previous hidden state
+    const float* weightsHh,   // [3 * hiddenSize, hiddenSize] - recurrent weights (R, Z, N stacked)
+    float* gradPrevH,         // [batch, hiddenSize] - output: partial gradient (direct path only)
+    float* gradGateR,         // [batch, hiddenSize] - output: reset gate gradient
+    float* gradGateZ,         // [batch, hiddenSize] - output: update gate gradient
+    float* gradGateN,         // [batch, hiddenSize] - output: candidate gradient
+    int batch,
+    int hiddenSize)
+{
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalElements = batch * hiddenSize;
+
+    if (gid >= totalElements) return;
+
+    int b = gid / hiddenSize;
+    int h = gid % hiddenSize;
+
+    float r = gateR[gid];
+    float z = gateZ[gid];
+    float n = gateN[gid];
+    float hPrevLocal = prevH[gid];
+    float dH = gradH[gid];
+
+    // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
+    // dL/dz = dH * (h_prev - n) * sigmoid'(z)
+    float dZ = dH * (hPrevLocal - n) * sigmoid_derivative(z);
+
+    // dL/dn = dH * (1 - z) * tanh'(n)
+    float dN = dH * (1.0f - z) * tanh_derivative(n);
+
+    // Compute Wn_hh @ h_prev for reset gate gradient
+    // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev) + bias)
+    // dR = dN * (Wn_hh @ h_prev) * sigmoid'(r)
+    float Wn_h_prev_dot = 0.0f;
+    for (int j = 0; j < hiddenSize; j++) {
+        float hPrevJ = prevH[b * hiddenSize + j];
+        // Wn_hh is at offset 2*hiddenSize in weightsHh (layout: R, Z, N)
+        Wn_h_prev_dot += hPrevJ * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
+    }
+    float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
+
+    // Store gate gradients
+    gradGateR[gid] = dR;
+    gradGateZ[gid] = dZ;
+    gradGateN[gid] = dN;
+
+    // Direct path gradient to prev hidden: dL/dh_prev from z branch = dH * z
+    // NOTE: This is ONLY the direct path. Full gradient requires gru_backward_prevh_unified.
+    float dHPrev = dH * z;
+    gradPrevH[gid] = dHPrev;
+}
+
+// ===========================================================================
+// UNIFIED GRU BACKWARD PREVH KERNEL
+// ===========================================================================
+// Computes full gradient to previous hidden state by summing contributions
+// from all hidden positions through the gate weight matrices.
+// Must be called AFTER gru_cell_backward_unified which computes gate gradients.
+
+extern ""C"" __global__ void gru_backward_prevh_unified(
+    const float* gradGateR,   // [batch, hiddenSize] - from gru_cell_backward_unified
+    const float* gradGateZ,   // [batch, hiddenSize] - from gru_cell_backward_unified
+    const float* gradGateN,   // [batch, hiddenSize] - from gru_cell_backward_unified
+    const float* gradH,       // [batch, hiddenSize] - gradient from output
+    const float* gateR,       // [batch, hiddenSize] - reset gate values
+    const float* gateZ,       // [batch, hiddenSize] - update gate values
+    const float* weightsHh,   // [3 * hiddenSize, hiddenSize] - recurrent weights (R, Z, N stacked)
+    float* gradPrevH,         // [batch, hiddenSize] - output: OVERWRITES with full gradient
+    int batch,
+    int hiddenSize)
+{
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalElements = batch * hiddenSize;
+
+    if (gid >= totalElements) return;
+
+    int b = gid / hiddenSize;
+    int j = gid % hiddenSize;  // This thread computes gradPrevH[b, j]
+
+    float z = gateZ[gid];
+    float dH = gradH[gid];
+
+    // Gradient through z path (direct contribution)
+    float gradSum = dH * z;
+
+    // Gradient through all gates from all hidden positions h
+    for (int hh = 0; hh < hiddenSize; hh++) {
+        int batchHiddenIdx = b * hiddenSize + hh;
+
+        float dR = gradGateR[batchHiddenIdx];
+        float dZ = gradGateZ[batchHiddenIdx];
+        float dN = gradGateN[batchHiddenIdx];
+        float r = gateR[batchHiddenIdx];
+
+        // weightsHh layout: [R weights, Z weights, N weights] each [hiddenSize, hiddenSize]
+        // R weights: weightsHh[hh * hiddenSize + j] for Ur[hh, j]
+        // Z weights: weightsHh[(hiddenSize + hh) * hiddenSize + j] for Uz[hh, j]
+        // N weights: weightsHh[(2 * hiddenSize + hh) * hiddenSize + j] for Uh[hh, j]
+        gradSum += dR * weightsHh[hh * hiddenSize + j];
+        gradSum += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + j];
+        gradSum += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + j];
+    }
+
+    gradPrevH[gid] = gradSum;
+}
 ";
     }
 
@@ -630,7 +748,9 @@ extern ""C"" __global__ void gru_backward_sequence(
             "gru_backward_prevh",
             "gru_compute_gate_gradients",
             "gru_accumulate_weight_gradients",
-            "gru_backward_sequence"
+            "gru_backward_sequence",
+            "gru_cell_backward_unified",
+            "gru_backward_prevh_unified"
         };
     }
 }
