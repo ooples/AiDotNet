@@ -86,9 +86,21 @@ extern ""C"" __global__ void gru_cell_forward(
         sumH += Wh[h * inputSize + i] * x_val;
     }
 
+    // Use per-element reset gate r_j for proper GRU computation
+    // In standard GRU: candidate = tanh(Wh*x + Uh*(r ⊙ h_prev) + bh)
+    // We need to compute r_j for each hidden unit j, not use scalar r
     for (int j = 0; j < hiddenSize; j++) {
         float h_val = prevH[b * hiddenSize + j];
-        sumH += Uh[h * hiddenSize + j] * r * h_val;
+        // Compute r_j = sigmoid(br[j] + Wr[j,:] @ x + Ur[j,:] @ h_prev)
+        float sumRj = br[j];
+        for (int ii = 0; ii < inputSize; ii++) {
+            sumRj += Wr[j * inputSize + ii] * input[b * inputSize + ii];
+        }
+        for (int jj = 0; jj < hiddenSize; jj++) {
+            sumRj += Ur[j * hiddenSize + jj] * prevH[b * hiddenSize + jj];
+        }
+        float rj = sigmoid(sumRj);
+        sumH += Uh[h * hiddenSize + j] * rj * h_val;
     }
 
     float h_candidate = tanhf(sumH);
@@ -650,12 +662,13 @@ extern ""C"" __global__ void gru_cell_backward_unified(
     float hPrevLocal = prevH[gid];
     float dH = gradH[gid];
 
-    // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
-    // dL/dz = dH * (h_prev - n) * sigmoid'(z)
-    float dZ = dH * (hPrevLocal - n) * sigmoid_derivative(z);
+    // Gradient through hidden state update: h_new = (1 - z) * h_prev + z * n
+    // For variant 1: h_new = (1-z)*h_prev + z*n
+    // dL/dz = dH * (n - h_prev) * sigmoid'(z)
+    float dZ = dH * (n - hPrevLocal) * sigmoid_derivative(z);
 
-    // dL/dn = dH * (1 - z) * tanh'(n)
-    float dN = dH * (1.0f - z) * tanh_derivative(n);
+    // dL/dn = dH * z * tanh'(n)
+    float dN = dH * z * tanh_derivative(n);
 
     // Compute Wn_hh @ h_prev for reset gate gradient
     // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev) + bias)
@@ -673,9 +686,9 @@ extern ""C"" __global__ void gru_cell_backward_unified(
     gradGateZ[gid] = dZ;
     gradGateN[gid] = dN;
 
-    // Direct path gradient to prev hidden: dL/dh_prev from z branch = dH * z
+    // Direct path gradient to prev hidden: dL/dh_prev from (1-z) branch = dH * (1-z)
     // NOTE: This is ONLY the direct path. Full gradient requires gru_backward_prevh_unified.
-    float dHPrev = dH * z;
+    float dHPrev = dH * (1.0f - z);
     gradPrevH[gid] = dHPrev;
 }
 
@@ -709,8 +722,8 @@ extern ""C"" __global__ void gru_backward_prevh_unified(
     float z = gateZ[gid];
     float dH = gradH[gid];
 
-    // Gradient through z path (direct contribution)
-    float gradSum = dH * z;
+    // Gradient through (1-z) path (direct contribution) for variant 1: h_new = (1-z)*h_prev + z*n
+    float gradSum = dH * (1.0f - z);
 
     // Gradient through all gates from all hidden positions h
     for (int hh = 0; hh < hiddenSize; hh++) {

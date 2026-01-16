@@ -249,12 +249,13 @@ __kernel void gru_cell_backward(
 
     float dH = gradH[gid];
 
-    // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
-    // dL/dz = dH * (-n + h_prev)
-    float dZ = dH * (hPrevLocal - n) * sigmoid_derivative(z);
+    // Gradient through hidden state update: h_new = (1 - z) * h_prev + z * n
+    // For variant 1: h_new = (1-z)*h_prev + z*n
+    // dL/dz = dH * (n - h_prev) * sigmoid'(z)
+    float dZ = dH * (n - hPrevLocal) * sigmoid_derivative(z);
 
-    // dL/dn = dH * (1 - z)
-    float dN = dH * (1.0f - z) * tanh_derivative(n);
+    // dL/dn = dH * z * tanh'(n)
+    float dN = dH * z * tanh_derivative(n);
 
     // Compute Wn_hh @ h_prev for reset gate gradient
     // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev) + bias)
@@ -272,13 +273,13 @@ __kernel void gru_cell_backward(
     gradGateZ[gid] = dZ;
     gradGateN[gid] = dN;
 
-    // Direct path gradient to prev hidden: dL/dh_prev from z branch = dH * z
+    // Direct path gradient to prev hidden: dL/dh_prev from (1-z) branch = dH * (1-z)
     // NOTE: This is ONLY the direct path. Full BPTT prev hidden gradient requires
     // calling gru_backward_prevh AFTER this kernel to sum contributions from all
     // hidden positions using the gate gradients stored above. A single kernel cannot
     // do both because OpenCL has no global barrier - each thread would need to read
     // gate gradients from ALL other threads, but those aren't written yet.
-    float dHPrev = dH * z;
+    float dHPrev = dH * (1.0f - z);
 
     // Store partial result - caller must add full gate contributions via gru_backward_prevh
     gradPrevH[gid] = dHPrev;
@@ -350,8 +351,8 @@ __kernel void gru_backward_prevh(
     float z = gateZ[gid];
     float dH = gradH[gid];
 
-    // Gradient through z path
-    float gradSum = dH * z;
+    // Gradient through (1-z) path (direct contribution) for variant 1: h_new = (1-z)*h_prev + z*n
+    float gradSum = dH * (1.0f - z);
 
     // Gradient through gates
     for (int h = 0; h < hiddenSize; h++) {
