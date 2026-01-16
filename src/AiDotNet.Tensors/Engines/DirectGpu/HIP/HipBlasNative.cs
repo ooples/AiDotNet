@@ -1,6 +1,7 @@
 // Copyright (c) AiDotNet. All rights reserved.
 // hipBLAS native bindings for HIP GEMM acceleration.
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.HIP;
@@ -55,15 +56,19 @@ internal static class HipBlasNative
         }
     }
 
+    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasCreate")]
     internal static extern HipBlasStatus hipblasCreate(ref IntPtr handle);
 
+    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasDestroy")]
     internal static extern HipBlasStatus hipblasDestroy(IntPtr handle);
 
+    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasSetStream")]
     internal static extern HipBlasStatus hipblasSetStream(IntPtr handle, IntPtr stream);
 
+    // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
     [DllImport(HipBlasLibrary, EntryPoint = "hipblasSgemm")]
     internal static extern HipBlasStatus hipblasSgemm(
         IntPtr handle,
@@ -91,25 +96,29 @@ internal static class HipBlasNative
             "libhipblas.dylib"
         };
 
-        foreach (var name in candidates)
-        {
+        return candidates.Where(CanLoadLibrary).Any();
+    }
+
+    private static bool CanLoadLibrary(string name)
+    {
 #if NETFRAMEWORK
-            var handle = LoadLibrary(name);
-            if (handle != IntPtr.Zero)
-            {
-                FreeLibrary(handle);
-                return true;
-            }
-#else
-            if (NativeLibrary.TryLoad(name, out var handle))
-            {
-                NativeLibrary.Free(handle);
-                return true;
-            }
-#endif
+        var handle = LoadLibrary(name);
+        if (handle == IntPtr.Zero)
+        {
+            return false;
         }
 
-        return false;
+        FreeLibrary(handle);
+        return true;
+#else
+        if (!NativeLibrary.TryLoad(name, out var handle))
+        {
+            return false;
+        }
+
+        NativeLibrary.Free(handle);
+        return true;
+#endif
     }
 
 #if NETFRAMEWORK

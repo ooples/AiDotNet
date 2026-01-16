@@ -338,6 +338,7 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 fixed (float* src = data)
                 {
                     CuBlasNative.CheckCudaResult(
+                        // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
                         CuBlasNative.cuMemcpyHtoD(pooled.Handle, (IntPtr)src, byteSize),
                         "cuMemcpyHtoD");
                 }
@@ -380,7 +381,10 @@ public sealed class CudaBackend : IAsyncGpuBackend
         using var _ = PushContext();
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {
-            CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(pooled.Handle, 0, (ulong)size), "cuMemsetD32");
+            CuBlasNative.CheckCudaResult(
+                // lgtm[cs/call-to-unmanaged-code] CUDA interop requires native driver calls.
+                CuBlasNative.cuMemsetD32(pooled.Handle, 0, (ulong)size),
+                "cuMemsetD32");
             return pooled;
         }
 

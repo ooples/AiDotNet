@@ -277,6 +277,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         try
         {
+            // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
             var status = HipBlasNative.hipblasCreate(ref _hipblasHandle);
             if (status != HipBlasNative.HipBlasStatus.Success)
             {
@@ -284,9 +285,11 @@ public sealed class HipBackend : IAsyncGpuBackend
                 return;
             }
 
+            // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
             status = HipBlasNative.hipblasSetStream(_hipblasHandle, _stream);
             if (status != HipBlasNative.HipBlasStatus.Success)
             {
+                // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
                 HipBlasNative.hipblasDestroy(_hipblasHandle);
                 _hipblasHandle = IntPtr.Zero;
                 return;
@@ -294,7 +297,22 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             _hipblasAvailable = true;
         }
-        catch
+        catch (DllNotFoundException)
+        {
+            _hipblasHandle = IntPtr.Zero;
+            _hipblasAvailable = false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            _hipblasHandle = IntPtr.Zero;
+            _hipblasAvailable = false;
+        }
+        catch (BadImageFormatException)
+        {
+            _hipblasHandle = IntPtr.Zero;
+            _hipblasAvailable = false;
+        }
+        catch (SEHException)
         {
             _hipblasHandle = IntPtr.Zero;
             _hipblasAvailable = false;
@@ -651,6 +669,7 @@ public sealed class HipBackend : IAsyncGpuBackend
             GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
+                // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
                 var result = HipNativeBindings.hipMemcpy(
                     pooled.Handle,
                     handle.AddrOfPinnedObject(),
@@ -673,6 +692,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         GCHandle allocHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
         try
         {
+            // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             var copyResult = HipNativeBindings.hipMemcpy(
                 devicePtr,
                 allocHandle.AddrOfPinnedObject(),
@@ -695,6 +715,7 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
         {
+            // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             var zeroResult = HipNativeBindings.hipMemset(pooled.Handle, 0, sizeBytes);
             HipNativeBindings.CheckError(zeroResult, "hipMemset");
             return pooled;
@@ -704,6 +725,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         HipNativeBindings.CheckError(allocResult, "hipMalloc");
 
         // Zero-initialize
+        // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
         var memsetResult = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes);
         HipNativeBindings.CheckError(memsetResult, "hipMemset");
 
@@ -871,6 +893,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         float alphaVal = alpha;
         float betaVal = beta;
 
+        // lgtm[cs/call-to-unmanaged-code] HIP BLAS uses native bindings.
         var status = HipBlasNative.hipblasSgemm(
             _hipblasHandle,
             HipBlasNative.HipBlasOperation.None,
@@ -9229,6 +9252,7 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
         if (_sparseModule != IntPtr.Zero)
         {
+            // lgtm[cs/call-to-unmanaged-code] HIP interop requires native driver calls.
             HipNativeBindings.hipModuleUnload(_sparseModule);
             _sparseModule = IntPtr.Zero;
         }

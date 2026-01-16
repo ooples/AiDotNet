@@ -161,9 +161,13 @@ internal static class BlasProvider
             return false;
         }
 
-        foreach (var candidate in GetCandidateLibraryNames()
-            .Where(name => TryLoadNativeLibrary(name, out _libraryHandle)))
+        foreach (var name in GetCandidateLibraryNames())
         {
+            if (!TryLoadNativeLibrary(name, out _libraryHandle))
+            {
+                continue;
+            }
+
             if (TryLoadSymbols())
             {
                 return true;
@@ -209,7 +213,19 @@ internal static class BlasProvider
             _setDynamic?.Invoke(0);
             _setNumThreads(ThreadCountOverride.Value);
         }
-        catch
+        catch (DllNotFoundException)
+        {
+            // Ignore failures to keep BLAS optional and non-fatal.
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // Ignore failures to keep BLAS optional and non-fatal.
+        }
+        catch (BadImageFormatException)
+        {
+            // Ignore failures to keep BLAS optional and non-fatal.
+        }
+        catch (SEHException)
         {
             // Ignore failures to keep BLAS optional and non-fatal.
         }

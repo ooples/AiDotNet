@@ -218,10 +218,10 @@ internal static class GpuResidentQuickHarness
 
     private sealed class CompositeDisposable : IDisposable
     {
-        private readonly IDisposable _first;
-        private readonly IDisposable _second;
+        private readonly IDisposable? _first;
+        private readonly IDisposable? _second;
 
-        public CompositeDisposable(IDisposable first, IDisposable second)
+        public CompositeDisposable(IDisposable? first, IDisposable? second)
         {
             _first = first;
             _second = second;
@@ -229,8 +229,8 @@ internal static class GpuResidentQuickHarness
 
         public void Dispose()
         {
-            _second.Dispose();
-            _first.Dispose();
+            _second?.Dispose();
+            _first?.Dispose();
         }
     }
 }

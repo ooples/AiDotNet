@@ -635,7 +635,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 return false;
             }
 
-            long work = (long)m * n * k;
+            long work;
+            try
+            {
+                work = checked((long)m * n * k);
+            }
+            catch (OverflowException)
+            {
+                work = long.MaxValue;
+            }
             return work >= GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
         }
 
