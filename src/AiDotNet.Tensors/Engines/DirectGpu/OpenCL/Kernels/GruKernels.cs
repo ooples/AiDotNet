@@ -267,29 +267,21 @@ __kernel void gru_cell_backward(
     }
     float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
 
-    // dL/dh_prev from z branch: dH * z
-    float dHPrev = dH * z;
-
-    // dL/dh_prev from n branch through reset gate: dN * r * Wn_hh[h, j]
-    for (int hh = 0; hh < hiddenSize; hh++) {
-        dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
-    }
-
-    // dL/dh_prev from r gate: dR * Wr_hh[h, j]
-    for (int hh = 0; hh < hiddenSize; hh++) {
-        dHPrev += dR * weightsHh[hh * hiddenSize + h];
-    }
-
-    // dL/dh_prev from z gate: dZ * Wz_hh[h, j]
-    for (int hh = 0; hh < hiddenSize; hh++) {
-        dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
-    }
-
-    // Store results
-    gradPrevH[gid] = dHPrev;
+    // Store gate gradients first - these are needed by gru_backward_prevh
     gradGateR[gid] = dR;
     gradGateZ[gid] = dZ;
     gradGateN[gid] = dN;
+
+    // Direct path gradient to prev hidden: dL/dh_prev from z branch = dH * z
+    // NOTE: This is ONLY the direct path. Full BPTT prev hidden gradient requires
+    // calling gru_backward_prevh AFTER this kernel to sum contributions from all
+    // hidden positions using the gate gradients stored above. A single kernel cannot
+    // do both because OpenCL has no global barrier - each thread would need to read
+    // gate gradients from ALL other threads, but those aren't written yet.
+    float dHPrev = dH * z;
+
+    // Store partial result - caller must add full gate contributions via gru_backward_prevh
+    gradPrevH[gid] = dHPrev;
 }
 
 // ===========================================================================

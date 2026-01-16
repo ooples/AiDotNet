@@ -2205,6 +2205,17 @@ public class GRULayer<T> : LayerBase<T>
         var gradBiasIhBuffer = backend.AllocateBuffer(biasSize);
         var gradBiasHhBuffer = backend.AllocateBuffer(biasSize);
 
+        // Zero all gradient accumulator buffers before GruBackwardSequence
+        // CRITICAL: The CUDA/HIP kernels use atomicAdd which accumulates into these buffers,
+        // so they must start from zero, not uninitialized garbage values
+        backend.Fill(gradInputBuffer, 0f, inputGradientSize);
+        backend.Fill(gradHInitBuffer, 0f, hiddenBufferSize);
+        backend.Fill(dHBuffer, 0f, hiddenBufferSize);
+        backend.Fill(gradWeightsIhBuffer, 0f, weightsIhSize);
+        backend.Fill(gradWeightsHhBuffer, 0f, weightsHhSize);
+        backend.Fill(gradBiasIhBuffer, 0f, biasSize);
+        backend.Fill(gradBiasHhBuffer, 0f, biasSize);
+
         try
         {
             // Call fused GRU backward sequence kernel (processes all timesteps in one kernel launch)
