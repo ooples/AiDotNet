@@ -919,118 +919,118 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             {
                 float time = (float)NumOps.ToDouble(DiffusionTimes[t]);
 
-            // Compute decay factors: exp(-eigenvalue * time)
-            var decayData = new float[numEig];
-            for (int k = 0; k < numEig; k++)
-            {
-                decayData[k] = (float)Math.Exp(-eigenvalueArray[k] * time);
-            }
-            using var decayBuffer = backend.AllocateBuffer(decayData);
-
-            // Step 1: Project input to spectral domain
-            // spectralCoeffs = eigenvectors^T @ input
-            // [numEig, numVertices] @ [batchSize * numVertices, inputChannels]
-            // We need to handle batch dimension - reshape input for batched processing
-            using var spectralCoeffsBuffer = backend.AllocateBuffer(batchSize * numEig * InputChannels);
-
-            if (batchSize == 1)
-            {
-                // [numEig, numVertices] @ [numVertices, inputChannels] -> [numEig, inputChannels]
-                backend.Gemm(eigenvectorsTransposedBuffer, input.Buffer, spectralCoeffsBuffer,
-                    numEig, InputChannels, numVertices);
-            }
-            else
-            {
-                // Process each batch separately with GPU operations
-                // BatchedGemm requires same A for all batches, so we tile eigenvectorsTransposed
-                using var tiledEigTBuffer = backend.AllocateBuffer(batchSize * numEig * numVertices);
-                backend.TileBatch(eigenvectorsTransposedBuffer, tiledEigTBuffer, batchSize, numEig * numVertices);
-
-                // BatchedGemm: [batch, numEig, numVertices] @ [batch, numVertices, inputChannels]
-                backend.BatchedGemm(tiledEigTBuffer, input.Buffer, spectralCoeffsBuffer,
-                    numEig, InputChannels, numVertices, batchSize);
-            }
-
-            // Step 2: Apply heat kernel - multiply each row by corresponding decay factor
-            // spectralCoeffs[k, :] *= decay[k]
-            using var decayTiledBuffer = backend.AllocateBuffer(batchSize * numEig * InputChannels);
-
-            // Tile decay along batch and feature dimensions
-            var decayTiledData = new float[batchSize * numEig * InputChannels];
-            for (int b = 0; b < batchSize; b++)
-            {
+                // Compute decay factors: exp(-eigenvalue * time)
+                var decayData = new float[numEig];
                 for (int k = 0; k < numEig; k++)
                 {
-                    for (int c = 0; c < InputChannels; c++)
+                    decayData[k] = (float)Math.Exp(-eigenvalueArray[k] * time);
+                }
+                using var decayBuffer = backend.AllocateBuffer(decayData);
+
+                // Step 1: Project input to spectral domain
+                // spectralCoeffs = eigenvectors^T @ input
+                // [numEig, numVertices] @ [batchSize * numVertices, inputChannels]
+                // We need to handle batch dimension - reshape input for batched processing
+                using var spectralCoeffsBuffer = backend.AllocateBuffer(batchSize * numEig * InputChannels);
+
+                if (batchSize == 1)
+                {
+                    // [numEig, numVertices] @ [numVertices, inputChannels] -> [numEig, inputChannels]
+                    backend.Gemm(eigenvectorsTransposedBuffer, input.Buffer, spectralCoeffsBuffer,
+                        numEig, InputChannels, numVertices);
+                }
+                else
+                {
+                    // Process each batch separately with GPU operations
+                    // BatchedGemm requires same A for all batches, so we tile eigenvectorsTransposed
+                    using var tiledEigTBuffer = backend.AllocateBuffer(batchSize * numEig * numVertices);
+                    backend.TileBatch(eigenvectorsTransposedBuffer, tiledEigTBuffer, batchSize, numEig * numVertices);
+
+                    // BatchedGemm: [batch, numEig, numVertices] @ [batch, numVertices, inputChannels]
+                    backend.BatchedGemm(tiledEigTBuffer, input.Buffer, spectralCoeffsBuffer,
+                        numEig, InputChannels, numVertices, batchSize);
+                }
+
+                // Step 2: Apply heat kernel - multiply each row by corresponding decay factor
+                // spectralCoeffs[k, :] *= decay[k]
+                using var decayTiledBuffer = backend.AllocateBuffer(batchSize * numEig * InputChannels);
+
+                // Tile decay along batch and feature dimensions
+                var decayTiledData = new float[batchSize * numEig * InputChannels];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int k = 0; k < numEig; k++)
                     {
-                        decayTiledData[b * numEig * InputChannels + k * InputChannels + c] = decayData[k];
+                        for (int c = 0; c < InputChannels; c++)
+                        {
+                            decayTiledData[b * numEig * InputChannels + k * InputChannels + c] = decayData[k];
+                        }
                     }
                 }
-            }
-            using var decayTiledUploadBuffer = backend.AllocateBuffer(decayTiledData);
-            backend.Multiply(spectralCoeffsBuffer, decayTiledUploadBuffer, spectralCoeffsBuffer,
-                batchSize * numEig * InputChannels);
+                using var decayTiledUploadBuffer = backend.AllocateBuffer(decayTiledData);
+                backend.Multiply(spectralCoeffsBuffer, decayTiledUploadBuffer, spectralCoeffsBuffer,
+                    batchSize * numEig * InputChannels);
 
-            // Step 3: Project back to spatial domain
-            // output = eigenvectors @ spectralCoeffs
-            // [numVertices, numEig] @ [batchSize * numEig, inputChannels]
-            using var timeOutputBuffer = backend.AllocateBuffer(batchSize * numVertices * InputChannels);
+                // Step 3: Project back to spatial domain
+                // output = eigenvectors @ spectralCoeffs
+                // [numVertices, numEig] @ [batchSize * numEig, inputChannels]
+                using var timeOutputBuffer = backend.AllocateBuffer(batchSize * numVertices * InputChannels);
 
-            if (batchSize == 1)
-            {
-                // [numVertices, numEig] @ [numEig, inputChannels] -> [numVertices, inputChannels]
-                backend.Gemm(eigenvectorsBuffer, spectralCoeffsBuffer, timeOutputBuffer,
-                    numVertices, InputChannels, numEig);
-            }
-            else
-            {
-                // Tile eigenvectors for batched operation
-                using var tiledEigBuffer = backend.AllocateBuffer(batchSize * numVertices * numEig);
-                backend.TileBatch(eigenvectorsBuffer, tiledEigBuffer, batchSize, numVertices * numEig);
-
-                // BatchedGemm: [batch, numVertices, numEig] @ [batch, numEig, inputChannels]
-                backend.BatchedGemm(tiledEigBuffer, spectralCoeffsBuffer, timeOutputBuffer,
-                    numVertices, InputChannels, numEig, batchSize);
-            }
-
-            // Copy this time scale's output to the appropriate columns in diffusedBuffer
-            // diffused[:, t*inputChannels:(t+1)*inputChannels] = timeOutput
-            int colOffset = t * InputChannels;
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int v = 0; v < numVertices; v++)
+                if (batchSize == 1)
                 {
-                    // Copy each row's time-scale output to the correct position
-                    int srcOffset = b * numVertices * InputChannels + v * InputChannels;
-                    int dstOffset = b * numVertices * diffusedSize + v * diffusedSize + colOffset;
-
-                    // Since we can't do strided copy easily, download and re-upload
-                    // This is O(1) roundtrips for the entire time scale
+                    // [numVertices, numEig] @ [numEig, inputChannels] -> [numVertices, inputChannels]
+                    backend.Gemm(eigenvectorsBuffer, spectralCoeffsBuffer, timeOutputBuffer,
+                        numVertices, InputChannels, numEig);
                 }
-            }
-
-            // For efficiency, download timeOutput, scatter to diffused, then continue
-            // At the end, upload the complete diffused buffer
-            var timeOutputData = backend.DownloadBuffer(timeOutputBuffer);
-            var diffusedData = backend.DownloadBuffer(diffusedBuffer);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int v = 0; v < numVertices; v++)
+                else
                 {
-                    int srcOffset = b * numVertices * InputChannels + v * InputChannels;
-                    int dstOffset = b * numVertices * diffusedSize + v * diffusedSize + colOffset;
-                    for (int c = 0; c < InputChannels; c++)
+                    // Tile eigenvectors for batched operation
+                    using var tiledEigBuffer = backend.AllocateBuffer(batchSize * numVertices * numEig);
+                    backend.TileBatch(eigenvectorsBuffer, tiledEigBuffer, batchSize, numVertices * numEig);
+
+                    // BatchedGemm: [batch, numVertices, numEig] @ [batch, numEig, inputChannels]
+                    backend.BatchedGemm(tiledEigBuffer, spectralCoeffsBuffer, timeOutputBuffer,
+                        numVertices, InputChannels, numEig, batchSize);
+                }
+
+                // Copy this time scale's output to the appropriate columns in diffusedBuffer
+                // diffused[:, t*inputChannels:(t+1)*inputChannels] = timeOutput
+                int colOffset = t * InputChannels;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int v = 0; v < numVertices; v++)
                     {
-                        diffusedData[dstOffset + c] = timeOutputData[srcOffset + c];
+                        // Copy each row's time-scale output to the correct position
+                        int srcOffset = b * numVertices * InputChannels + v * InputChannels;
+                        int dstOffset = b * numVertices * diffusedSize + v * diffusedSize + colOffset;
+
+                        // Since we can't do strided copy easily, download and re-upload
+                        // This is O(1) roundtrips for the entire time scale
                     }
                 }
-            }
 
-            // Re-upload diffused buffer with accumulated data
-            using var updatedDiffusedBuffer = backend.AllocateBuffer(diffusedData);
-            backend.Copy(updatedDiffusedBuffer, diffusedBuffer, batchSize * numVertices * diffusedSize);
-        }
+                // For efficiency, download timeOutput, scatter to diffused, then continue
+                // At the end, upload the complete diffused buffer
+                var timeOutputData = backend.DownloadBuffer(timeOutputBuffer);
+                var diffusedData = backend.DownloadBuffer(diffusedBuffer);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int v = 0; v < numVertices; v++)
+                    {
+                        int srcOffset = b * numVertices * InputChannels + v * InputChannels;
+                        int dstOffset = b * numVertices * diffusedSize + v * diffusedSize + colOffset;
+                        for (int c = 0; c < InputChannels; c++)
+                        {
+                            diffusedData[dstOffset + c] = timeOutputData[srcOffset + c];
+                        }
+                    }
+                }
+
+                // Re-upload diffused buffer with accumulated data
+                using var updatedDiffusedBuffer = backend.AllocateBuffer(diffusedData);
+                backend.Copy(updatedDiffusedBuffer, diffusedBuffer, batchSize * numVertices * diffusedSize);
+            }
 
             if (IsTrainingMode)
             {
