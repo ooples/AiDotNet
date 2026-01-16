@@ -321,6 +321,60 @@ extern ""C"" __global__ void rmsnorm_forward(
         output[idx] = input[idx] * invRms * gamma[i];
     }
 }
+
+// RMS Normalization backward pass
+// Computes gradients for input and gamma
+extern ""C"" __global__ void rmsnorm_backward(
+    const float* gradOutput, const float* input,
+    const float* gamma, const float* saveRms,
+    float* gradInput, float* gradGamma,
+    int batchSize, int normalizedSize, float epsilon)
+{
+    int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= batchSize) return;
+
+    float rms = saveRms[b];
+    float invRms = 1.0f / rms;
+    float invRms3 = invRms * invRms * invRms;
+
+    // Compute sum of (gradOutput * gamma * input) for this sample
+    float sumGradGammaX = 0.0f;
+    for (int i = 0; i < normalizedSize; i++) {
+        int idx = b * normalizedSize + i;
+        sumGradGammaX += gradOutput[idx] * gamma[i] * input[idx];
+    }
+
+    // Compute gradInput for this sample
+    for (int i = 0; i < normalizedSize; i++) {
+        int idx = b * normalizedSize + i;
+        float x = input[idx];
+        float dy = gradOutput[idx];
+        float g = gamma[i];
+
+        // d/dx (x / rms * gamma) = gamma * (1/rms - x^2 / (n * rms^3))
+        // Simplified: gamma * invRms - x * sumGradGammaX * invRms^3 / n
+        gradInput[idx] = g * dy * invRms - x * sumGradGammaX * invRms3 / (float)normalizedSize;
+    }
+}
+
+// RMS Normalization gradient accumulation for gamma
+extern ""C"" __global__ void rmsnorm_grad_gamma(
+    const float* gradOutput, const float* input,
+    const float* saveRms, float* gradGamma,
+    int batchSize, int normalizedSize)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= normalizedSize) return;
+
+    float dGamma = 0.0f;
+    for (int b = 0; b < batchSize; b++) {
+        int idx = b * normalizedSize + i;
+        float rms = saveRms[b];
+        float invRms = 1.0f / rms;
+        dGamma += gradOutput[idx] * input[idx] * invRms;
+    }
+    gradGamma[i] = dGamma;
+}
 ";
         }
 
@@ -335,7 +389,9 @@ extern ""C"" __global__ void rmsnorm_forward(
                 "layernorm_grad_params",
                 "groupnorm_forward",
                 "instancenorm_forward",
-                "rmsnorm_forward"
+                "rmsnorm_forward",
+                "rmsnorm_backward",
+                "rmsnorm_grad_gamma"
             };
         }
     }

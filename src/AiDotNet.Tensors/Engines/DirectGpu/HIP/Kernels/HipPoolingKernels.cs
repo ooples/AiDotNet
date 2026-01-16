@@ -352,6 +352,114 @@ extern ""C"" __global__ void maxpool3d_backward(
     atomicAdd(&gradInput[inputIdx], grad);
 }
 
+// Average Pooling 3D
+extern ""C"" __global__ void avgpool3d(
+    const float* input, float* output,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int outDepth, int outHeight, int outWidth,
+    int kernelD, int kernelH, int kernelW,
+    int strideD, int strideH, int strideW,
+    int countIncludePad)
+{
+    int ow = blockIdx.x * blockDim.x + threadIdx.x;
+    int oh = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int od = linear_z % outDepth;
+    int c = (linear_z / outDepth) % channels;
+    int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    float sum = 0.0f;
+    int count = 0;
+
+    for (int kd = 0; kd < kernelD; kd++) {
+        int id = od * strideD + kd;
+        if (id >= inDepth) continue;
+
+        for (int kh = 0; kh < kernelH; kh++) {
+            int ih = oh * strideH + kh;
+            if (ih >= inHeight) continue;
+
+            for (int kw = 0; kw < kernelW; kw++) {
+                int iw = ow * strideW + kw;
+                if (iw >= inWidth) continue;
+
+                int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                             + ih * inWidth + iw;
+                sum += input[inputIdx];
+                count++;
+            }
+        }
+    }
+
+    int divisor = countIncludePad ? (kernelD * kernelH * kernelW) : count;
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+    output[outIdx] = sum / (float)max(divisor, 1);
+}
+
+// Average Pooling 3D backward pass
+extern ""C"" __global__ void avgpool3d_backward(
+    const float* gradOutput, float* gradInput,
+    int batch, int channels,
+    int inDepth, int inHeight, int inWidth,
+    int outDepth, int outHeight, int outWidth,
+    int kernelD, int kernelH, int kernelW,
+    int strideD, int strideH, int strideW,
+    int countIncludePad)
+{
+    int iw = blockIdx.x * blockDim.x + threadIdx.x;
+    int ih = blockIdx.y * blockDim.y + threadIdx.y;
+    int linear_z = blockIdx.z;
+
+    int id = linear_z % inDepth;
+    int c = (linear_z / inDepth) % channels;
+    int b = linear_z / (inDepth * channels);
+
+    if (iw >= inWidth || ih >= inHeight || id >= inDepth || b >= batch) return;
+
+    float sum = 0.0f;
+
+    for (int od = 0; od < outDepth; od++) {
+        int dStart = od * strideD;
+        int dEnd = dStart + kernelD;
+        if (id < dStart || id >= dEnd) continue;
+
+        for (int oh = 0; oh < outHeight; oh++) {
+            int hStart = oh * strideH;
+            int hEnd = hStart + kernelH;
+            if (ih < hStart || ih >= hEnd) continue;
+
+            for (int ow = 0; ow < outWidth; ow++) {
+                int wStart = ow * strideW;
+                int wEnd = wStart + kernelW;
+                if (iw < wStart || iw >= wEnd) continue;
+
+                int poolSize;
+                if (countIncludePad) {
+                    poolSize = kernelD * kernelH * kernelW;
+                } else {
+                    int dEndClamp = min(dEnd, inDepth);
+                    int hEndClamp = min(hEnd, inHeight);
+                    int wEndClamp = min(wEnd, inWidth);
+                    poolSize = (dEndClamp - dStart) * (hEndClamp - hStart) * (wEndClamp - wStart);
+                }
+
+                int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+                           + oh * outWidth + ow;
+                sum += gradOutput[outIdx] / (float)max(poolSize, 1);
+            }
+        }
+    }
+
+    int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                 + ih * inWidth + iw;
+    gradInput[inputIdx] = sum;
+}
+
 extern ""C"" __global__ void nearest_upsample3d(
     const float* input, float* output,
     int batch, int channels,
@@ -492,7 +600,8 @@ extern ""C"" __global__ void nearest_neighbor_upsample_backward(
         {
             "maxpool2d", "maxpool2d_backward", "avgpool2d", "avgpool2d_backward",
             "global_avgpool2d", "global_maxpool2d", "global_avgpool2d_backward", "global_maxpool2d_backward", "adaptive_avgpool2d",
-            "maxpool3d", "maxpool3d_backward", "nearest_upsample3d", "nearest_upsample3d_backward",
+            "maxpool3d", "maxpool3d_backward", "avgpool3d", "avgpool3d_backward",
+            "nearest_upsample3d", "nearest_upsample3d_backward",
             "nearest_neighbor_upsample", "nearest_neighbor_upsample_backward"
         };
     }

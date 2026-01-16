@@ -531,6 +531,50 @@ extern ""C"" __global__ void elastic_net_gradient(const float* predicted, const 
     gradient[idx] = 2.0f * diff + l1_weight * sign_pred + 2.0f * l2_weight * pred;
 }
 
+// Contrastive Loss
+extern ""C"" __global__ void contrastive_loss(
+    const float* pred1, const float* pred2, const float* label, float* output,
+    float margin, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float diff = pred1[idx] - pred2[idx];
+    float dist_sq = diff * diff;
+    float l = label[idx];
+
+    float dist = sqrtf(dist_sq);
+    float margin_diff = fmaxf(0.0f, margin - dist);
+    output[idx] = (1.0f - l) * 0.5f * dist_sq + l * 0.5f * margin_diff * margin_diff;
+}
+
+extern ""C"" __global__ void contrastive_loss_backward(
+    const float* pred1, const float* pred2, const float* label,
+    float* grad1, float* grad2, float margin, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float diff = pred1[idx] - pred2[idx];
+    float dist = sqrtf(diff * diff);
+    float l = label[idx];
+
+    float gradient;
+    if (l < 0.5f) {
+        gradient = diff;
+    } else {
+        float margin_diff = margin - dist;
+        if (margin_diff > 0.0f && dist > 1e-7f) {
+            gradient = -margin_diff * diff / dist;
+        } else {
+            gradient = 0.0f;
+        }
+    }
+
+    grad1[idx] = gradient;
+    grad2[idx] = -gradient;
+}
+
 // ===========================================================================
 // UTILITY KERNELS
 // ===========================================================================
@@ -2196,7 +2240,7 @@ extern ""C"" __global__ void batched_gemm(
             "exponential_loss", "exponential_gradient", "modified_huber_loss", "modified_huber_gradient",
             "categorical_cross_entropy_loss", "categorical_cross_entropy_gradient",
             "charbonnier_loss", "charbonnier_gradient", "elastic_net_loss", "elastic_net_gradient",
-            // NOTE: contrastive_loss and contrastive_loss_backward not implemented in HIP backend
+            "contrastive_loss", "contrastive_loss_backward",
             "clamp", "l2_norm_squared", "scale", "copy_buffer", "fill_buffer",
             "greater_than", "less_than", "equals", "where_cond",
             "compute_mean_var", "argmax_axis", "argmin_axis",
