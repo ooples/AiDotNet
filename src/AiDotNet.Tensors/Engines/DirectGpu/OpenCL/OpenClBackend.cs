@@ -460,6 +460,28 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, lossProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Loss function kernels compiled: {LossKernels.GetKernelNames().Length} kernels");
+
+                // Compile LSTM sequence kernels (forward/backward for BPTT training)
+                Console.WriteLine("[OpenClBackend] Compiling LSTM sequence kernels...");
+                var lstmProgram = new DirectOpenClProgram(_context, LstmKernels.GetSource());
+                lstmProgram.Build(optimizationFlags);
+                _programs.Add(lstmProgram);
+                foreach (var name in LstmKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, lstmProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] LSTM sequence kernels compiled: {LstmKernels.GetKernelNames().Length} kernels");
+
+                // Compile GRU sequence kernels (forward/backward for BPTT training)
+                Console.WriteLine("[OpenClBackend] Compiling GRU sequence kernels...");
+                var gruProgram = new DirectOpenClProgram(_context, GruKernels.GetSource());
+                gruProgram.Build(optimizationFlags);
+                _programs.Add(gruProgram);
+                foreach (var name in GruKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, gruProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] GRU sequence kernels compiled: {GruKernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -9130,6 +9152,146 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(4u, stateSize);
             // Execute with batchSize work groups, each of localSize items
             kernel.Execute1D(batchSize * localSize, localSize);
+        }
+
+        #endregion
+
+        #region RNN (LSTM/GRU) Sequence Operations
+
+        public void LstmForwardSequence(
+            IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+            IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+            IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+            IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+            int seqLen, int batch, int inputSize, int hiddenSize)
+        {
+            if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: lstm_forward_sequence");
+
+            int totalThreads = batch * hiddenSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)hInit).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)cInit).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)biasIh).Buffer.Handle);
+            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)biasHh).Buffer.Handle);
+            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)hFinal).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)cFinal).Buffer.Handle);
+            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)allH).Buffer.Handle);
+            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)allC).Buffer.Handle);
+            kernel.SetArg(12u, ((DirectOpenClGpuBuffer)cacheGates).Buffer.Handle);
+            kernel.SetArg(13u, seqLen);
+            kernel.SetArg(14u, batch);
+            kernel.SetArg(15u, inputSize);
+            kernel.SetArg(16u, hiddenSize);
+
+            int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
+            kernel.Execute1D(globalSize, localSize);
+        }
+
+        public void LstmBackwardSequence(
+            IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+            IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+            IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+            IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+            int seqLen, int batch, int inputSize, int hiddenSize)
+        {
+            if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: lstm_backward_sequence");
+
+            int totalThreads = batch * hiddenSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)allH).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)allC).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)cacheGates).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)gradHInit).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradCInit).Buffer.Handle);
+            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
+            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
+            kernel.SetArg(12u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
+            kernel.SetArg(13u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
+            kernel.SetArg(14u, seqLen);
+            kernel.SetArg(15u, batch);
+            kernel.SetArg(16u, inputSize);
+            kernel.SetArg(17u, hiddenSize);
+
+            int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
+            kernel.Execute1D(globalSize, localSize);
+        }
+
+        public void GruForwardSequence(
+            IGpuBuffer input, IGpuBuffer hInit,
+            IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+            IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+            int seqLen, int batch, int inputSize, int hiddenSize)
+        {
+            if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: gru_forward_sequence");
+
+            int totalThreads = batch * hiddenSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)hInit).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)biasIh).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)biasHh).Buffer.Handle);
+            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)hFinal).Buffer.Handle);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)allH).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)cacheGates).Buffer.Handle);
+            kernel.SetArg(10u, seqLen);
+            kernel.SetArg(11u, batch);
+            kernel.SetArg(12u, inputSize);
+            kernel.SetArg(13u, hiddenSize);
+
+            int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
+            kernel.Execute1D(globalSize, localSize);
+        }
+
+        public void GruBackwardSequence(
+            IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+            IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+            IGpuBuffer gradInput, IGpuBuffer gradHInit,
+            IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+            int seqLen, int batch, int inputSize, int hiddenSize)
+        {
+            if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
+                throw new InvalidOperationException("OpenCL kernel not found: gru_backward_sequence");
+
+            int totalThreads = batch * hiddenSize;
+            int localSize = CalculateOptimalWorkGroupSize1D(totalThreads);
+
+            kernel.SetArg(0u, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kernel.SetArg(1u, ((DirectOpenClGpuBuffer)allH).Buffer.Handle);
+            kernel.SetArg(2u, ((DirectOpenClGpuBuffer)cacheGates).Buffer.Handle);
+            kernel.SetArg(3u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradHInit).Buffer.Handle);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
+            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
+            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
+            kernel.SetArg(12u, seqLen);
+            kernel.SetArg(13u, batch);
+            kernel.SetArg(14u, inputSize);
+            kernel.SetArg(15u, hiddenSize);
+
+            int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
+            kernel.Execute1D(globalSize, localSize);
         }
 
         #endregion

@@ -34,6 +34,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _deformableConvModule;
     private IntPtr _capsuleModule;
     private IntPtr _specializedModule;
+    private IntPtr _lstmModule;
+    private IntPtr _gruModule;
     private IntPtr _fp16Module;
     private bool _disposed;
 
@@ -298,6 +300,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile FP16 conversion kernels (half-precision float conversion)
         _fp16Module = CompileKernelModule(device, CudaFp16Kernels.GetSource(), "fp16_kernels", CudaFp16Kernels.GetKernelNames());
+
+        // Compile LSTM sequence kernels (forward/backward for BPTT training)
+        _lstmModule = CompileKernelModule(device, CudaLstmKernels.GetSource(), "lstm_kernels", CudaLstmKernels.GetKernelNames());
+
+        // Compile GRU sequence kernels (forward/backward for BPTT training)
+        _gruModule = CompileKernelModule(device, CudaGruKernels.GetSource(), "gru_kernels", CudaGruKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -7633,6 +7641,207 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
     #endregion
 
+    #region RNN (LSTM/GRU) Sequence Operations
+
+    public unsafe void LstmForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+        IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lstm_forward_sequence");
+
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr inputPtr = input.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr cInitPtr = cInit.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr biasIhPtr = biasIh.Handle;
+        IntPtr biasHhPtr = biasHh.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr hFinalPtr = hFinal.Handle;
+        IntPtr cFinalPtr = cFinal.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr allCPtr = allC.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+
+        void** args = stackalloc void*[17];
+        args[0] = &inputPtr;
+        args[1] = &hInitPtr;
+        args[2] = &cInitPtr;
+        args[3] = &weightsIhPtr;
+        args[4] = &weightsHhPtr;
+        args[5] = &biasIhPtr;
+        args[6] = &biasHhPtr;
+        args[7] = &outputPtr;
+        args[8] = &hFinalPtr;
+        args[9] = &cFinalPtr;
+        args[10] = &allHPtr;
+        args[11] = &allCPtr;
+        args[12] = &cacheGatesPtr;
+        args[13] = &seqLen;
+        args[14] = &batch;
+        args[15] = &inputSize;
+        args[16] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void LstmBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lstm_backward_sequence");
+
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr allCPtr = allC.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr gradCInitPtr = gradCInit.Handle;
+        IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
+        IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
+        IntPtr gradBiasIhPtr = gradBiasIh.Handle;
+        IntPtr gradBiasHhPtr = gradBiasHh.Handle;
+
+        void** args = stackalloc void*[18];
+        args[0] = &gradOutputPtr;
+        args[1] = &allHPtr;
+        args[2] = &allCPtr;
+        args[3] = &cacheGatesPtr;
+        args[4] = &weightsIhPtr;
+        args[5] = &weightsHhPtr;
+        args[6] = &inputPtr;
+        args[7] = &gradInputPtr;
+        args[8] = &gradHInitPtr;
+        args[9] = &gradCInitPtr;
+        args[10] = &gradWeightsIhPtr;
+        args[11] = &gradWeightsHhPtr;
+        args[12] = &gradBiasIhPtr;
+        args[13] = &gradBiasHhPtr;
+        args[14] = &seqLen;
+        args[15] = &batch;
+        args[16] = &inputSize;
+        args[17] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GruForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_forward_sequence");
+
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr inputPtr = input.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr biasIhPtr = biasIh.Handle;
+        IntPtr biasHhPtr = biasHh.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr hFinalPtr = hFinal.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+
+        void** args = stackalloc void*[14];
+        args[0] = &inputPtr;
+        args[1] = &hInitPtr;
+        args[2] = &weightsIhPtr;
+        args[3] = &weightsHhPtr;
+        args[4] = &biasIhPtr;
+        args[5] = &biasHhPtr;
+        args[6] = &outputPtr;
+        args[7] = &hFinalPtr;
+        args[8] = &allHPtr;
+        args[9] = &cacheGatesPtr;
+        args[10] = &seqLen;
+        args[11] = &batch;
+        args[12] = &inputSize;
+        args[13] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GruBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_backward_sequence");
+
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
+        IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
+        IntPtr gradBiasIhPtr = gradBiasIh.Handle;
+        IntPtr gradBiasHhPtr = gradBiasHh.Handle;
+
+        void** args = stackalloc void*[16];
+        args[0] = &gradOutputPtr;
+        args[1] = &allHPtr;
+        args[2] = &cacheGatesPtr;
+        args[3] = &weightsIhPtr;
+        args[4] = &weightsHhPtr;
+        args[5] = &inputPtr;
+        args[6] = &gradInputPtr;
+        args[7] = &gradHInitPtr;
+        args[8] = &gradWeightsIhPtr;
+        args[9] = &gradWeightsHhPtr;
+        args[10] = &gradBiasIhPtr;
+        args[11] = &gradBiasHhPtr;
+        args[12] = &seqLen;
+        args[13] = &batch;
+        args[14] = &inputSize;
+        args[15] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    #endregion
+
 
     public void Dispose()
     {
@@ -7723,6 +7932,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
         {
             CudaNativeBindings.cuModuleUnload(_fp16Module);
             _fp16Module = IntPtr.Zero;
+        }
+
+        if (_lstmModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_lstmModule);
+            _lstmModule = IntPtr.Zero;
+        }
+
+        if (_gruModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_gruModule);
+            _gruModule = IntPtr.Zero;
         }
 
         if (_fusedConvolutionModule != IntPtr.Zero)

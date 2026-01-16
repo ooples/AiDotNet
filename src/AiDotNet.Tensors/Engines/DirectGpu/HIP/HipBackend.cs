@@ -59,6 +59,8 @@ public sealed class HipBackend : IAsyncGpuBackend
     private IntPtr _specializedModule;
     private IntPtr _fp16Module;
     private IntPtr _spatialTransformerModule;
+    private IntPtr _lstmModule;
+    private IntPtr _gruModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -345,6 +347,14 @@ public sealed class HipBackend : IAsyncGpuBackend
             // Compile Spatial Transformer kernels (TopK, AffineGrid, GridSample)
             CompileKernelModule(Kernels.HipSpatialTransformerKernels.GetSource(), "spatial_transformer", ref _spatialTransformerModule,
                 Kernels.HipSpatialTransformerKernels.GetKernelNames());
+
+            // Compile LSTM sequence kernels (forward/backward for BPTT training)
+            CompileKernelModule(HipLstmKernels.GetSource(), "lstm", ref _lstmModule,
+                HipLstmKernels.GetKernelNames());
+
+            // Compile GRU sequence kernels (forward/backward for BPTT training)
+            CompileKernelModule(HipGruKernels.GetSource(), "gru", ref _gruModule,
+                HipGruKernels.GetKernelNames());
 
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
@@ -8989,6 +8999,190 @@ public sealed class HipBackend : IAsyncGpuBackend
 
     #endregion
 
+    #region RNN (LSTM/GRU) Sequence Operations
+
+    public void LstmForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+        IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: lstm_forward_sequence");
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        var handles = new GCHandle[17];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(hInit.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(cInit.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(weightsIh.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(biasIh.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(biasHh.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(hFinal.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(cFinal.Handle, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(allH.Handle, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(allC.Handle, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(cacheGates.Handle, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[17];
+            for (int i = 0; i < 17; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void LstmBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: lstm_backward_sequence");
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        var handles = new GCHandle[18];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(allH.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(allC.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(cacheGates.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(weightsIh.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(gradHInit.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(gradCInit.Handle, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(gradWeightsIh.Handle, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(gradWeightsHh.Handle, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(gradBiasIh.Handle, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(gradBiasHh.Handle, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[16] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
+            handles[17] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[18];
+            for (int i = 0; i < 18; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void GruForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: gru_forward_sequence");
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        var handles = new GCHandle[14];
+        try
+        {
+            handles[0] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(hInit.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(weightsIh.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(biasIh.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(biasHh.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(hFinal.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(allH.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(cacheGates.Handle, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[14];
+            for (int i = 0; i < 14; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public void GruBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
+            throw new InvalidOperationException("HIP kernel not found: gru_backward_sequence");
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        var handles = new GCHandle[16];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(allH.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(cacheGates.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(weightsIh.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(weightsHh.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(gradHInit.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(gradWeightsIh.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(gradWeightsHh.Handle, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(gradBiasIh.Handle, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(gradBiasHh.Handle, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(seqLen, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(inputSize, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(hiddenSize, GCHandleType.Pinned);
+
+            var args = new IntPtr[16];
+            for (int i = 0; i < 16; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    #endregion
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -9077,6 +9271,18 @@ public sealed class HipBackend : IAsyncGpuBackend
         {
             HipNativeBindings.hipModuleUnload(_fp16Module);
             _fp16Module = IntPtr.Zero;
+        }
+
+        if (_lstmModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_lstmModule);
+            _lstmModule = IntPtr.Zero;
+        }
+
+        if (_gruModule != IntPtr.Zero)
+        {
+            HipNativeBindings.hipModuleUnload(_gruModule);
+            _gruModule = IntPtr.Zero;
         }
 
         if (_stream != IntPtr.Zero)

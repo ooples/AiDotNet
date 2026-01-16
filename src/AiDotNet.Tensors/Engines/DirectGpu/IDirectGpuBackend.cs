@@ -2292,6 +2292,116 @@ public interface IDirectGpuBackend : IDisposable
     void MeasurementForward(IGpuBuffer input, IGpuBuffer output, int batchSize, int stateSize);
 
     #endregion
+
+    #region RNN (LSTM/GRU) Sequence Operations
+
+    /// <summary>
+    /// Forward pass for LSTM sequence - processes all timesteps in a single kernel launch.
+    /// Efficient for BPTT training with minimal kernel launch overhead.
+    /// </summary>
+    /// <param name="input">Input sequence [seqLen * batch * inputSize].</param>
+    /// <param name="hInit">Initial hidden state [batch * hiddenSize].</param>
+    /// <param name="cInit">Initial cell state [batch * hiddenSize].</param>
+    /// <param name="weightsIh">Input-to-hidden weights [4 * hiddenSize * inputSize] (gates: i, f, g, o).</param>
+    /// <param name="weightsHh">Hidden-to-hidden weights [4 * hiddenSize * hiddenSize].</param>
+    /// <param name="biasIh">Input-to-hidden bias [4 * hiddenSize].</param>
+    /// <param name="biasHh">Hidden-to-hidden bias [4 * hiddenSize].</param>
+    /// <param name="output">Output sequence [seqLen * batch * hiddenSize].</param>
+    /// <param name="hFinal">Final hidden state [batch * hiddenSize].</param>
+    /// <param name="cFinal">Final cell state [batch * hiddenSize].</param>
+    /// <param name="allH">All hidden states cache [(seqLen + 1) * batch * hiddenSize] for backward.</param>
+    /// <param name="allC">All cell states cache [(seqLen + 1) * batch * hiddenSize] for backward.</param>
+    /// <param name="cacheGates">Gate cache [seqLen * batch * hiddenSize * 4] for backward.</param>
+    /// <param name="seqLen">Sequence length.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inputSize">Input feature size.</param>
+    /// <param name="hiddenSize">Hidden state size.</param>
+    void LstmForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+        IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize);
+
+    /// <summary>
+    /// Backward pass for LSTM sequence - computes gradients via BPTT.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [seqLen * batch * hiddenSize].</param>
+    /// <param name="allH">All hidden states from forward [(seqLen + 1) * batch * hiddenSize].</param>
+    /// <param name="allC">All cell states from forward [(seqLen + 1) * batch * hiddenSize].</param>
+    /// <param name="cacheGates">Gate cache from forward [seqLen * batch * hiddenSize * 4].</param>
+    /// <param name="weightsIh">Input-to-hidden weights [4 * hiddenSize * inputSize].</param>
+    /// <param name="weightsHh">Hidden-to-hidden weights [4 * hiddenSize * hiddenSize].</param>
+    /// <param name="input">Original input sequence [seqLen * batch * inputSize].</param>
+    /// <param name="gradInput">Output: gradient for input [seqLen * batch * inputSize].</param>
+    /// <param name="gradHInit">Output: gradient for initial hidden [batch * hiddenSize].</param>
+    /// <param name="gradCInit">Output: gradient for initial cell [batch * hiddenSize].</param>
+    /// <param name="gradWeightsIh">Output: gradient for weightsIh [4 * hiddenSize * inputSize].</param>
+    /// <param name="gradWeightsHh">Output: gradient for weightsHh [4 * hiddenSize * hiddenSize].</param>
+    /// <param name="gradBiasIh">Output: gradient for biasIh [4 * hiddenSize].</param>
+    /// <param name="gradBiasHh">Output: gradient for biasHh [4 * hiddenSize].</param>
+    /// <param name="seqLen">Sequence length.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inputSize">Input feature size.</param>
+    /// <param name="hiddenSize">Hidden state size.</param>
+    void LstmBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize);
+
+    /// <summary>
+    /// Forward pass for GRU sequence - processes all timesteps in a single kernel launch.
+    /// Efficient for BPTT training with minimal kernel launch overhead.
+    /// </summary>
+    /// <param name="input">Input sequence [seqLen * batch * inputSize].</param>
+    /// <param name="hInit">Initial hidden state [batch * hiddenSize].</param>
+    /// <param name="weightsIh">Input-to-hidden weights [3 * hiddenSize * inputSize] (gates: r, z, n).</param>
+    /// <param name="weightsHh">Hidden-to-hidden weights [3 * hiddenSize * hiddenSize].</param>
+    /// <param name="biasIh">Input-to-hidden bias [3 * hiddenSize].</param>
+    /// <param name="biasHh">Hidden-to-hidden bias [3 * hiddenSize].</param>
+    /// <param name="output">Output sequence [seqLen * batch * hiddenSize].</param>
+    /// <param name="hFinal">Final hidden state [batch * hiddenSize].</param>
+    /// <param name="allH">All hidden states cache [(seqLen + 1) * batch * hiddenSize] for backward.</param>
+    /// <param name="cacheGates">Gate cache [seqLen * batch * hiddenSize * 3] for backward.</param>
+    /// <param name="seqLen">Sequence length.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inputSize">Input feature size.</param>
+    /// <param name="hiddenSize">Hidden state size.</param>
+    void GruForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize);
+
+    /// <summary>
+    /// Backward pass for GRU sequence - computes gradients via BPTT.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from next layer [seqLen * batch * hiddenSize].</param>
+    /// <param name="allH">All hidden states from forward [(seqLen + 1) * batch * hiddenSize].</param>
+    /// <param name="cacheGates">Gate cache from forward [seqLen * batch * hiddenSize * 3].</param>
+    /// <param name="weightsIh">Input-to-hidden weights [3 * hiddenSize * inputSize].</param>
+    /// <param name="weightsHh">Hidden-to-hidden weights [3 * hiddenSize * hiddenSize].</param>
+    /// <param name="input">Original input sequence [seqLen * batch * inputSize].</param>
+    /// <param name="gradInput">Output: gradient for input [seqLen * batch * inputSize].</param>
+    /// <param name="gradHInit">Output: gradient for initial hidden [batch * hiddenSize].</param>
+    /// <param name="gradWeightsIh">Output: gradient for weightsIh [3 * hiddenSize * inputSize].</param>
+    /// <param name="gradWeightsHh">Output: gradient for weightsHh [3 * hiddenSize * hiddenSize].</param>
+    /// <param name="gradBiasIh">Output: gradient for biasIh [3 * hiddenSize].</param>
+    /// <param name="gradBiasHh">Output: gradient for biasHh [3 * hiddenSize].</param>
+    /// <param name="seqLen">Sequence length.</param>
+    /// <param name="batch">Batch size.</param>
+    /// <param name="inputSize">Input feature size.</param>
+    /// <param name="hiddenSize">Hidden state size.</param>
+    void GruBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize);
+
+    #endregion
 }
 
 /// <summary>
