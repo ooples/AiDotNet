@@ -546,17 +546,61 @@ extern ""C"" __global__ void gru_backward_sequence(
             }
 
             // Gradient to previous hidden state for next iteration (full BPTT)
-            // dPrevH = dH * (1-z) + contributions from all output positions through gates
-            float dH_prev = dH * (1.0f - z);  // Direct path
+            // dPrevH[j] = dH[j] * (1-z[j]) + sum_h(dZ[h]*Uz[h,j] + dR[h]*Ur[h,j] + dHCand[h]*Uh[h,j]*r[j])
+            float dH_prev = dH * (1.0f - z);  // Direct path for this hidden unit
 
-            // Gradient through Z gate to prevH
-            dH_prev += dZ * Uz[h_idx * hiddenSize + h_idx];
+            // Accumulate gradient contributions from all hidden output positions h
+            for (int h = 0; h < hiddenSize; h++) {
+                // Get cached gate values for output position h
+                float z_h = gates[gateOffset + h];
+                float r_h = gates[gateOffset + hiddenSize + h];
+                float h_cand_h = gates[gateOffset + 2 * hiddenSize + h];
 
-            // Gradient through R gate to prevH
-            dH_prev += dR * Ur[h_idx * hiddenSize + h_idx];
+                // Get previous hidden state for position h
+                float h_prev_h;
+                if (t == 0) {
+                    h_prev_h = h_init[b * hiddenSize + h];
+                } else {
+                    h_prev_h = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + h];
+                }
 
-            // Gradient through candidate (Uh) path: dHCand * Uh[h_idx, h_idx] * r[h_idx]
-            dH_prev += dHCand * Uh[h_idx * hiddenSize + h_idx] * r;
+                // Get accumulated hidden gradient for position h
+                float dH_h;
+                int h_gid = b * hiddenSize + h;
+                int h_local_idx = h_gid - (blockIdx.x * blockDim.x);
+                if (h_local_idx >= 0 && h_local_idx < blockDim.x) {
+                    dH_h = shared_dH[h_local_idx];
+                } else {
+                    dH_h = dH_buffer[h_gid];
+                }
+
+                // Compute gate gradients for output position h
+                float dHCand_h = dH_h * z_h * tanh_derivative(h_cand_h);
+                float dZ_h = dH_h * (h_cand_h - h_prev_h) * sigmoid_derivative(z_h);
+
+                // Compute dR[h] with nested loop: dR[h] = sum_k(dHCand_k * Uh[k,h]) * prevH[h] * sigmoid'(r[h])
+                float dR_sum_h = 0.0f;
+                for (int k = 0; k < hiddenSize; k++) {
+                    float z_k = gates[gateOffset + k];
+                    float h_cand_k = gates[gateOffset + 2 * hiddenSize + k];
+                    float dH_k;
+                    int k_gid = b * hiddenSize + k;
+                    int k_local_idx = k_gid - (blockIdx.x * blockDim.x);
+                    if (k_local_idx >= 0 && k_local_idx < blockDim.x) {
+                        dH_k = shared_dH[k_local_idx];
+                    } else {
+                        dH_k = dH_buffer[k_gid];
+                    }
+                    float dHCand_k = dH_k * z_k * tanh_derivative(h_cand_k);
+                    dR_sum_h += dHCand_k * Uh[k * hiddenSize + h];
+                }
+                float dR_h = dR_sum_h * h_prev_h * sigmoid_derivative(r_h);
+
+                // Accumulate contributions from all gates to prev hidden at position h_idx
+                dH_prev += dZ_h * Uz[h * hiddenSize + h_idx];
+                dH_prev += dR_h * Ur[h * hiddenSize + h_idx];
+                dH_prev += dHCand_h * Uh[h * hiddenSize + h_idx] * r;
+            }
 
             dH = dH_prev;
         }

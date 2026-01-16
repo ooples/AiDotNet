@@ -2386,6 +2386,7 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="input">Original input sequence [seqLen * batch * inputSize].</param>
     /// <param name="gradInput">Output: gradient for input [seqLen * batch * inputSize].</param>
     /// <param name="gradHInit">Output: gradient for initial hidden [batch * hiddenSize].</param>
+    /// <param name="dHBuffer">Temporary buffer for cross-block intermediate hidden-state gradients during BPTT [batch * hiddenSize].</param>
     /// <param name="gradWeightsIh">Output: gradient for weightsIh [3 * hiddenSize * inputSize].</param>
     /// <param name="gradWeightsHh">Output: gradient for weightsHh [3 * hiddenSize * hiddenSize].</param>
     /// <param name="gradBiasIh">Output: gradient for biasIh [3 * hiddenSize].</param>

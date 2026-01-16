@@ -488,19 +488,68 @@ __kernel void gru_backward_sequence(
         }
 
         // Phase 3: Compute gradient to previous hidden state (full BPTT)
+        // dPrevH[j] = dH[j] * (1-z[j]) + sum_hh(dZ[hh]*Uz[hh,j] + dR[hh]*Ur[hh,j] + dN[hh]*Uh[hh,j]*r[j])
         if (isActive) {
-            // Gradient to previous hidden state from z path
-            float dHPrev = dH * z;
+            // Direct path: h_t = (1-z)*n + z*h_prev, so dh_prev = dH * z is WRONG
+            // Correct: dh_prev from direct path = dH * (1-z) for n term... wait, let me recalculate
+            // h_t = (1-z)*n + z*h_prev
+            // dL/dh_prev = dL/dh_t * dh_t/dh_prev = dH * z (gradient flows through z*h_prev term)
+            // But we also need gradient through n gate which uses r*h_prev
+            // Actually for OpenCL we use (1-z)*n + z*h_prev, different convention than CUDA
+            // Let me check: dh_prev direct = dH * z (from z*h_prev term)
+            // Hmm, the GRU formula here is h = (1-z)*n + z*h_prev, so dh/dh_prev = z
+            // But CUDA uses h = (1-z)*h_prev + z*h_cand, so dh/dh_prev = (1-z)
+            // The convention differs! OpenCL seems inverted.
+            // Looking at gru_cell_forward: newHVal = (1.0f - z) * n + z * prevHVal
+            // So direct path gradient is dH * z, which is correct for this convention.
+            float dHPrev = dH * z;  // Direct path for this GRU convention
 
-            // Gradient through n gate to previous hidden (via reset gate)
+            // Accumulate gradient contributions from all hidden output positions hh
             for (int hh = 0; hh < hiddenSize; hh++) {
-                dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
-            }
+                // Get gate values for output position hh (from cacheGates buffer)
+                int hh_gateIdx = (t * batch * hiddenSize + b * hiddenSize + hh) * 3;
+                float r_hh = cacheGates[hh_gateIdx + 0];
+                float z_hh = cacheGates[hh_gateIdx + 1];
+                float n_hh = cacheGates[hh_gateIdx + 2];
 
-            // Gradient through r and z to previous hidden
-            for (int hh = 0; hh < hiddenSize; hh++) {
-                dHPrev += dR * weightsHh[hh * hiddenSize + h];
-                dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
+                // Get accumulated hidden gradient for position hh
+                float dH_hh;
+                int hh_gid = b * hiddenSize + hh;
+                int hh_local_idx = hh_gid - (group_id * local_size);
+                if (hh_local_idx >= 0 && hh_local_idx < local_size) {
+                    dH_hh = local_dH[hh_local_idx];
+                } else {
+                    dH_hh = dH_buffer[hh_gid];
+                }
+
+                // Get h_prev for position hh
+                float hPrev_hh = allH[t * batch * hiddenSize + b * hiddenSize + hh];
+
+                // Recompute gate gradients for output position hh
+                // OpenCL convention: h = (1-z)*n + z*h_prev
+                float dN_hh = dH_hh * (1.0f - z_hh) * tanh_derivative(n_hh);
+                float dZ_hh = dH_hh * (hPrev_hh - n_hh) * sigmoid_derivative(z_hh);
+
+                // Compute dR[hh] properly: dR[hh] = sum_k(dN_k * Wn_hh[k,hh]) * hPrev[hh] * sigmoid'(r[hh])
+                float dR_sum_hh = 0.0f;
+                for (int k = 0; k < hiddenSize; k++) {
+                    int k_gateIdx = (t * batch * hiddenSize + b * hiddenSize + k) * 3;
+                    float z_k = cacheGates[k_gateIdx + 1];
+                    float n_k = cacheGates[k_gateIdx + 2];
+                    int k_gid = b * hiddenSize + k;
+                    int k_local_idx = k_gid - (group_id * local_size);
+                    float dH_k = (k_local_idx >= 0 && k_local_idx < local_size)
+                                 ? local_dH[k_local_idx] : dH_buffer[k_gid];
+                    float dN_k = dH_k * (1.0f - z_k) * tanh_derivative(n_k);
+                    dR_sum_hh += dN_k * weightsHh[(2 * hiddenSize + k) * hiddenSize + hh];
+                }
+                float dR_hh = dR_sum_hh * hPrev_hh * sigmoid_derivative(r_hh);
+
+                // Gradient through gates to prevH[h] (this thread's hidden unit)
+                dHPrev += dZ_hh * weightsHh[(hiddenSize + hh) * hiddenSize + h];
+                dHPrev += dR_hh * weightsHh[hh * hiddenSize + h];
+                // For Wn_hh path, the reset gate is for THIS thread's unit (h), not hh
+                dHPrev += dN_hh * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
             }
 
             // Update for next iteration

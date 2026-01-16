@@ -2159,11 +2159,36 @@ public class GRULayer<T> : LayerBase<T>
         if (_gpuStackedWeightsIh == null || _gpuStackedWeightsHh == null)
             throw new InvalidOperationException("Stacked weights not prepared. ForwardGpu must be called first.");
 
-        // Determine dimensions from input
-        int batchSize = _gpuLastInput.Shape[0];
-        int timeSteps = _gpuLastInput.Shape.Length > 2 ? _gpuLastInput.Shape[1] : _gpuLastInput.Shape[0];
-        if (_gpuLastInput.Shape.Length == 2)
+        // Determine dimensions from input (must match ForwardGpu logic)
+        var shape = _gpuLastInput.Shape;
+        int rank = shape.Length;
+        int timeSteps;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            timeSteps = 1;
             batchSize = 1;
+        }
+        else if (rank == 2)
+        {
+            timeSteps = shape[0];
+            batchSize = 1;
+        }
+        else if (rank == 3)
+        {
+            timeSteps = shape[1];
+            batchSize = shape[0];
+        }
+        else
+        {
+            // Higher rank: collapse leading dims into batch
+            timeSteps = shape[rank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= shape[d];
+            batchSize = flatBatch;
+        }
 
         int hiddenBufferSize = batchSize * _hiddenSize;
         int inputGradientSize = batchSize * timeSteps * _inputSize;
