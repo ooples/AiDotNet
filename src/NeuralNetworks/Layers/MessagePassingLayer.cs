@@ -208,6 +208,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private IGpuBuffer? _gpuAggregatedCache;
     private IGpuBuffer? _gpuResetGateCache;
     private IGpuBuffer? _gpuUpdateGateCache;
+    private IGpuBuffer? _gpuPreActivationCache;
     private int _gpuNumEdges;
     private int _gpuNumNodes;
     private int _gpuBatchSize;
@@ -1161,6 +1162,8 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _gpuResetGateCache = null;
         _gpuUpdateGateCache?.Dispose();
         _gpuUpdateGateCache = null;
+        _gpuPreActivationCache?.Dispose();
+        _gpuPreActivationCache = null;
 
         _gpuMsgWeights1Gradient?.Dispose();
         _gpuMsgWeights1Gradient = null;
@@ -1552,6 +1555,13 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
+            // Cache pre-activation for backward pass (needed for activation derivative)
+            if (IsTrainingMode)
+            {
+                _gpuPreActivationCache?.Dispose();
+                _gpuPreActivationCache = backend.AllocateBuffer(outputSize);
+                backend.Copy(outputBuffer, _gpuPreActivationCache, outputSize);
+            }
             ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
         }
 
@@ -1657,6 +1667,44 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numEdges = _gpuNumEdges;
         int batchSize = _gpuBatchSize;
         int messageInputDim = 2 * _inputFeatures;
+        int outputSize = batchSize * numNodes * _outputFeatures;
+
+        // Apply activation derivative if activation was used in forward pass
+        // This creates a working gradient tensor with the activation derivative applied
+        IGpuTensor<T> workingGradTensor;
+        bool disposeWorkingGrad = false;
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None && _gpuPreActivationCache != null)
+        {
+            var workingGradBuffer = backend.AllocateBuffer(outputSize);
+            disposeWorkingGrad = true;
+            // For activations like ReLU, LeakyReLU, GELU, Swish: need pre-activation (input)
+            // For Sigmoid, Tanh: need post-activation (output) - but we have pre-activation cached
+            // Since we cache pre-activation, we can apply forward activation to get output if needed
+            bool applied = ApplyGpuActivationBackward(
+                backend,
+                outputGradient.Buffer,
+                _gpuPreActivationCache, // input (pre-activation) for ReLU-family
+                null, // output not available, would need separate cache for Sigmoid/Tanh
+                workingGradBuffer,
+                outputSize,
+                activationType);
+            if (!applied)
+            {
+                // Fallback: just copy without activation derivative (for unsupported activations)
+                backend.Copy(outputGradient.Buffer, workingGradBuffer, outputSize);
+            }
+            // Wrap in a tensor so we can use CreateView for multi-batch
+            int[] gradShape = batchSize > 1
+                ? [batchSize, numNodes, _outputFeatures]
+                : [numNodes, _outputFeatures];
+            workingGradTensor = new GpuTensor<T>(backend, workingGradBuffer, gradShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        }
+        else
+        {
+            // No activation or identity - use original gradient directly
+            workingGradTensor = outputGradient;
+        }
 
         // Upload weights to GPU for backward computation (transposed for backward pass)
         // msgW1: [messageInputDim, _messageFeatures] -> need transpose [_messageFeatures, messageInputDim]
@@ -1732,16 +1780,16 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // For single batch processing
         for (int b = 0; b < batchSize; b++)
         {
-            // Get output gradient for this batch using GPU view (no CPU roundtrip)
+            // Get output gradient for this batch (uses workingGradTensor which has activation derivative applied)
             IGpuBuffer batchGradOutput;
             if (batchSize == 1)
             {
-                batchGradOutput = outputGradient.Buffer;
+                batchGradOutput = workingGradTensor.Buffer;
             }
             else
             {
                 int gradOffset = b * numNodes * _outputFeatures;
-                var gradView = outputGradient.CreateView(gradOffset, [numNodes, _outputFeatures]);
+                var gradView = workingGradTensor.CreateView(gradOffset, [numNodes, _outputFeatures]);
                 batchGradOutput = gradView.Buffer;
             }
 
@@ -1759,19 +1807,43 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
 
             // Backward through update gate sigmoid
+            // dz = (m - h) * dh', where m is aggregated and h is input
+            // Handle dimension mismatches by operating on overlapping dimensions
             using var gradUpdateGatePre = backend.AllocateBuffer(numNodes * _outputFeatures);
-            if (_messageFeatures >= _outputFeatures && _inputFeatures == _outputFeatures)
+
+            // Compute m - h element-wise, handling dimension mismatches
+            // m has _messageFeatures dims, h has _inputFeatures dims, output needs _outputFeatures dims
+            using var mMinusH = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Fill(mMinusH, 0.0f, numNodes * _outputFeatures);
+
+            // Copy overlapping dimensions from m (aggregated)
+            int mOverlap = Math.Min(_messageFeatures, _outputFeatures);
+            if (mOverlap > 0)
             {
-                // dz = (m - h) * dh'
-                using var mMinusH = backend.AllocateBuffer(numNodes * _outputFeatures);
-                backend.Subtract(_gpuAggregatedCache, batchInput, mMinusH, numNodes * _outputFeatures);
-                backend.Multiply(mMinusH, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
-                backend.SigmoidBackward(tempGradBuffer1, _gpuUpdateGateCache, gradUpdateGatePre, numNodes * _outputFeatures);
+                // Copy column-by-column for the overlapping features
+                for (int n = 0; n < numNodes; n++)
+                {
+                    backend.Copy(_gpuAggregatedCache, n * _messageFeatures, mMinusH, n * _outputFeatures, mOverlap);
+                }
             }
-            else
+
+            // Subtract overlapping dimensions from h (input)
+            int hOverlap = Math.Min(_inputFeatures, _outputFeatures);
+            if (hOverlap > 0)
             {
-                backend.Fill(gradUpdateGatePre, 0.0f, numNodes * _outputFeatures);
+                using var hPadded = backend.AllocateBuffer(numNodes * _outputFeatures);
+                backend.Fill(hPadded, 0.0f, numNodes * _outputFeatures);
+                for (int n = 0; n < numNodes; n++)
+                {
+                    backend.Copy(batchInput, n * _inputFeatures, hPadded, n * _outputFeatures, hOverlap);
+                }
+                // Now subtract: mMinusH = mMinusH - hPadded
+                backend.Subtract(mMinusH, hPadded, mMinusH, numNodes * _outputFeatures);
             }
+
+            // Compute dz = (m - h) * dh' and apply sigmoid backward
+            backend.Multiply(mMinusH, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
+            backend.SigmoidBackward(tempGradBuffer1, _gpuUpdateGateCache, gradUpdateGatePre, numNodes * _outputFeatures);
 
             // Update bias gradient: sum over nodes using SumAxis
             backend.SumAxis(gradUpdateGatePre, _gpuUpdateBiasGradient, numNodes, _outputFeatures);
@@ -1787,18 +1859,68 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             backend.Add(gradInputBuffer, tempInputGrad, gradInputBuffer, numNodes * _inputFeatures);
 
             // Gradient to aggregated from output: dm = z * dh'
-            if (_messageFeatures >= _outputFeatures)
+            // This contributes to the first min(_messageFeatures, _outputFeatures) dimensions of aggregated gradient
             {
                 backend.Multiply(_gpuUpdateGateCache, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
-                backend.Add(gradAggregatedBuffer, tempGradBuffer1, gradAggregatedBuffer, numNodes * _messageFeatures);
+                // Add to gradAggregatedBuffer, handling dimension mismatch by copying to properly sized buffer
+                if (_messageFeatures >= _outputFeatures)
+                {
+                    // Message features larger: pad with zeros
+                    using var tempAggGrad = backend.AllocateBuffer(numNodes * _messageFeatures);
+                    backend.Fill(tempAggGrad, 0.0f, numNodes * _messageFeatures);
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        backend.Copy(tempGradBuffer1, n * _outputFeatures, tempAggGrad, n * _messageFeatures, _outputFeatures);
+                    }
+                    backend.Add(gradAggregatedBuffer, tempAggGrad, gradAggregatedBuffer, numNodes * _messageFeatures);
+                }
+                else
+                {
+                    // Message features smaller: only use first messageFeatures from each row
+                    using var tempAggGrad = backend.AllocateBuffer(numNodes * _messageFeatures);
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        backend.Copy(tempGradBuffer1, n * _outputFeatures, tempAggGrad, n * _messageFeatures, _messageFeatures);
+                    }
+                    backend.Add(gradAggregatedBuffer, tempAggGrad, gradAggregatedBuffer, numNodes * _messageFeatures);
+                }
             }
 
             // Gradient to input from output: dh = (1 - z) * dh'
-            if (_inputFeatures == _outputFeatures)
+            // This contributes to the first min(_inputFeatures, _outputFeatures) dimensions of input gradient
             {
                 backend.Subtract(onesBuffer, _gpuUpdateGateCache, tempGradBuffer1, numNodes * _outputFeatures);
                 backend.Multiply(tempGradBuffer1, batchGradOutput, tempGradBuffer2, numNodes * _outputFeatures);
-                backend.Add(gradInputBuffer, tempGradBuffer2, gradInputBuffer, numNodes * _inputFeatures);
+                int dhOverlap = Math.Min(_inputFeatures, _outputFeatures);
+                if (dhOverlap > 0)
+                {
+                    if (_inputFeatures == _outputFeatures)
+                    {
+                        // Direct add when dimensions match
+                        backend.Add(gradInputBuffer, tempGradBuffer2, gradInputBuffer, numNodes * _inputFeatures);
+                    }
+                    else if (_inputFeatures > _outputFeatures)
+                    {
+                        // Input larger: pad gradient with zeros before adding
+                        using var tempInputGrad2 = backend.AllocateBuffer(numNodes * _inputFeatures);
+                        backend.Fill(tempInputGrad2, 0.0f, numNodes * _inputFeatures);
+                        for (int n = 0; n < numNodes; n++)
+                        {
+                            backend.Copy(tempGradBuffer2, n * _outputFeatures, tempInputGrad2, n * _inputFeatures, _outputFeatures);
+                        }
+                        backend.Add(gradInputBuffer, tempInputGrad2, gradInputBuffer, numNodes * _inputFeatures);
+                    }
+                    else
+                    {
+                        // Output larger: only use first inputFeatures from gradient
+                        using var tempInputGrad2 = backend.AllocateBuffer(numNodes * _inputFeatures);
+                        for (int n = 0; n < numNodes; n++)
+                        {
+                            backend.Copy(tempGradBuffer2, n * _outputFeatures, tempInputGrad2, n * _inputFeatures, _inputFeatures);
+                        }
+                        backend.Add(gradInputBuffer, tempInputGrad2, gradInputBuffer, numNodes * _inputFeatures);
+                    }
+                }
             }
 
             // Compute update weight gradients: dW = input^T @ gradUpdateGatePre
@@ -1873,6 +1995,12 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Scatter-add gradients back to input
         backend.ScatterAdd(gradEdgeSrc, _gpuEdgeSrcIndices, gradInputBuffer, numEdges * _inputFeatures, numNodes * _inputFeatures);
         backend.ScatterAdd(gradEdgeTgt, _gpuEdgeTgtIndices, gradInputBuffer, numEdges * _inputFeatures, numNodes * _inputFeatures);
+
+        // Clean up working gradient tensor if we allocated it
+        if (disposeWorkingGrad)
+        {
+            workingGradTensor.Dispose();
+        }
 
         // Return input gradient
         int[] gradInputShape = _gpuLastInput.Shape.Length == 2

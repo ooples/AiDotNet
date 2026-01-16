@@ -376,118 +376,128 @@ extern ""C"" __global__ void lstm_backward_sequence(
     int inputSize,
     int hiddenSize)
 {
+    // Each thread handles one (batch, hidden) element
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = batch * hiddenSize;
-    int b = gid / hiddenSize;
-    int h_idx = gid % hiddenSize;
 
-    // Initialize dH_init buffer for use as intermediate storage during BPTT
-    // (all threads participate for sync safety)
-    if (gid < totalElements) {
+    // Use isValid flag instead of early return to avoid __syncthreads deadlock
+    bool isValid = gid < totalElements;
+
+    int b = isValid ? (gid / hiddenSize) : 0;
+    int h_idx = isValid ? (gid % hiddenSize) : 0;
+
+    // Initialize gradients for recurrence
+    float dH = 0.0f;
+    float dC = 0.0f;
+
+    // Clear dH_init buffer for use as intermediate storage during BPTT (only valid threads)
+    if (isValid) {
         dH_init[gid] = 0.0f;
     }
     __syncthreads();
 
-    if (gid >= totalElements) return;
-
-    float dH = 0.0f;
-    float dC = 0.0f;
-
+    // Process timesteps in reverse (BPTT)
     for (int t = timeSteps - 1; t >= 0; t--) {
         // Read accumulated recurrent gradient from previous iteration (if any)
-        if (t < timeSteps - 1) {
+        if (isValid && t < timeSteps - 1) {
             dH = dH_init[gid];
             dH_init[gid] = 0.0f;  // Clear for next accumulation
         }
+        // All threads must reach this barrier
         __syncthreads();
 
-        dH += gradOutput[(b * timeSteps + t) * hiddenSize + h_idx];
+        if (isValid) {
+            dH += gradOutput[(b * timeSteps + t) * hiddenSize + h_idx];
 
-        int gateOffset = t * batch * 4 * hiddenSize + b * 4 * hiddenSize;
-        float f = gates[gateOffset + h_idx];
-        float i_gate = gates[gateOffset + hiddenSize + h_idx];
-        float c_candidate = gates[gateOffset + 2 * hiddenSize + h_idx];
-        float o = gates[gateOffset + 3 * hiddenSize + h_idx];
+            int gateOffset = t * batch * 4 * hiddenSize + b * 4 * hiddenSize;
+            float f = gates[gateOffset + h_idx];
+            float i_gate = gates[gateOffset + hiddenSize + h_idx];
+            float c_candidate = gates[gateOffset + 2 * hiddenSize + h_idx];
+            float o = gates[gateOffset + 3 * hiddenSize + h_idx];
 
-        int stateOffset = t * batch * hiddenSize + gid;
-        float c_t = c_states[stateOffset];
-        float c_prev;
-        if (t == 0) {
-            c_prev = c_init[gid];
-        } else {
-            c_prev = c_states[(t - 1) * batch * hiddenSize + gid];
-        }
-
-        float tanh_c = tanhf(c_t);
-        float dO = dH * tanh_c * sigmoid_derivative(o);
-        float dC_from_H = dH * o * tanh_derivative(tanh_c);
-        dC += dC_from_H;
-
-        float dF = dC * c_prev * sigmoid_derivative(f);
-        float dI = dC * c_candidate * sigmoid_derivative(i_gate);
-        float dCCandidate = dC * i_gate * tanh_derivative(c_candidate);
-        float dC_prev = dC * f;
-
-        int inputOffset = (b * timeSteps + t) * inputSize;
-        for (int i = 0; i < inputSize; i++) {
-            float x_val = input[inputOffset + i];
-            atomicAdd(&dWi[h_idx * inputSize + i], dF * x_val);
-            atomicAdd(&dWi[(hiddenSize + h_idx) * inputSize + i], dI * x_val);
-            atomicAdd(&dWi[(2 * hiddenSize + h_idx) * inputSize + i], dCCandidate * x_val);
-            atomicAdd(&dWi[(3 * hiddenSize + h_idx) * inputSize + i], dO * x_val);
-        }
-
-        for (int j = 0; j < hiddenSize; j++) {
-            float hj;
+            int stateOffset = t * batch * hiddenSize + gid;
+            float c_t = c_states[stateOffset];
+            float c_prev;
             if (t == 0) {
-                hj = h_init[b * hiddenSize + j];
+                c_prev = c_init[gid];
             } else {
-                hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+                c_prev = c_states[(t - 1) * batch * hiddenSize + gid];
             }
-            atomicAdd(&dWh[h_idx * hiddenSize + j], dF * hj);
-            atomicAdd(&dWh[(hiddenSize + h_idx) * hiddenSize + j], dI * hj);
-            atomicAdd(&dWh[(2 * hiddenSize + h_idx) * hiddenSize + j], dCCandidate * hj);
-            atomicAdd(&dWh[(3 * hiddenSize + h_idx) * hiddenSize + j], dO * hj);
+
+            float tanh_c = tanhf(c_t);
+            float dO = dH * tanh_c * sigmoid_derivative(o);
+            float dC_from_H = dH * o * tanh_derivative(tanh_c);
+            dC += dC_from_H;
+
+            float dF = dC * c_prev * sigmoid_derivative(f);
+            float dI = dC * c_candidate * sigmoid_derivative(i_gate);
+            float dCCandidate = dC * i_gate * tanh_derivative(c_candidate);
+            float dC_prev = dC * f;
+
+            int inputOffset = (b * timeSteps + t) * inputSize;
+            for (int i = 0; i < inputSize; i++) {
+                float x_val = input[inputOffset + i];
+                atomicAdd(&dWi[h_idx * inputSize + i], dF * x_val);
+                atomicAdd(&dWi[(hiddenSize + h_idx) * inputSize + i], dI * x_val);
+                atomicAdd(&dWi[(2 * hiddenSize + h_idx) * inputSize + i], dCCandidate * x_val);
+                atomicAdd(&dWi[(3 * hiddenSize + h_idx) * inputSize + i], dO * x_val);
+            }
+
+            for (int j = 0; j < hiddenSize; j++) {
+                float hj;
+                if (t == 0) {
+                    hj = h_init[b * hiddenSize + j];
+                } else {
+                    hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+                }
+                atomicAdd(&dWh[h_idx * hiddenSize + j], dF * hj);
+                atomicAdd(&dWh[(hiddenSize + h_idx) * hiddenSize + j], dI * hj);
+                atomicAdd(&dWh[(2 * hiddenSize + h_idx) * hiddenSize + j], dCCandidate * hj);
+                atomicAdd(&dWh[(3 * hiddenSize + h_idx) * hiddenSize + j], dO * hj);
+            }
+
+            atomicAdd(&dBias[h_idx], dF);
+            atomicAdd(&dBias[hiddenSize + h_idx], dI);
+            atomicAdd(&dBias[2 * hiddenSize + h_idx], dCCandidate);
+            atomicAdd(&dBias[3 * hiddenSize + h_idx], dO);
+
+            int gradInputOffset = (b * timeSteps + t) * inputSize;
+            for (int i = 0; i < inputSize; i++) {
+                float grad_i = 0.0f;
+                grad_i += dF * Wi[h_idx * inputSize + i];
+                grad_i += dI * Wi[(hiddenSize + h_idx) * inputSize + i];
+                grad_i += dCCandidate * Wi[(2 * hiddenSize + h_idx) * inputSize + i];
+                grad_i += dO * Wi[(3 * hiddenSize + h_idx) * inputSize + i];
+                atomicAdd(&gradInput[gradInputOffset + i], grad_i);
+            }
+
+            // Gradient to previous hidden state for BPTT
+            // dH_prev[j] = sum_k (dGate[k] * Wh[k, j]) for all four gates
+            // This is a matrix-vector product: dH_prev = Wh^T @ dGates
+            // Accumulate to dH_init buffer (used as temp storage during loop, final output at t=0)
+            for (int j = 0; j < hiddenSize; j++) {
+                // Contribution from gate derivatives at position h_idx to hidden unit j
+                // Wh layout: [4*hiddenSize, hiddenSize], so Wh[k, j] = Wh[k * hiddenSize + j]
+                float contrib = dF * Wh[h_idx * hiddenSize + j];
+                contrib += dI * Wh[(hiddenSize + h_idx) * hiddenSize + j];
+                contrib += dCCandidate * Wh[(2 * hiddenSize + h_idx) * hiddenSize + j];
+                contrib += dO * Wh[(3 * hiddenSize + h_idx) * hiddenSize + j];
+                atomicAdd(&dH_init[b * hiddenSize + j], contrib);
+            }
+
+            // Update dC for next iteration
+            dC = dC_prev;
         }
 
-        atomicAdd(&dBias[h_idx], dF);
-        atomicAdd(&dBias[hiddenSize + h_idx], dI);
-        atomicAdd(&dBias[2 * hiddenSize + h_idx], dCCandidate);
-        atomicAdd(&dBias[3 * hiddenSize + h_idx], dO);
-
-        int gradInputOffset = (b * timeSteps + t) * inputSize;
-        for (int i = 0; i < inputSize; i++) {
-            float grad_i = 0.0f;
-            grad_i += dF * Wi[h_idx * inputSize + i];
-            grad_i += dI * Wi[(hiddenSize + h_idx) * inputSize + i];
-            grad_i += dCCandidate * Wi[(2 * hiddenSize + h_idx) * inputSize + i];
-            grad_i += dO * Wi[(3 * hiddenSize + h_idx) * inputSize + i];
-            atomicAdd(&gradInput[gradInputOffset + i], grad_i);
-        }
-
-        // Gradient to previous hidden state for BPTT
-        // dH_prev[j] = sum_k (dGate[k] * Wh[k, j]) for all four gates
-        // This is a matrix-vector product: dH_prev = Wh^T @ dGates
-        // Accumulate to dH_init buffer (used as temp storage during loop, final output at t=0)
-        for (int j = 0; j < hiddenSize; j++) {
-            // Contribution from gate derivatives at position h_idx to hidden unit j
-            // Wh layout: [4*hiddenSize, hiddenSize], so Wh[k, j] = Wh[k * hiddenSize + j]
-            float contrib = dF * Wh[h_idx * hiddenSize + j];
-            contrib += dI * Wh[(hiddenSize + h_idx) * hiddenSize + j];
-            contrib += dCCandidate * Wh[(2 * hiddenSize + h_idx) * hiddenSize + j];
-            contrib += dO * Wh[(3 * hiddenSize + h_idx) * hiddenSize + j];
-            atomicAdd(&dH_init[b * hiddenSize + j], contrib);
-        }
-
-        // Update dC for next iteration
-        dC = dC_prev;
-
+        // All threads must reach this barrier
         __syncthreads();
     }
 
-    // Store initial cell state gradient
+    // Store initial cell state gradient (only valid threads)
     // dH_init already contains the accumulated gradient for h_init from the t=0 iteration
-    dC_init[gid] = dC;
+    if (isValid) {
+        dC_init[gid] = dC;
+    }
 }
 ";
     }

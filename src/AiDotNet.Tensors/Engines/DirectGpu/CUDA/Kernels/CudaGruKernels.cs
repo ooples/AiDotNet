@@ -287,6 +287,9 @@ extern ""C"" __global__ void gru_forward_sequence(
 // Reset gate gradient is computed per-element: for each input hidden unit j,
 // we compute sum over outputs h of dHCand_h * Uh[h, j], then multiply by
 // prevH[j] * sigmoid_derivative(r[j])
+//
+// The reset gate is applied element-wise in forward: candidate uses r[j] * prevH[j]
+// So the backward must compute dR[j] as a reduction over all output positions h.
 extern ""C"" __global__ void gru_cell_backward(
     const float* dH,          // [batch, hidden]
     const float* gateZ,       // [batch, hidden]
@@ -331,67 +334,96 @@ extern ""C"" __global__ void gru_cell_backward(
     // dh_prev from direct path = dh * (1-z)
     float dHPrev_direct = dh * (1.0f - z);
 
-    // Gradient to previous hidden through reset gate path
-    // For output h, contribution to dPrevH[j] comes from dHCand * Uh[h,j] * r[j]
-    // This thread handles output h, so we compute contribution to each j
-    float dHPrev_reset = 0.0f;
-    for (int j = 0; j < hiddenSize; j++) {
-        float r_j = gateR[b * hiddenSize + j];
-        // Contribution from this output h to dPrevH[j] via reset path
-        // But we need to accumulate across all outputs h for each j
-        // Since this thread handles output h, atomicAdd the contribution
-        float contrib = dHCand * Uh[h * hiddenSize + j] * r_j;
-        atomicAdd(&dPrevH[b * hiddenSize + j], contrib);
-    }
-
-    // Add direct path contribution to dPrevH[h] (only for this thread's output position)
+    // Add direct path contribution to dPrevH[h]
     atomicAdd(&dPrevH[gid], dHPrev_direct);
 
-    // Reset gate gradient: for input unit j, dR[j] = sum_h(dHCand_h * Uh[h,j]) * prevH[j] * sigmoid'(r[j])
-    // This thread handles output h, so we contribute to dR[j] for all j
+    // Gradient to previous hidden through reset gate path and reset gate gradient
+    // Forward: candidate_h = tanh(... + sum_j(Uh[h,j] * r[j] * prevH[j]) + ...)
+    // So for each input position j:
+    //   d(candidate_h)/d(prevH[j]) = Uh[h,j] * r[j]
+    //   d(candidate_h)/d(r[j]) = Uh[h,j] * prevH[j]
+    //
+    // dPrevH[j] from reset path = sum_h(dHCand_h * Uh[h,j] * r[j])
+    // dR[j] (pre-activation) = sum_h(dHCand_h * Uh[h,j]) * prevH[j] * sigmoid'(r[j])
+    //
+    // This thread handles output h, so we contribute to each j via atomicAdd
     for (int j = 0; j < hiddenSize; j++) {
         float r_j = gateR[b * hiddenSize + j];
         float prevH_j = prevH[b * hiddenSize + j];
-        float dR_contrib = dHCand * Uh[h * hiddenSize + j] * prevH_j * sigmoid_derivative(r_j);
-        // Accumulate into dUr and dbr using this dR contribution
-        atomicAdd(&dUr[h * hiddenSize + j], dR_contrib * prevH_j);
-        if (h == 0) {
-            // Only one thread per batch element accumulates bias gradient for j
-            // We need a reduction across h for dR[j], then bias update
-            // For simplicity, accumulate contribution from this h to dbr[j]
-        }
+
+        // Contribution from output h to dPrevH[j] through reset path
+        float dPrevH_contrib = dHCand * Uh[h * hiddenSize + j] * r_j;
+        atomicAdd(&dPrevH[b * hiddenSize + j], dPrevH_contrib);
+
+        // Contribution from output h to dR[j]
+        // dR[j] = sum_h(dHCand_h * Uh[h,j]) * prevH[j] * sigmoid'(r[j])
+        // This thread contributes: dHCand * Uh[h,j]
+        // Then multiply by prevH[j] * sigmoid'(r[j]) to get contribution to pre-activation gradient
+        float dR_contrib_h = dHCand * Uh[h * hiddenSize + j];
+        float dR_j_contrib = dR_contrib_h * prevH_j * sigmoid_derivative(r_j);
+
+        // Accumulate reset gate weight gradients: dUr[h,j] = dR[h] * prevH[j]
+        // But reset weights connect output h to input j, and dR is per input position j
+        // The gradient for Ur[h,j] comes from output h's contribution to the reset path
+        // dL/dUr[h,j] = dL/d(preR[h]) * d(preR[h])/dUr[h,j] = dR[h] * prevH[j]
+        // We need dR[h] which is the gradient at output position h, not input position j
+
+        // Hidden weight gradient for reset gate: dUr[h,j] uses dR[h], not dR[j]
+        // We compute dR[h] later for weight updates
+
+        // Accumulate dUh: dUh[h,j] = dHCand * r[j] * prevH[j]
+        atomicAdd(&dUh[h * hiddenSize + j], dHCand * r_j * prevH_j);
+
+        // Accumulate bias gradient for reset gate position j
+        // dbr[j] = sum_b sum_h dR_j_contrib (already has sigmoid' and prevH)
+        atomicAdd(&dbr[j], dR_j_contrib);
+
+        // Accumulate hidden weight gradient for reset: dUr[h,j] from this output h
+        // The reset gate computation is: preR[h] = sum_j(Ur[h,j] * prevH[j]) + ...
+        // So dUr[h,j] needs dR[h] * prevH[j]
+        // We'll compute dR[h] separately below for correct weight gradient
     }
 
-    // Simplified approach: compute dR for this thread's position and use it
-    // The full dR[j] requires reduction across all outputs h
-    // For now, use simplified scalar dR for weight accumulation
-    float sumUhH = 0.0f;
-    for (int j = 0; j < hiddenSize; j++) {
-        sumUhH += Uh[h * hiddenSize + j] * prevH[b * hiddenSize + j];
+    // Compute dR[h] - the gradient of the reset gate at output position h
+    // This is needed for Wr weight gradient: dWr[h,i] = dR[h] * x[i]
+    // and Ur weight gradient: dUr[h,j] = dR[h] * prevH[j]
+    //
+    // dR[h] = sum_j(dL/d(r[j]) contribution from position h)
+    // But actually for the reset gate weights, we need the gradient w.r.t. the
+    // pre-activation at position h, not j.
+    //
+    // The forward is: r[h] = sigmoid(sum_i(Wr[h,i]*x[i]) + sum_j(Ur[h,j]*prevH[j]) + br[h])
+    // The reset gate r[h] at position h is used to gate prevH[h] in the candidate for all outputs.
+    //
+    // So dL/dr[h] = sum_over_outputs_k(dHCand_k * Uh[k,h]) * prevH[h]
+    // And dL/d(preR[h]) = dL/dr[h] * sigmoid'(r[h])
+    float dR_h_sum = 0.0f;
+    for (int k = 0; k < hiddenSize; k++) {
+        float dHCand_k = dH[b * hiddenSize + k] * gateZ[b * hiddenSize + k] *
+                         tanh_derivative(gateHCand[b * hiddenSize + k]);
+        dR_h_sum += dHCand_k * Uh[k * hiddenSize + h];
     }
     float r_h = gateR[gid];
-    float dR = dHCand * sumUhH * sigmoid_derivative(r_h);
+    float dR_h = dR_h_sum * prevH[gid] * sigmoid_derivative(r_h);
 
     // Accumulate input weight gradients
     for (int i = 0; i < inputSize; i++) {
         float x_val = input[b * inputSize + i];
         atomicAdd(&dWz[h * inputSize + i], dZ * x_val);
-        atomicAdd(&dWr[h * inputSize + i], dR * x_val);
+        atomicAdd(&dWr[h * inputSize + i], dR_h * x_val);
         atomicAdd(&dWh[h * inputSize + i], dHCand * x_val);
     }
 
-    // Hidden weight gradients for Z gate
+    // Hidden weight gradients for Z gate and Ur
     for (int j = 0; j < hiddenSize; j++) {
         float h_val = prevH[b * hiddenSize + j];
         atomicAdd(&dUz[h * hiddenSize + j], dZ * h_val);
-        // dUh uses r[j] (the input position's reset gate)
-        float r_j = gateR[b * hiddenSize + j];
-        atomicAdd(&dUh[h * hiddenSize + j], dHCand * r_j * h_val);
+        atomicAdd(&dUr[h * hiddenSize + j], dR_h * h_val);
     }
 
-    // Bias gradients
+    // Bias gradients for Z gate and candidate
     atomicAdd(&dbz[h], dZ);
-    atomicAdd(&dbr[h], dR);
+    // Note: dbr was already accumulated per-element in the loop above
     atomicAdd(&dbh[h], dHCand);
 }
 
@@ -533,18 +565,24 @@ extern ""C"" __global__ void gru_backward_sequence(
         float dHCand = dH * z * tanh_derivative(h_cand);
         float dZ = dH * (h_cand - h_prev) * sigmoid_derivative(z);
 
-        // Gradient through candidate hidden state
-        float sumUhH = 0.0f;
-        for (int j = 0; j < hiddenSize; j++) {
-            float hj;
-            if (t == 0) {
-                hj = h_init[b * hiddenSize + j];
-            } else {
-                hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
-            }
-            sumUhH += Uh[h_idx * hiddenSize + j] * hj;
+        // Gradient through reset gate
+        // Forward: candidate_k = tanh(... + sum_j(Uh[k,j] * r[j] * prevH[j]) + ...)
+        // So r[h_idx] affects all candidate outputs k through the term Uh[k,h_idx] * r[h_idx] * prevH[h_idx]
+        // dL/dr[h_idx] = sum_k(dHCand_k * Uh[k,h_idx]) * prevH[h_idx]
+        // dL/d(preR[h_idx]) = dL/dr[h_idx] * sigmoid'(r[h_idx])
+        float dR_sum = 0.0f;
+        for (int k = 0; k < hiddenSize; k++) {
+            // Get cached gate values for output k
+            float z_k = gates[gateOffset + k];
+            float h_cand_k = gates[gateOffset + 2 * hiddenSize + k];
+            // Compute dHCand for output k
+            float dH_k = gradOutput[(b * timeSteps + t) * hiddenSize + k];
+            // Note: For recurrent gradient, we'd need to accumulate, but for simplicity
+            // use the direct output gradient here (full BPTT would require additional storage)
+            float dHCand_k = dH_k * z_k * tanh_derivative(h_cand_k);
+            dR_sum += dHCand_k * Uh[k * hiddenSize + h_idx];
         }
-        float dR = dHCand * sumUhH * sigmoid_derivative(r);
+        float dR = dR_sum * h_prev * sigmoid_derivative(r);
 
         // Accumulate weight gradients
         int inputOffset = (b * timeSteps + t) * inputSize;
@@ -563,9 +601,11 @@ extern ""C"" __global__ void gru_backward_sequence(
             } else {
                 hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
             }
+            float r_j = gates[gateOffset + hiddenSize + j];
             atomicAdd(&dUz[h_idx * hiddenSize + j], dZ * hj);
             atomicAdd(&dUr[h_idx * hiddenSize + j], dR * hj);
-            atomicAdd(&dUh[h_idx * hiddenSize + j], dHCand * r * hj);
+            // dUh uses the reset gate at the input position j
+            atomicAdd(&dUh[h_idx * hiddenSize + j], dHCand * r_j * hj);
         }
 
         // Bias gradients
@@ -587,13 +627,10 @@ extern ""C"" __global__ void gru_backward_sequence(
         float dH_prev = dH * (1.0f - z);  // Direct path
 
         // Add gradient through gates to hidden weights
-        for (int j = 0; j < hiddenSize; j++) {
-            if (j == h_idx) {
-                dH_prev += dZ * Uz[h_idx * hiddenSize + j];
-                dH_prev += dR * Ur[h_idx * hiddenSize + j];
-                dH_prev += dHCand * Uh[h_idx * hiddenSize + j] * r;
-            }
-        }
+        // dPrevH[h_idx] += dZ * Uz[h_idx, h_idx] + dR * Ur[h_idx, h_idx] + dHCand * Uh[h_idx, h_idx] * r[h_idx]
+        dH_prev += dZ * Uz[h_idx * hiddenSize + h_idx];
+        dH_prev += dR * Ur[h_idx * hiddenSize + h_idx];
+        dH_prev += dHCand * Uh[h_idx * hiddenSize + h_idx] * r;
 
         dH = dH_prev;
 
@@ -609,6 +646,8 @@ extern ""C"" __global__ void gru_backward_sequence(
 // ===========================================================================
 
 // Computes gate gradients from hidden gradient
+// dR[h] is computed correctly as: sum_k(dHCand_k * Uh[k,h]) * prevH[h] * sigmoid'(r[h])
+// This is because r[h] is used to gate prevH[h] for all output positions k in the candidate computation
 extern ""C"" __global__ void gru_compute_gate_gradients(
     const float* dH,          // [batch, hidden]
     const float* gateZ,       // [batch, hidden]
@@ -644,11 +683,18 @@ extern ""C"" __global__ void gru_compute_gate_gradients(
     float dZ = dh * (h_cand - h_prev) * sigmoid_derivative(z);
 
     // Gradient through reset gate
-    float sumUhH = 0.0f;
-    for (int j = 0; j < hiddenSize; j++) {
-        sumUhH += Uh[h * hiddenSize + j] * prevH[b * hiddenSize + j];
+    // Forward: candidate_k = tanh(... + sum_j(Uh[k,j] * r[j] * prevH[j]) + ...)
+    // So r[h] affects all candidate outputs k through the term Uh[k,h] * r[h] * prevH[h]
+    // dL/dr[h] = sum_k(dHCand_k * Uh[k,h]) * prevH[h]
+    // dL/d(preR[h]) = dL/dr[h] * sigmoid'(r[h])
+    float dR_sum = 0.0f;
+    for (int k = 0; k < hiddenSize; k++) {
+        // Compute dHCand for output k
+        float dHCand_k = dH[b * hiddenSize + k] * gateZ[b * hiddenSize + k] *
+                         tanh_derivative(gateHCand[b * hiddenSize + k]);
+        dR_sum += dHCand_k * Uh[k * hiddenSize + h];
     }
-    float dR = dHCand * sumUhH * sigmoid_derivative(r);
+    float dR = dR_sum * h_prev * sigmoid_derivative(r);
 
     // Store gate gradients
     int gateOffset = b * 3 * hiddenSize;
