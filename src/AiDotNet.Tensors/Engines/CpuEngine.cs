@@ -1833,11 +1833,7 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.SetFlat(i, numOps.Add(a.GetFlat(i), b.GetFlat(i)));
-        }
+        numOps.Add(a.Data.Span, b.Data.Span, result.Data.Span);
 
         return result;
     }
@@ -1950,11 +1946,7 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.SetFlat(i, numOps.Subtract(a.GetFlat(i), b.GetFlat(i)));
-        }
+        numOps.Subtract(a.Data.Span, b.Data.Span, result.Data.Span);
 
         return result;
     }
@@ -1972,11 +1964,7 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.SetFlat(i, numOps.Multiply(a.GetFlat(i), b.GetFlat(i)));
-        }
+        numOps.Multiply(a.Data.Span, b.Data.Span, result.Data.Span);
 
         return result;
     }
@@ -2043,11 +2031,7 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(tensor.Shape);
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result.SetFlat(i, numOps.Multiply(tensor.GetFlat(i), scalar));
-        }
+        numOps.MultiplyScalar(tensor.Data.Span, scalar, result.Data.Span);
 
         return result;
     }
@@ -3002,14 +2986,7 @@ public class CpuEngine : IEngine
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        T sum = numOps.Zero;
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sum = numOps.Add(sum, tensor.GetFlat(i));
-        }
-
-        return sum;
+        return numOps.Sum(tensor.Data.Span);
     }
 
     /// <inheritdoc/>
@@ -3690,10 +3667,10 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        // Convert tensor to vector, apply SIMD-optimized Sigmoid, convert back
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.Sigmoid(flatVector);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+        numOps.Sigmoid(tensor.Data.Span, result.Data.Span);
+        return result;
     }
 
     public Tensor<T> ReLU<T>(Tensor<T> tensor)
@@ -3703,18 +3680,9 @@ public class CpuEngine : IEngine
 
         // ReLU(x) = max(0, x)
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputArray = tensor.ToArray();
-        var outputArray = new T[inputArray.Length];
-
-        // Manual implementation that works for all types
-        for (int i = 0; i < inputArray.Length; i++)
-        {
-            outputArray[i] = numOps.GreaterThan(inputArray[i], numOps.Zero)
-                ? inputArray[i]
-                : numOps.Zero;
-        }
-
-        return new Tensor<T>(tensor.Shape, new Vector<T>(outputArray));
+        var result = new Tensor<T>(tensor.Shape);
+        numOps.Clip(tensor.Data.Span, numOps.Zero, numOps.MaxValue, result.Data.Span);
+        return result;
     }
 
     public Vector<T> GELU<T>(Vector<T> vector)
