@@ -660,24 +660,28 @@ extern ""C"" __global__ void contrastive_loss(
 
 extern ""C"" __global__ void contrastive_loss_backward(
     const float* pred1, const float* pred2, const float* label,
-    float* grad1, float* grad2, float margin, int size)
+    float* grad1, float* grad2, int batchSize, int embeddingDim, float margin)
 {
+    int totalSize = batchSize * embeddingDim;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= size) return;
+    if (idx >= totalSize) return;
 
     float diff = pred1[idx] - pred2[idx];
     float dist = sqrtf(diff * diff);
     float l = label[idx];
 
+    // Scale by 1/batchSize to match forward pass batch reduction
+    float scale = 1.0f / (float)batchSize;
+
     float gradient;
     if (l < 0.5f) {
-        // Similar pair: d_loss/d_pred1 = diff
-        gradient = diff;
+        // Similar pair: d_loss/d_pred1 = diff * scale
+        gradient = diff * scale;
     } else {
         // Dissimilar pair
         float margin_diff = margin - dist;
         if (margin_diff > 0.0f && dist > 1e-7f) {
-            gradient = -margin_diff * diff / dist;
+            gradient = -margin_diff * diff / dist * scale;
         } else {
             gradient = 0.0f;
         }

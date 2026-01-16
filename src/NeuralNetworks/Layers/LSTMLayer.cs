@@ -1522,6 +1522,24 @@ public class LSTMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Invalidates and disposes the stacked GPU weight buffers.
+    /// Call this after any weight modification (CPU or GPU side) to ensure
+    /// PrepareStackedWeightsForGpu will rebuild the stacked buffers.
+    /// </summary>
+    private void InvalidateGpuStackedWeights()
+    {
+        _gpuStackedWeightsIh?.Dispose();
+        _gpuStackedWeightsIh = null;
+        _gpuStackedWeightsHh?.Dispose();
+        _gpuStackedWeightsHh = null;
+        _gpuStackedBiasIh?.Dispose();
+        _gpuStackedBiasIh = null;
+        _gpuStackedBiasHh?.Dispose();
+        _gpuStackedBiasHh = null;
+        _gpuStackedWeightsValid = false;
+    }
+
+    /// <summary>
     /// Extracts per-gate gradients from stacked gradient buffers after fused backward kernel.
     /// </summary>
     private void UnstackGradients(
@@ -1758,6 +1776,9 @@ public class LSTMLayer<T> : LayerBase<T>
         _biasI = _gpuBiasI.ToTensor();
         _biasC = _gpuBiasC.ToTensor();
         _biasO = _gpuBiasO.ToTensor();
+
+        // Invalidate stacked weight buffers since individual weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -2496,6 +2517,9 @@ public class LSTMLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_biasC);
             Engine.InvalidatePersistentTensor(_biasO);
         }
+
+        // Invalidate stacked weight buffers since weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -2570,6 +2594,9 @@ public class LSTMLayer<T> : LayerBase<T>
         _biasI = SerializationHelper<T>.DeserializeTensor(reader);
         _biasC = SerializationHelper<T>.DeserializeTensor(reader);
         _biasO = SerializationHelper<T>.DeserializeTensor(reader);
+
+        // Invalidate stacked weight buffers since weights have been replaced from deserialization
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>

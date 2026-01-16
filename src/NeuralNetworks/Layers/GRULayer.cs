@@ -1368,6 +1368,9 @@ public class GRULayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_br);
             Engine.InvalidatePersistentTensor(_bh);
         }
+
+        // Invalidate stacked weight buffers since weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -1442,6 +1445,9 @@ public class GRULayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_bz);
         Engine.InvalidatePersistentTensor(_br);
         Engine.InvalidatePersistentTensor(_bh);
+
+        // Invalidate stacked weight buffers since weights have been replaced
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -2076,6 +2082,24 @@ public class GRULayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Invalidates and disposes the stacked GPU weight buffers.
+    /// Call this after any weight modification (CPU or GPU side) to ensure
+    /// PrepareStackedWeightsForGpu will rebuild the stacked buffers.
+    /// </summary>
+    private void InvalidateGpuStackedWeights()
+    {
+        _gpuStackedWeightsIh?.Dispose();
+        _gpuStackedWeightsIh = null;
+        _gpuStackedWeightsHh?.Dispose();
+        _gpuStackedWeightsHh = null;
+        _gpuStackedBiasIh?.Dispose();
+        _gpuStackedBiasIh = null;
+        _gpuStackedBiasHh?.Dispose();
+        _gpuStackedBiasHh = null;
+        _gpuStackedWeightsValid = false;
+    }
+
+    /// <summary>
     /// Extracts per-gate gradients from stacked gradient buffers after fused backward kernel.
     /// </summary>
     private void UnstackGradients(
@@ -2274,6 +2298,9 @@ public class GRULayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBz.Buffer, _gpuBzGradient.Buffer, bzState, _bz.Length);
         config.ApplyUpdate(backend, _gpuBr.Buffer, _gpuBrGradient.Buffer, brState, _br.Length);
         config.ApplyUpdate(backend, _gpuBh.Buffer, _gpuBhGradient.Buffer, bhState, _bh.Length);
+
+        // Invalidate stacked weight buffers since individual weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>

@@ -550,8 +550,9 @@ extern ""C"" __global__ void contrastive_loss(
 
 extern ""C"" __global__ void contrastive_loss_backward(
     const float* pred1, const float* pred2, const float* label,
-    float* grad1, float* grad2, float margin, int size)
+    float* grad1, float* grad2, int batchSize, int embeddingDim, float margin)
 {
+    int size = batchSize * embeddingDim;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
 
@@ -559,13 +560,16 @@ extern ""C"" __global__ void contrastive_loss_backward(
     float dist = sqrtf(diff * diff);
     float l = label[idx];
 
+    // Match CPU backend: multiply by 2 and scale by 1/size (batch-wise reduction)
     float gradient;
     if (l < 0.5f) {
-        gradient = diff;
+        // Similar pair: gradient = 2 * diff / size
+        gradient = 2.0f * diff / (float)size;
     } else {
+        // Dissimilar pair: gradient = -2 * margin_diff * diff / (dist * size)
         float margin_diff = margin - dist;
         if (margin_diff > 0.0f && dist > 1e-7f) {
-            gradient = -margin_diff * diff / dist;
+            gradient = -2.0f * margin_diff * diff / (dist * (float)size);
         } else {
             gradient = 0.0f;
         }

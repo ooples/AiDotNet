@@ -1682,22 +1682,30 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // For single batch processing
         for (int b = 0; b < batchSize; b++)
         {
-            // Get output gradient for this batch
-            int gradOffset = b * numNodes * _outputFeatures;
+            // Get output gradient for this batch using GPU view (no CPU roundtrip)
             IGpuBuffer batchGradOutput;
-            bool ownsBatchGrad = false;
-
             if (batchSize == 1)
             {
                 batchGradOutput = outputGradient.Buffer;
             }
             else
             {
-                var fullGrad = backend.DownloadBuffer(outputGradient.Buffer);
-                var batchGrad = new float[numNodes * _outputFeatures];
-                Array.Copy(fullGrad, gradOffset, batchGrad, 0, numNodes * _outputFeatures);
-                batchGradOutput = backend.AllocateBuffer(batchGrad);
-                ownsBatchGrad = true;
+                int gradOffset = b * numNodes * _outputFeatures;
+                var gradView = outputGradient.CreateView(gradOffset, [numNodes, _outputFeatures]);
+                batchGradOutput = gradView.Buffer;
+            }
+
+            // Get batch input using GPU view
+            IGpuBuffer batchInput;
+            if (batchSize == 1)
+            {
+                batchInput = _gpuLastInput.Buffer;
+            }
+            else
+            {
+                int inputOffset = b * numNodes * _inputFeatures;
+                var inputView = _gpuLastInput.CreateView(inputOffset, [numNodes, _inputFeatures]);
+                batchInput = inputView.Buffer;
             }
 
             // Backward through update gate sigmoid
@@ -1706,7 +1714,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             {
                 // dz = (m - h) * dh'
                 using var mMinusH = backend.AllocateBuffer(numNodes * _outputFeatures);
-                backend.Subtract(_gpuAggregatedCache, _gpuLastInput.Buffer, mMinusH, numNodes * _outputFeatures);
+                backend.Subtract(_gpuAggregatedCache, batchInput, mMinusH, numNodes * _outputFeatures);
                 backend.Multiply(mMinusH, batchGradOutput, tempGradBuffer1, numNodes * _outputFeatures);
                 backend.SigmoidBackward(tempGradBuffer1, _gpuUpdateGateCache, gradUpdateGatePre, numNodes * _outputFeatures);
             }
@@ -1743,10 +1751,22 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 backend.Add(gradInputBuffer, tempGradBuffer2, gradInputBuffer, numNodes * _inputFeatures);
             }
 
-            if (ownsBatchGrad)
-            {
-                batchGradOutput.Dispose();
-            }
+            // Compute update weight gradients: dW = input^T @ gradUpdateGatePre
+            // Update weights gradient: [inputFeatures, outputFeatures]
+            using var inputTransposed = backend.AllocateBuffer(_inputFeatures * numNodes);
+            backend.Transpose(batchInput, inputTransposed, numNodes, _inputFeatures);
+
+            using var tempWeightGrad = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
+            backend.Gemm(inputTransposed, gradUpdateGatePre, tempWeightGrad, _inputFeatures, _outputFeatures, numNodes);
+            backend.Add(_gpuUpdateWeightsGradient, tempWeightGrad, _gpuUpdateWeightsGradient, _inputFeatures * _outputFeatures);
+
+            // Update message weight gradient: aggregated^T @ gradUpdateGatePre
+            using var aggregatedTransposed = backend.AllocateBuffer(_messageFeatures * numNodes);
+            backend.Transpose(_gpuAggregatedCache, aggregatedTransposed, numNodes, _messageFeatures);
+
+            using var tempMsgWeightGrad = backend.AllocateBuffer(_messageFeatures * _outputFeatures);
+            backend.Gemm(aggregatedTransposed, gradUpdateGatePre, tempMsgWeightGrad, _messageFeatures, _outputFeatures, numNodes);
+            backend.Add(_gpuUpdateMsgWeightsGradient, tempMsgWeightGrad, _gpuUpdateMsgWeightsGradient, _messageFeatures * _outputFeatures);
         }
 
         // Step 2: Backward through aggregation (scatter-add backward = gather)
@@ -1759,6 +1779,12 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Bias gradient: sum over edges
         backend.SumAxis(gradMsgBuffer, _gpuMsgBias2Gradient, numEdges, _messageFeatures);
 
+        // Weight gradient for layer 2: msgHidden^T @ gradMsg
+        // msgHidden is cached in _gpuMsgHiddenCache [numEdges, _messageFeatures]
+        using var msgHiddenTransposed = backend.AllocateBuffer(_messageFeatures * numEdges);
+        backend.Transpose(_gpuMsgHiddenCache, msgHiddenTransposed, numEdges, _messageFeatures);
+        backend.Gemm(msgHiddenTransposed, gradMsgBuffer, _gpuMsgWeights2Gradient, _messageFeatures, _messageFeatures, numEdges);
+
         // Step 4: Backward through ReLU
         using var gradPreRelu = backend.AllocateBuffer(numEdges * _messageFeatures);
         backend.ReluBackward(gradMsgHiddenBuffer, _gpuMsgHiddenCache, gradPreRelu, numEdges * _messageFeatures);
@@ -1770,24 +1796,29 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Bias gradient: sum over edges
         backend.SumAxis(gradPreRelu, _gpuMsgBias1Gradient, numEdges, _messageFeatures);
 
+        // Weight gradient for layer 1: edgeConcat^T @ gradPreRelu
+        // edgeConcat is cached in _gpuEdgeConcatCache [numEdges, messageInputDim]
+        using var edgeConcatTransposed = backend.AllocateBuffer(messageInputDim * numEdges);
+        backend.Transpose(_gpuEdgeConcatCache, edgeConcatTransposed, numEdges, messageInputDim);
+        backend.Gemm(edgeConcatTransposed, gradPreRelu, _gpuMsgWeights1Gradient, messageInputDim, _messageFeatures, numEdges);
+
         // Step 6: Backward through edge feature gathering
         // Split gradConcat into gradSrc and gradTgt, then scatter to input gradient
         using var gradEdgeSrc = backend.AllocateBuffer(numEdges * _inputFeatures);
         using var gradEdgeTgt = backend.AllocateBuffer(numEdges * _inputFeatures);
 
-        // Extract first half (source features gradient)
-        backend.Copy(gradConcatBuffer, 0, gradEdgeSrc, 0, numEdges * _inputFeatures);
-
-        // Extract second half (target features gradient) - download, extract, upload
-        var concatData = backend.DownloadBuffer(gradConcatBuffer);
-        var tgtGradData = new float[numEdges * _inputFeatures];
+        // Extract source and target feature gradients using GPU Copy with offsets
+        // gradConcat layout: [edge0_src(inputF) | edge0_tgt(inputF) | edge1_src(inputF) | edge1_tgt(inputF) | ...]
+        // Need: gradEdgeSrc = [e0_src | e1_src | ...], gradEdgeTgt = [e0_tgt | e1_tgt | ...]
         for (int e = 0; e < numEdges; e++)
         {
-            Array.Copy(concatData, e * messageInputDim + _inputFeatures, tgtGradData, e * _inputFeatures, _inputFeatures);
+            int concatOffset = e * messageInputDim;
+            int dstOffset = e * _inputFeatures;
+            // Copy source features gradient
+            backend.Copy(gradConcatBuffer, concatOffset, gradEdgeSrc, dstOffset, _inputFeatures);
+            // Copy target features gradient (starts at inputFeatures offset in each row)
+            backend.Copy(gradConcatBuffer, concatOffset + _inputFeatures, gradEdgeTgt, dstOffset, _inputFeatures);
         }
-        var tgtGradBuffer = backend.AllocateBuffer(tgtGradData);
-        backend.Copy(tgtGradBuffer, gradEdgeTgt, numEdges * _inputFeatures);
-        tgtGradBuffer.Dispose();
 
         // Scatter-add gradients back to input
         backend.ScatterAdd(gradEdgeSrc, _gpuEdgeSrcIndices, gradInputBuffer, numEdges * _inputFeatures, numNodes * _inputFeatures);

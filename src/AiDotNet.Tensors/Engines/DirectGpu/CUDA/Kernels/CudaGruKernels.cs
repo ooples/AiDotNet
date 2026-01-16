@@ -69,63 +69,76 @@ extern ""C"" __global__ void gru_cell_forward(
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = batch * hiddenSize;
-
-    if (gid >= totalElements) return;
-
     int b = gid / hiddenSize;
     int h = gid % hiddenSize;
+    int isValid = (gid < totalElements) ? 1 : 0;
 
-    // Compute update gate z: sigmoid(Wz*x + Uz*h + bz)
-    float sumZ = bz[h];
-    float sumR = br[h];
+    // Phase 1: Compute z and r gates for all threads
+    float z = 0.0f;
+    float r = 0.0f;
 
-    // Input contribution
-    for (int i = 0; i < inputSize; i++) {
-        float x_val = input[b * inputSize + i];
-        sumZ += Wz[h * inputSize + i] * x_val;
-        sumR += Wr[h * inputSize + i] * x_val;
+    if (isValid) {
+        // Compute update gate z: sigmoid(Wz*x + Uz*h + bz)
+        float sumZ = bz[h];
+        float sumR = br[h];
+
+        // Input contribution
+        for (int i = 0; i < inputSize; i++) {
+            float x_val = input[b * inputSize + i];
+            sumZ += Wz[h * inputSize + i] * x_val;
+            sumR += Wr[h * inputSize + i] * x_val;
+        }
+
+        // Hidden contribution for z and r gates
+        for (int j = 0; j < hiddenSize; j++) {
+            float h_val = prevH[b * hiddenSize + j];
+            sumZ += Uz[h * hiddenSize + j] * h_val;
+            sumR += Ur[h * hiddenSize + j] * h_val;
+        }
+
+        z = sigmoid(sumZ);
+        r = sigmoid(sumR);
+
+        // Store r to global buffer so other threads can read it
+        gateR[gid] = r;
     }
 
-    // Hidden contribution for z and r gates
-    for (int j = 0; j < hiddenSize; j++) {
-        float h_val = prevH[b * hiddenSize + j];
-        sumZ += Uz[h * hiddenSize + j] * h_val;
-        sumR += Ur[h * hiddenSize + j] * h_val;
+    // Synchronize to ensure all r values are written before reading
+    __syncthreads();
+
+    // Phase 2: Compute candidate using per-element r_j values
+    float h_candidate = 0.0f;
+
+    if (isValid) {
+        float sumH = bh[h];
+
+        for (int i = 0; i < inputSize; i++) {
+            float x_val = input[b * inputSize + i];
+            sumH += Wh[h * inputSize + i] * x_val;
+        }
+
+        // Use per-element reset gate r_j for proper GRU computation
+        // In standard GRU: candidate = tanh(Wh*x + Uh*(r ⊙ h_prev) + bh)
+        for (int j = 0; j < hiddenSize; j++) {
+            float h_val = prevH[b * hiddenSize + j];
+            float r_j = gateR[b * hiddenSize + j];  // Read r for hidden unit j
+            sumH += Uh[h * hiddenSize + j] * r_j * h_val;
+        }
+
+        h_candidate = tanhf(sumH);
+
+        // Compute new hidden: (1-z)*h_prev + z*h_candidate
+        float prevHVal = prevH[gid];
+        float newHVal = (1.0f - z) * prevHVal + z * h_candidate;
+
+        // Store outputs
+        newH[gid] = newHVal;
+
+        // Store gate values for backward pass
+        gateZ[gid] = z;
+        // gateR already stored above
+        gateHCandidate[gid] = h_candidate;
     }
-
-    float z = sigmoid(sumZ);
-    float r = sigmoid(sumR);
-
-    // Compute candidate hidden: tanh(Wh*x + Uh*(r*h) + bh)
-    float sumH = bh[h];
-
-    for (int i = 0; i < inputSize; i++) {
-        float x_val = input[b * inputSize + i];
-        sumH += Wh[h * inputSize + i] * x_val;
-    }
-
-    for (int j = 0; j < hiddenSize; j++) {
-        float h_val = prevH[b * hiddenSize + j];
-        // Reset gate applied: r * h_prev
-        // But we need r for the same hidden index - this is element-wise
-        // Actually in standard GRU, r is applied element-wise to h_prev
-        // So we need the full r vector for this computation
-        sumH += Uh[h * hiddenSize + j] * r * h_val;
-    }
-
-    float h_candidate = tanhf(sumH);
-
-    // Compute new hidden: (1-z)*h_prev + z*h_candidate
-    float prevHVal = prevH[gid];
-    float newHVal = (1.0f - z) * prevHVal + z * h_candidate;
-
-    // Store outputs
-    newH[gid] = newHVal;
-
-    // Store gate values for backward pass
-    gateZ[gid] = z;
-    gateR[gid] = r;
-    gateHCandidate[gid] = h_candidate;
 }
 
 // ===========================================================================
@@ -193,10 +206,14 @@ extern ""C"" __global__ void gru_forward_sequence(
         float z = sigmoid(sumZ);
         float r = sigmoid(sumR);
 
-        // Sync to ensure all threads have computed r
+        // Store r to gates buffer immediately so other threads can read it
+        int gateOffset = t * batch * 3 * hiddenSize + b * 3 * hiddenSize;
+        gates[gateOffset + hiddenSize + h_idx] = r;
+
+        // Sync to ensure all threads have stored their r values
         __syncthreads();
 
-        // Compute candidate hidden
+        // Compute candidate hidden using per-element reset gate
         float sumH = bh[h_idx];
 
         for (int i = 0; i < inputSize; i++) {
@@ -204,8 +221,8 @@ extern ""C"" __global__ void gru_forward_sequence(
             sumH += Wh[h_idx * inputSize + i] * x_val;
         }
 
-        // For the hidden-to-hidden with reset gate, we need element-wise r
-        // Read r values and previous h
+        // Use per-element reset gate r_j for proper GRU computation
+        // In standard GRU: candidate = tanh(Wh*x + Uh*(r ⊙ h_prev) + bh)
         for (int j = 0; j < hiddenSize; j++) {
             float hj;
             if (t == 0) {
@@ -213,10 +230,8 @@ extern ""C"" __global__ void gru_forward_sequence(
             } else {
                 hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
             }
-            // Get r for position j - read from gates if stored, or recompute
-            // For simplicity, use our own r (element-wise approximation)
-            // In true GRU, each hidden unit j has its own r_j value
-            float rj = r;  // Simplified: use same r for all
+            // Read r_j for hidden unit j from gates buffer
+            float rj = gates[gateOffset + hiddenSize + j];
             sumH += Uh[h_idx * hiddenSize + j] * rj * hj;
         }
 
@@ -240,10 +255,8 @@ extern ""C"" __global__ void gru_forward_sequence(
         // Store output
         output[(b * timeSteps + t) * hiddenSize + h_idx] = h_val;
 
-        // Store gates for backward pass
-        int gateOffset = t * batch * 3 * hiddenSize + b * 3 * hiddenSize;
+        // Store remaining gates for backward pass (r was stored earlier)
         gates[gateOffset + h_idx] = z;
-        gates[gateOffset + hiddenSize + h_idx] = r;
         gates[gateOffset + 2 * hiddenSize + h_idx] = h_candidate;
 
         __syncthreads();

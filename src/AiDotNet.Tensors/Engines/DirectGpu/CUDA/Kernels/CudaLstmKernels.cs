@@ -461,8 +461,19 @@ extern ""C"" __global__ void lstm_backward_sequence(
     float dH = 0.0f;
     float dC = 0.0f;
 
+    // Clear dH_init buffer for use as intermediate storage during BPTT
+    dH_init[gid] = 0.0f;
+    __syncthreads();
+
     // Process timesteps in reverse (BPTT)
     for (int t = timeSteps - 1; t >= 0; t--) {
+        // Read accumulated recurrent gradient from previous iteration (if any)
+        if (t < timeSteps - 1) {
+            dH = dH_init[gid];
+            dH_init[gid] = 0.0f;  // Clear for next accumulation
+        }
+        __syncthreads();
+
         // Add gradient from output at this timestep
         dH += gradOutput[(b * timeSteps + t) * hiddenSize + h_idx];
 
@@ -552,11 +563,19 @@ extern ""C"" __global__ void lstm_backward_sequence(
             atomicAdd(&gradInput[gradInputOffset + i], grad_i);
         }
 
-        // Gradient to previous hidden state for next iteration
-        dH = 0.0f;
-        for (int k = 0; k < hiddenSize; k++) {
-            // This is complex - need gradient from this hidden to all gates
-            // For simplicity, compute in separate pass
+        // Gradient to previous hidden state for BPTT
+        // dH_prev[j] = sum_k (dGate[k] * Wh[k, j]) for all four gates
+        // This is a matrix-vector product: dH_prev = Wh^T @ dGates
+        // Each thread k contributes: dGates[k] * Wh[k, j] for all j
+        // Accumulate to dH_init buffer (used as temp storage during loop, final output at t=0)
+        for (int j = 0; j < hiddenSize; j++) {
+            // Contribution from gate derivatives at position h_idx to hidden unit j
+            // Wh layout: [4*hiddenSize, hiddenSize], so Wh[k, j] = Wh[k * hiddenSize + j]
+            float contrib = dF * Wh[h_idx * hiddenSize + j];
+            contrib += dI * Wh[(hiddenSize + h_idx) * hiddenSize + j];
+            contrib += dCCandidate * Wh[(2 * hiddenSize + h_idx) * hiddenSize + j];
+            contrib += dO * Wh[(3 * hiddenSize + h_idx) * hiddenSize + j];
+            atomicAdd(&dH_init[b * hiddenSize + j], contrib);
         }
 
         // Update dC for next iteration
@@ -565,7 +584,8 @@ extern ""C"" __global__ void lstm_backward_sequence(
         __syncthreads();
     }
 
-    // Store initial state gradients
+    // Store initial cell state gradient
+    // dH_init already contains the accumulated gradient for h_init from the t=0 iteration
     dC_init[gid] = dC;
 }
 

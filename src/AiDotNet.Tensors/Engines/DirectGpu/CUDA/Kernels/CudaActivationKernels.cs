@@ -137,6 +137,15 @@ extern ""C"" __global__ void hardtanh(const float* input, float* output, int siz
     output[idx] = fminf(fmaxf(x, -1.0f), 1.0f);
 }
 
+// Leaky ReLU: x > 0 ? x : alpha * x
+extern ""C"" __global__ void leaky_relu(const float* input, float* output, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    output[idx] = x > 0.0f ? x : alpha * x;
+}
+
 // ===========================================================================
 // ACTIVATION BACKWARD KERNELS
 // ===========================================================================
@@ -714,6 +723,7 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
                 "selu",
                 "hardsigmoid",
                 "hardtanh",
+                "leaky_relu",
                 "softmax",
                 // Activation backward
                 "relu_backward",

@@ -122,79 +122,95 @@ extern ""C"" __global__ void gru_forward_sequence(
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = batch * hiddenSize;
-
-    if (gid >= totalElements) return;
-
     int b = gid / hiddenSize;
     int h_idx = gid % hiddenSize;
+    int isValid = (gid < totalElements) ? 1 : 0;
 
-    float h_val = h_init[gid];
+    float h_val = 0.0f;
+    if (isValid) {
+        h_val = h_init[gid];
+    }
 
     for (int t = 0; t < timeSteps; t++) {
-        float sumZ = bz[h_idx];
-        float sumR = br[h_idx];
+        float z = 0.0f;
+        float r = 0.0f;
+        int gateOffset = t * batch * 3 * hiddenSize + b * 3 * hiddenSize;
 
-        int inputOffset = (b * timeSteps + t) * inputSize;
-        for (int i = 0; i < inputSize; i++) {
-            float x_val = input[inputOffset + i];
-            sumZ += Wz[h_idx * inputSize + i] * x_val;
-            sumR += Wr[h_idx * inputSize + i] * x_val;
-        }
+        if (isValid) {
+            float sumZ = bz[h_idx];
+            float sumR = br[h_idx];
 
-        for (int j = 0; j < hiddenSize; j++) {
-            float hj;
-            if (t == 0) {
-                hj = h_init[b * hiddenSize + j];
-            } else {
-                hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+            int inputOffset = (b * timeSteps + t) * inputSize;
+            for (int i = 0; i < inputSize; i++) {
+                float x_val = input[inputOffset + i];
+                sumZ += Wz[h_idx * inputSize + i] * x_val;
+                sumR += Wr[h_idx * inputSize + i] * x_val;
             }
-            sumZ += Uz[h_idx * hiddenSize + j] * hj;
-            sumR += Ur[h_idx * hiddenSize + j] * hj;
+
+            for (int j = 0; j < hiddenSize; j++) {
+                float hj;
+                if (t == 0) {
+                    hj = h_init[b * hiddenSize + j];
+                } else {
+                    hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+                }
+                sumZ += Uz[h_idx * hiddenSize + j] * hj;
+                sumR += Ur[h_idx * hiddenSize + j] * hj;
+            }
+
+            z = sigmoid(sumZ);
+            r = sigmoid(sumR);
+
+            // Store r to gates buffer immediately so other threads can read it
+            gates[gateOffset + hiddenSize + h_idx] = r;
         }
 
-        float z = sigmoid(sumZ);
-        float r = sigmoid(sumR);
-
+        // Sync to ensure all threads have stored their r values
         __syncthreads();
 
-        float sumH = bh[h_idx];
+        if (isValid) {
+            float sumH = bh[h_idx];
 
-        for (int i = 0; i < inputSize; i++) {
-            float x_val = input[inputOffset + i];
-            sumH += Wh[h_idx * inputSize + i] * x_val;
-        }
-
-        for (int j = 0; j < hiddenSize; j++) {
-            float hj;
-            if (t == 0) {
-                hj = h_init[b * hiddenSize + j];
-            } else {
-                hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+            int inputOffset = (b * timeSteps + t) * inputSize;
+            for (int i = 0; i < inputSize; i++) {
+                float x_val = input[inputOffset + i];
+                sumH += Wh[h_idx * inputSize + i] * x_val;
             }
-            float rj = r;
-            sumH += Uh[h_idx * hiddenSize + j] * rj * hj;
+
+            // Use per-element reset gate r_j for proper GRU computation
+            // In standard GRU: candidate = tanh(Wh*x + Uh*(r ⊙ h_prev) + bh)
+            for (int j = 0; j < hiddenSize; j++) {
+                float hj;
+                if (t == 0) {
+                    hj = h_init[b * hiddenSize + j];
+                } else {
+                    hj = h_states[(t - 1) * batch * hiddenSize + b * hiddenSize + j];
+                }
+                // Read r_j for hidden unit j from gates buffer
+                float rj = gates[gateOffset + hiddenSize + j];
+                sumH += Uh[h_idx * hiddenSize + j] * rj * hj;
+            }
+
+            float h_candidate = tanhf(sumH);
+
+            float h_prev;
+            if (t == 0) {
+                h_prev = h_init[gid];
+            } else {
+                h_prev = h_states[(t - 1) * batch * hiddenSize + gid];
+            }
+
+            h_val = (1.0f - z) * h_prev + z * h_candidate;
+
+            int stateOffset = t * batch * hiddenSize + gid;
+            h_states[stateOffset] = h_val;
+
+            output[(b * timeSteps + t) * hiddenSize + h_idx] = h_val;
+
+            // Store remaining gates for backward pass (r was stored earlier)
+            gates[gateOffset + h_idx] = z;
+            gates[gateOffset + 2 * hiddenSize + h_idx] = h_candidate;
         }
-
-        float h_candidate = tanhf(sumH);
-
-        float h_prev;
-        if (t == 0) {
-            h_prev = h_init[gid];
-        } else {
-            h_prev = h_states[(t - 1) * batch * hiddenSize + gid];
-        }
-
-        h_val = (1.0f - z) * h_prev + z * h_candidate;
-
-        int stateOffset = t * batch * hiddenSize + gid;
-        h_states[stateOffset] = h_val;
-
-        output[(b * timeSteps + t) * hiddenSize + h_idx] = h_val;
-
-        int gateOffset = t * batch * 3 * hiddenSize + b * 3 * hiddenSize;
-        gates[gateOffset + h_idx] = z;
-        gates[gateOffset + hiddenSize + h_idx] = r;
-        gates[gateOffset + 2 * hiddenSize + h_idx] = h_candidate;
 
         __syncthreads();
     }
@@ -396,11 +412,17 @@ extern ""C"" __global__ void gru_backward_sequence(
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = batch * hiddenSize;
-
-    if (gid >= totalElements) return;
-
     int b = gid / hiddenSize;
     int h_idx = gid % hiddenSize;
+
+    // Initialize dH_init buffer for use as intermediate storage during BPTT
+    // (all threads participate, including out-of-bounds ones for sync safety)
+    if (gid < totalElements) {
+        dH_init[gid] = 0.0f;
+    }
+    __syncthreads();
+
+    if (gid >= totalElements) return;
 
     float dH = 0.0f;
 
@@ -467,21 +489,30 @@ extern ""C"" __global__ void gru_backward_sequence(
             atomicAdd(&gradInput[gradInputOffset + i], grad_i);
         }
 
-        float dH_prev = dH * (1.0f - z);
+        // Gradient to previous hidden state for BPTT
+        // dH_prev[j] = dH * (1-z) * delta(j==h_idx) + sum_k (dZ[k]*Uz[k,j] + dR[k]*Ur[k,j] + dHCand[k]*Uh[k,j]*r)
+        // Each thread k contributes its gate derivatives to all hidden units j via atomicAdd
+        float dH_direct = dH * (1.0f - z);  // Direct contribution for this hidden unit
 
+        // Accumulate cross-hidden contributions to dH_init buffer
         for (int j = 0; j < hiddenSize; j++) {
-            if (j == h_idx) {
-                dH_prev += dZ * Uz[h_idx * hiddenSize + j];
-                dH_prev += dR * Ur[h_idx * hiddenSize + j];
-                dH_prev += dHCand * Uh[h_idx * hiddenSize + j] * r;
-            }
+            // Contribution from gate derivatives at position h_idx to hidden unit j
+            float contrib = dZ * Uz[h_idx * hiddenSize + j];
+            contrib += dR * Ur[h_idx * hiddenSize + j];
+            contrib += dHCand * Uh[h_idx * hiddenSize + j] * r;
+            atomicAdd(&dH_init[b * hiddenSize + j], contrib);
         }
 
-        dH = dH_prev;
+        __syncthreads();
+
+        // Read accumulated gradient and add direct contribution
+        dH = dH_init[gid] + dH_direct;
+        dH_init[gid] = 0.0f;  // Clear for next iteration
 
         __syncthreads();
     }
 
+    // Final dH is the gradient for h_init
     dH_init[gid] = dH;
 }
 ";

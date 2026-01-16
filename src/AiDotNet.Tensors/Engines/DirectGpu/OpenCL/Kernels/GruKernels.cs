@@ -130,78 +130,90 @@ __kernel void gru_forward_sequence(
 {
     int gid = get_global_id(0);
     int totalElements = batch * hiddenSize;
-
-    if (gid >= totalElements) return;
-
     int b = gid / hiddenSize;
     int h = gid % hiddenSize;
+    int isValid = (gid < totalElements) ? 1 : 0;
 
-    // Initialize from hInit
-    float hPrev = hInit[gid];
+    // Initialize from hInit (only valid threads)
+    float hPrev = 0.0f;
+    if (isValid) {
+        hPrev = hInit[gid];
+        // Store initial state
+        allH[gid] = hPrev;
+    }
 
-    // Store initial state
-    allH[gid] = hPrev;
+    // Barrier to ensure all threads have written initial hidden state
+    // Note: All threads must reach barrier for proper synchronization
+    barrier(CLK_GLOBAL_MEM_FENCE);
 
     // Process each timestep
     for (int t = 0; t < seqLen; t++) {
-        // Compute gate pre-activations
-        float sumR = biasIh[h] + biasHh[h];
-        float sumZ = biasIh[hiddenSize + h] + biasHh[hiddenSize + h];
-        float sumN_input = biasIh[2 * hiddenSize + h];
-        float sumN_hidden = biasHh[2 * hiddenSize + h];
+        if (isValid) {
+            // Compute gate pre-activations
+            float sumR = biasIh[h] + biasHh[h];
+            float sumZ = biasIh[hiddenSize + h] + biasHh[hiddenSize + h];
+            float sumN_input = biasIh[2 * hiddenSize + h];
+            float sumN_hidden = biasHh[2 * hiddenSize + h];
 
-        // Input contribution at this timestep
-        int inputOffset = t * batch * inputSize + b * inputSize;
-        for (int j = 0; j < inputSize; j++) {
-            float inVal = input[inputOffset + j];
-            sumR += inVal * weightsIh[h * inputSize + j];
-            sumZ += inVal * weightsIh[(hiddenSize + h) * inputSize + j];
-            sumN_input += inVal * weightsIh[(2 * hiddenSize + h) * inputSize + j];
+            // Input contribution at this timestep
+            int inputOffset = t * batch * inputSize + b * inputSize;
+            for (int j = 0; j < inputSize; j++) {
+                float inVal = input[inputOffset + j];
+                sumR += inVal * weightsIh[h * inputSize + j];
+                sumZ += inVal * weightsIh[(hiddenSize + h) * inputSize + j];
+                sumN_input += inVal * weightsIh[(2 * hiddenSize + h) * inputSize + j];
+            }
+
+            // Previous hidden state contribution for r and z
+            for (int j = 0; j < hiddenSize; j++) {
+                float hVal = (j == h) ? hPrev : allH[t * batch * hiddenSize + b * hiddenSize + j];
+                sumR += hVal * weightsHh[h * hiddenSize + j];
+                sumZ += hVal * weightsHh[(hiddenSize + h) * hiddenSize + j];
+            }
+
+            // Apply activations for r and z
+            float r = sigmoid_fn(sumR);
+            float z = sigmoid_fn(sumZ);
+
+            // Hidden contribution for n gate (gated by reset)
+            for (int j = 0; j < hiddenSize; j++) {
+                float hVal = (j == h) ? hPrev : allH[t * batch * hiddenSize + b * hiddenSize + j];
+                sumN_hidden += (r * hVal) * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
+            }
+
+            // New gate activation
+            float n = tanh(sumN_input + sumN_hidden);
+
+            // Hidden state update
+            float newH = (1.0f - z) * n + z * hPrev;
+
+            // Store output
+            int outIdx = t * batch * hiddenSize + gid;
+            output[outIdx] = newH;
+
+            // Store all states for backward pass
+            int stateIdx = (t + 1) * batch * hiddenSize + gid;
+            allH[stateIdx] = newH;
+
+            // Cache gate values for backward
+            int gateIdx = (t * batch * hiddenSize + gid) * 3;
+            cacheGates[gateIdx + 0] = r;
+            cacheGates[gateIdx + 1] = z;
+            cacheGates[gateIdx + 2] = n;
+
+            // Update for next iteration
+            hPrev = newH;
         }
 
-        // Previous hidden state contribution for r and z
-        for (int j = 0; j < hiddenSize; j++) {
-            float hVal = (j == h) ? hPrev : allH[t * batch * hiddenSize + b * hiddenSize + j];
-            sumR += hVal * weightsHh[h * hiddenSize + j];
-            sumZ += hVal * weightsHh[(hiddenSize + h) * hiddenSize + j];
-        }
-
-        // Apply activations for r and z
-        float r = sigmoid_fn(sumR);
-        float z = sigmoid_fn(sumZ);
-
-        // Hidden contribution for n gate (gated by reset)
-        for (int j = 0; j < hiddenSize; j++) {
-            float hVal = (j == h) ? hPrev : allH[t * batch * hiddenSize + b * hiddenSize + j];
-            sumN_hidden += (r * hVal) * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
-        }
-
-        // New gate activation
-        float n = tanh(sumN_input + sumN_hidden);
-
-        // Hidden state update
-        float newH = (1.0f - z) * n + z * hPrev;
-
-        // Store output
-        int outIdx = t * batch * hiddenSize + gid;
-        output[outIdx] = newH;
-
-        // Store all states for backward pass
-        int stateIdx = (t + 1) * batch * hiddenSize + gid;
-        allH[stateIdx] = newH;
-
-        // Cache gate values for backward
-        int gateIdx = (t * batch * hiddenSize + gid) * 3;
-        cacheGates[gateIdx + 0] = r;
-        cacheGates[gateIdx + 1] = z;
-        cacheGates[gateIdx + 2] = n;
-
-        // Update for next iteration
-        hPrev = newH;
+        // Barrier to ensure all threads have written new hidden state before next iteration
+        // All threads (valid and invalid) must reach this barrier
+        barrier(CLK_GLOBAL_MEM_FENCE);
     }
 
-    // Store final state
-    hFinal[gid] = hPrev;
+    // Store final state (only valid threads)
+    if (isValid) {
+        hFinal[gid] = hPrev;
+    }
 }
 
 // ===========================================================================
@@ -401,15 +413,27 @@ __kernel void gru_backward_sequence(
         // Gradient to previous hidden state from z path
         float dHPrev = dH * z;
 
+        // Compute dR: gradient through reset gate from n gate
+        // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev))
+        // dn/dr = tanh_derivative(n) * (Wn_hh @ h_prev) - but dN already includes tanh_derivative
+        // So dR = dN * (Wn_hh @ h_prev)[h] * sigmoid_derivative(r)
+        float Wn_h_prev_dot = 0.0f;
+        for (int j = 0; j < hiddenSize; j++) {
+            // Get h_prev for position j
+            float hPrevJ = allH[t * batch * hiddenSize + b * hiddenSize + j];
+            // Wn_hh has shape [hidden, hidden] starting at offset 2*hiddenSize
+            Wn_h_prev_dot += hPrevJ * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
+        }
+        float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
+
         // Gradient through n gate to previous hidden (via reset gate)
-        // Simplified - full impl needs proper weight accumulation
+        // dh_prev[j] += dN * r * Wn_hh[h, j] for each source hidden unit j
         for (int hh = 0; hh < hiddenSize; hh++) {
             dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
         }
 
         // Gradient through r and z to previous hidden
         for (int hh = 0; hh < hiddenSize; hh++) {
-            float dR = 0.0f;  // Would need to compute from dN
             dHPrev += dR * weightsHh[hh * hiddenSize + h];
             dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
         }
