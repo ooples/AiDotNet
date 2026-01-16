@@ -226,6 +226,7 @@ __kernel void gru_cell_backward(
     __global const float* gateZ,       // [batch, hidden_size]
     __global const float* gateN,       // [batch, hidden_size]
     __global const float* prevH,       // [batch, hidden_size]
+    __global const float* weightsHh,   // [3 * hidden_size, hidden_size] - recurrent weights
     __global float* gradPrevH,         // [batch, hidden_size] - gradient to previous hidden
     __global float* gradGateR,         // [batch, hidden_size] - gradient for reset gate
     __global float* gradGateZ,         // [batch, hidden_size] - gradient for update gate
@@ -238,33 +239,54 @@ __kernel void gru_cell_backward(
 
     if (gid >= totalElements) return;
 
+    int b = gid / hiddenSize;
+    int h = gid % hiddenSize;
+
     float r = gateR[gid];
     float z = gateZ[gid];
     float n = gateN[gid];
-    float hPrev = prevH[gid];
+    float hPrevLocal = prevH[gid];
 
     float dH = gradH[gid];
 
     // Gradient through hidden state update: h_new = (1 - z) * n + z * h_prev
     // dL/dz = dH * (-n + h_prev)
-    float dZ = dH * (hPrev - n) * sigmoid_derivative(z);
+    float dZ = dH * (hPrevLocal - n) * sigmoid_derivative(z);
 
     // dL/dn = dH * (1 - z)
     float dN = dH * (1.0f - z) * tanh_derivative(n);
 
+    // Compute Wn_hh @ h_prev for reset gate gradient
+    // n = tanh(Wn_ih @ x + r * (Wn_hh @ h_prev) + bias)
+    // dR = dN * (Wn_hh @ h_prev) * sigmoid_derivative(r)
+    float Wn_h_prev_dot = 0.0f;
+    for (int j = 0; j < hiddenSize; j++) {
+        float hPrevJ = prevH[b * hiddenSize + j];
+        // Wn_hh is at offset 2*hiddenSize in weightsHh
+        Wn_h_prev_dot += hPrevJ * weightsHh[(2 * hiddenSize + h) * hiddenSize + j];
+    }
+    float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
+
     // dL/dh_prev from z branch: dH * z
-    float dHPrev_z = dH * z;
+    float dHPrev = dH * z;
 
-    // dL/dh_prev from n branch through reset gate
-    // n = tanh(sumN_input + sumN_hidden), where sumN_hidden uses r * h_prev
-    // This is simplified - full impl needs weight contributions
-    float dHPrev_n = dN * r;  // Simplified
+    // dL/dh_prev from n branch through reset gate: dN * r * Wn_hh[h, j]
+    for (int hh = 0; hh < hiddenSize; hh++) {
+        dHPrev += dN * r * weightsHh[(2 * hiddenSize + hh) * hiddenSize + h];
+    }
 
-    // dL/dr = dN * h_prev * weightsHh[n, :] (accumulated)
-    float dR = dN * hPrev * sigmoid_derivative(r);  // Simplified
+    // dL/dh_prev from r gate: dR * Wr_hh[h, j]
+    for (int hh = 0; hh < hiddenSize; hh++) {
+        dHPrev += dR * weightsHh[hh * hiddenSize + h];
+    }
 
-    // Total gradient to previous hidden state
-    gradPrevH[gid] = dHPrev_z + dHPrev_n;
+    // dL/dh_prev from z gate: dZ * Wz_hh[h, j]
+    for (int hh = 0; hh < hiddenSize; hh++) {
+        dHPrev += dZ * weightsHh[(hiddenSize + hh) * hiddenSize + h];
+    }
+
+    // Store results
+    gradPrevH[gid] = dHPrev;
     gradGateR[gid] = dR;
     gradGateZ[gid] = dZ;
     gradGateN[gid] = dN;
@@ -455,6 +477,7 @@ __kernel void gru_accumulate_weight_gradients_ih(
     __global const float* allH,         // [seqLen + 1, batch, hidden_size]
     __global const float* cacheGates,   // [seqLen, batch, hidden_size, 3]
     __global const float* gradOutput,   // [seqLen, batch, hidden_size]
+    __global const float* weightsHh,    // [3 * hidden_size, hidden_size] - for proper dR computation
     __global float* gradWeightsIh,      // [3 * hidden_size, input_size]
     const int seqLen,
     const int batch,
@@ -493,7 +516,14 @@ __kernel void gru_accumulate_weight_gradients_ih(
             // Compute gate gradients
             float dZ = dH * (hPrev - n) * sigmoid_derivative(z);
             float dN = dH * (1.0f - z) * tanh_derivative(n);
-            float dR = dN * hPrev * sigmoid_derivative(r);  // Simplified
+
+            // Compute proper dR using Wn_hh @ h_prev dot product
+            float Wn_h_prev_dot = 0.0f;
+            for (int jj = 0; jj < hiddenSize; jj++) {
+                float hPrevJ = allH[t * batch * hiddenSize + b * hiddenSize + jj];
+                Wn_h_prev_dot += hPrevJ * weightsHh[(2 * hiddenSize + h) * hiddenSize + jj];
+            }
+            float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
 
             // Get input value
             float inputVal = input[t * batch * inputSize + b * inputSize + j];
@@ -516,6 +546,7 @@ __kernel void gru_accumulate_weight_gradients_hh(
     __global const float* allH,         // [seqLen + 1, batch, hidden_size]
     __global const float* cacheGates,   // [seqLen, batch, hidden_size, 3]
     __global const float* gradOutput,   // [seqLen, batch, hidden_size]
+    __global const float* weightsHh,    // [3 * hidden_size, hidden_size] - for proper dR computation
     __global float* gradWeightsHh,      // [3 * hidden_size, hidden_size]
     const int seqLen,
     const int batch,
@@ -529,7 +560,7 @@ __kernel void gru_accumulate_weight_gradients_hh(
     int gateIdx = gid / (hiddenSize * hiddenSize);  // Which gate (0-2)
     int remainder = gid % (hiddenSize * hiddenSize);
     int h = remainder / hiddenSize;
-    int jj = remainder % hiddenSize;
+    int colIdx = remainder % hiddenSize;
 
     float gradSum = 0.0f;
 
@@ -546,7 +577,7 @@ __kernel void gru_accumulate_weight_gradients_hh(
             // Previous hidden state
             int prevStateIdx = t * batch * hiddenSize + batchHiddenIdx;
             float hPrev = allH[prevStateIdx];
-            float hPrevJ = allH[t * batch * hiddenSize + b * hiddenSize + jj];
+            float hPrevColIdx = allH[t * batch * hiddenSize + b * hiddenSize + colIdx];
 
             // Get output gradient
             float dH = gradOutput[t * batch * hiddenSize + batchHiddenIdx];
@@ -554,16 +585,23 @@ __kernel void gru_accumulate_weight_gradients_hh(
             // Compute gate gradients
             float dZ = dH * (hPrev - n) * sigmoid_derivative(z);
             float dN = dH * (1.0f - z) * tanh_derivative(n);
-            float dR = dN * hPrev * sigmoid_derivative(r);  // Simplified
+
+            // Compute proper dR using Wn_hh @ h_prev dot product
+            float Wn_h_prev_dot = 0.0f;
+            for (int k = 0; k < hiddenSize; k++) {
+                float hPrevK = allH[t * batch * hiddenSize + b * hiddenSize + k];
+                Wn_h_prev_dot += hPrevK * weightsHh[(2 * hiddenSize + h) * hiddenSize + k];
+            }
+            float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
 
             // Accumulate based on gate index
             if (gateIdx == 0) {
-                gradSum += dR * hPrevJ;
+                gradSum += dR * hPrevColIdx;
             } else if (gateIdx == 1) {
-                gradSum += dZ * hPrevJ;
+                gradSum += dZ * hPrevColIdx;
             } else {
                 // For n gate, the hidden contribution is gated by r
-                gradSum += dN * (r * hPrevJ);
+                gradSum += dN * (r * hPrevColIdx);
             }
         }
     }
@@ -575,6 +613,7 @@ __kernel void gru_accumulate_bias_gradients(
     __global const float* allH,         // [seqLen + 1, batch, hidden_size]
     __global const float* cacheGates,   // [seqLen, batch, hidden_size, 3]
     __global const float* gradOutput,   // [seqLen, batch, hidden_size]
+    __global const float* weightsHh,    // [3 * hidden_size, hidden_size] - for proper dR computation
     __global float* gradBias,           // [3 * hidden_size]
     const int seqLen,
     const int batch,
@@ -610,7 +649,14 @@ __kernel void gru_accumulate_bias_gradients(
             // Compute gate gradients
             float dZ = dH * (hPrev - n) * sigmoid_derivative(z);
             float dN = dH * (1.0f - z) * tanh_derivative(n);
-            float dR = dN * hPrev * sigmoid_derivative(r);  // Simplified
+
+            // Compute proper dR using Wn_hh @ h_prev dot product
+            float Wn_h_prev_dot = 0.0f;
+            for (int k = 0; k < hiddenSize; k++) {
+                float hPrevK = allH[t * batch * hiddenSize + b * hiddenSize + k];
+                Wn_h_prev_dot += hPrevK * weightsHh[(2 * hiddenSize + h) * hiddenSize + k];
+            }
+            float dR = dN * Wn_h_prev_dot * sigmoid_derivative(r);
 
             // Accumulate based on gate index
             if (gateIdx == 0) {

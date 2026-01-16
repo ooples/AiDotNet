@@ -316,9 +316,13 @@ extern ""C"" __global__ void gru_compute_gate_gradients(
     float dHCand = dh * z * tanh_derivative(h_cand);
     float dZ = dh * (h_cand - h_prev) * sigmoid_derivative(z);
 
+    // Compute sumUhH with correct index ordering
+    // Uh is [hiddenSize, hiddenSize] in row-major, so Uh[row, col] = Uh[row * hiddenSize + col]
+    // For the reset gate gradient, we need sum over input j: Uh[j, h] * prevH[j]
+    // which is Uh[j * hiddenSize + h] in row-major
     float sumUhH = 0.0f;
     for (int j = 0; j < hiddenSize; j++) {
-        sumUhH += Uh[h * hiddenSize + j] * prevH[b * hiddenSize + j];
+        sumUhH += Uh[j * hiddenSize + h] * prevH[b * hiddenSize + j];
     }
     float dR = dHCand * sumUhH * sigmoid_derivative(r);
 
@@ -367,8 +371,10 @@ extern ""C"" __global__ void gru_accumulate_weight_gradients(
             float dGate = dGates[b * 3 * hiddenSize + gateIdx];
             float h_val = prevH[b * hiddenSize + colIdx];
 
+            // For Uh (candidate gate), multiply by reset gate for the INPUT hidden unit (colIdx)
+            // not the output unit (h), since GRU applies r element-wise to prevH before Uh multiplication
             if (gateType == 2) {
-                float r = gateR[b * hiddenSize + h];
+                float r = gateR[b * hiddenSize + colIdx];
                 h_val *= r;
             }
 
@@ -503,12 +509,17 @@ extern ""C"" __global__ void gru_backward_sequence(
             atomicAdd(&dH_init[b * hiddenSize + j], contrib);
         }
 
+        // Device-wide memory fence to ensure atomicAdd writes are visible across all blocks
+        // This is required because __syncthreads() only synchronizes within a block
+        __threadfence();
         __syncthreads();
 
         // Read accumulated gradient and add direct contribution
         dH = dH_init[gid] + dH_direct;
         dH_init[gid] = 0.0f;  // Clear for next iteration
 
+        // Memory fence before next iteration's read
+        __threadfence();
         __syncthreads();
     }
 

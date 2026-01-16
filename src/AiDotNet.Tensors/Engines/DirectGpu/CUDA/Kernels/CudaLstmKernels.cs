@@ -318,14 +318,14 @@ extern ""C"" __global__ void lstm_cell_backward(
     dPrevC[gid] = dC * f;
 
     // Gradient to previous hidden state (through all gates)
-    float dPrevH_val = 0.0f;
+    // dPrevH[b,j] = sum_h (dF_h * Wh[h,j] + dI_h * Wh[H+h,j] + dCCandidate_h * Wh[2H+h,j] + dO_h * Wh[3H+h,j])
+    // This thread handles output position h, so we contribute to each j using atomicAdd
     for (int j = 0; j < hiddenSize; j++) {
-        // This thread contributes to dPrevH[b, j] through gates
-        // Need to read dF, dI, dCCandidate, dO from position (b, h)
-        // and Wh weights
-        float contrib = 0.0f;
-        // Actually, we need to accumulate from all hidden positions
-        // This requires different indexing - simpler to do in separate kernel
+        float contrib = dF * Wh[h * hiddenSize + j];
+        contrib += dI * Wh[(hiddenSize + h) * hiddenSize + j];
+        contrib += dCCandidate * Wh[(2 * hiddenSize + h) * hiddenSize + j];
+        contrib += dO * Wh[(3 * hiddenSize + h) * hiddenSize + j];
+        atomicAdd(&dPrevH[b * hiddenSize + j], contrib);
     }
 
     // Accumulate weight gradients (using atomic operations)

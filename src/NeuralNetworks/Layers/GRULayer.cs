@@ -1991,16 +1991,8 @@ public class GRULayer<T> : LayerBase<T>
         _gpuInitialHiddenState = null;
         _gpuLastInput = null; // Don't dispose - owned by caller
 
-        // Clear fused kernel cache
-        _gpuStackedWeightsIh?.Dispose();
-        _gpuStackedWeightsIh = null;
-        _gpuStackedWeightsHh?.Dispose();
-        _gpuStackedWeightsHh = null;
-        _gpuStackedBiasIh?.Dispose();
-        _gpuStackedBiasIh = null;
-        _gpuStackedBiasHh?.Dispose();
-        _gpuStackedBiasHh = null;
-        _gpuStackedWeightsValid = false;
+        // Note: Do NOT dispose stacked weights here - they're reusable across forward passes
+        // and are only invalidated when actual weights are updated via InvalidateGpuStackedWeights()
 
         _gpuFusedAllH?.Dispose();
         _gpuFusedAllH = null;

@@ -1545,6 +1545,25 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         float alphaValue = (float)NumOps.ToDouble(_alpha);
 
+        // Pre-allocate cache for backward pass when training (MUST be before batch loop)
+        if (IsTrainingMode)
+        {
+            ClearGpuCache();
+            _gpuLastInput = input;
+            _gpuNumNodes = numNodes;
+            _gpuBatchSize = batchSize;
+
+            // Transformed cache: [batchSize * numHeads * numNodes * outputFeatures]
+            int transformedCacheSize = batchSize * _numHeads * numNodes * _outputFeatures;
+            _gpuTransformedCache = backend.AllocateBuffer(transformedCacheSize);
+            backend.Fill(_gpuTransformedCache, 0.0f, transformedCacheSize);
+
+            // Attention cache: [batchSize * numHeads * numNodes * numNodes]
+            int attentionCacheSize = batchSize * _numHeads * numNodes * numNodes;
+            _gpuAttentionCache = backend.AllocateBuffer(attentionCacheSize);
+            backend.Fill(_gpuAttentionCache, 0.0f, attentionCacheSize);
+        }
+
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
@@ -1819,27 +1838,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        // Cache tensors for backward pass when training
-        if (IsTrainingMode)
-        {
-            ClearGpuCache();
-            _gpuLastInput = input;
-            _gpuNumNodes = numNodes;
-            _gpuBatchSize = batchSize;
-
-            // Allocate cache for backward: transformed features and attention scores per head
-            // Transformed cache: [batchSize * numHeads * numNodes * outputFeatures]
-            int transformedCacheSize = batchSize * _numHeads * numNodes * _outputFeatures;
-            _gpuTransformedCache = backend.AllocateBuffer(transformedCacheSize);
-            backend.Fill(_gpuTransformedCache, 0.0f, transformedCacheSize);
-
-            // Attention cache: [batchSize * numHeads * numNodes * numNodes]
-            int attentionCacheSize = batchSize * _numHeads * numNodes * numNodes;
-            _gpuAttentionCache = backend.AllocateBuffer(attentionCacheSize);
-            backend.Fill(_gpuAttentionCache, 0.0f, attentionCacheSize);
-        }
-
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

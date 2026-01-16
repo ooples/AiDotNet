@@ -1356,7 +1356,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int outputSize = batchSize * numNodes * _outputFeatures;
         var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
 
-        // Allocate per-edge and per-node buffers
+        // Allocate per-edge and per-node buffers (temporary work buffers)
         var edgeSrcFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
         var edgeTgtFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
         var edgeConcatBuffer = backend.AllocateBuffer(new float[numEdges * messageInputDim]);
@@ -1367,6 +1367,33 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var updateGateBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
         var tempBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
         var nodeOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Pre-allocate per-batch cache buffers for training mode (before batch loop)
+        IGpuBuffer? batchedEdgeConcatCache = null;
+        IGpuBuffer? batchedMsgHiddenCache = null;
+        IGpuBuffer? batchedMsgCache = null;
+        IGpuBuffer? batchedAggregatedCache = null;
+        IGpuBuffer? batchedResetGateCache = null;
+        IGpuBuffer? batchedUpdateGateCache = null;
+
+        if (IsTrainingMode)
+        {
+            ClearGpuCache();
+            _gpuLastInput = input;
+            _gpuNumEdges = numEdges;
+            _gpuNumNodes = numNodes;
+            _gpuBatchSize = batchSize;
+            _gpuEdgeSrcIndices = srcIdxBuffer;
+            _gpuEdgeTgtIndices = tgtIdxBuffer;
+
+            // Allocate batch-sized cache buffers
+            batchedEdgeConcatCache = backend.AllocateBuffer(batchSize * numEdges * messageInputDim);
+            batchedMsgHiddenCache = backend.AllocateBuffer(batchSize * numEdges * _messageFeatures);
+            batchedMsgCache = backend.AllocateBuffer(batchSize * numEdges * _messageFeatures);
+            batchedAggregatedCache = backend.AllocateBuffer(batchSize * numNodes * _messageFeatures);
+            batchedResetGateCache = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            batchedUpdateGateCache = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+        }
 
         // Allocate temporary buffers for GRU computation
         var onesBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
@@ -1486,6 +1513,29 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 backend.Copy(tempOut, outputBuffer, outputSize);
             }
 
+            // Cache per-batch results for backward pass
+            if (IsTrainingMode && batchedEdgeConcatCache != null)
+            {
+                int edgeConcatSize = numEdges * messageInputDim;
+                int msgSize = numEdges * _messageFeatures;
+                int aggSize = numNodes * _messageFeatures;
+                int gateSize = numNodes * _outputFeatures;
+
+                // Copy this batch's results to the batched cache at the correct offset
+                backend.Copy2DStrided(edgeConcatBuffer, batchedEdgeConcatCache,
+                    1, edgeConcatSize, batchSize * edgeConcatSize, b * edgeConcatSize);
+                backend.Copy2DStrided(edgeMsgHiddenBuffer, batchedMsgHiddenCache!,
+                    1, msgSize, batchSize * msgSize, b * msgSize);
+                backend.Copy2DStrided(edgeMsgBuffer, batchedMsgCache!,
+                    1, msgSize, batchSize * msgSize, b * msgSize);
+                backend.Copy2DStrided(aggregatedBuffer, batchedAggregatedCache!,
+                    1, aggSize, batchSize * aggSize, b * aggSize);
+                backend.Copy2DStrided(resetGateBuffer, batchedResetGateCache!,
+                    1, gateSize, batchSize * gateSize, b * gateSize);
+                backend.Copy2DStrided(updateGateBuffer, batchedUpdateGateCache!,
+                    1, gateSize, batchSize * gateSize, b * gateSize);
+            }
+
             if (ownsBatchBuffer)
             {
                 batchInputBuffer.Dispose();
@@ -1508,24 +1558,24 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Cache or clean up based on training mode
         if (IsTrainingMode)
         {
-            // Clear previous cache first
-            ClearGpuCache();
+            // Store batched caches (already populated during batch loop)
+            // Note: ClearGpuCache was already called before the batch loop
+            _gpuEdgeConcatCache = batchedEdgeConcatCache;
+            _gpuMsgHiddenCache = batchedMsgHiddenCache;
+            _gpuMsgCache = batchedMsgCache;
+            _gpuAggregatedCache = batchedAggregatedCache;
+            _gpuResetGateCache = batchedResetGateCache;
+            _gpuUpdateGateCache = batchedUpdateGateCache;
 
-            // Cache tensors needed for backward pass
-            _gpuLastInput = input;
-            _gpuEdgeSrcIndices = srcIdxBuffer;
-            _gpuEdgeTgtIndices = tgtIdxBuffer;
-            _gpuEdgeConcatCache = edgeConcatBuffer;
-            _gpuMsgHiddenCache = edgeMsgHiddenBuffer;
-            _gpuMsgCache = edgeMsgBuffer;
-            _gpuAggregatedCache = aggregatedBuffer;
-            _gpuResetGateCache = resetGateBuffer;
-            _gpuUpdateGateCache = updateGateBuffer;
-            _gpuNumEdges = numEdges;
-            _gpuNumNodes = numNodes;
-            _gpuBatchSize = batchSize;
+            // Dispose per-iteration work buffers (no longer needed)
+            edgeConcatBuffer.Dispose();
+            edgeMsgHiddenBuffer.Dispose();
+            edgeMsgBuffer.Dispose();
+            aggregatedBuffer.Dispose();
+            resetGateBuffer.Dispose();
+            updateGateBuffer.Dispose();
 
-            // Dispose buffers not needed for backward
+            // Dispose weight buffers not needed for backward
             msgW1Buffer.Dispose();
             msgW2Buffer.Dispose();
             msgB1Buffer.Dispose();
@@ -1572,7 +1622,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
