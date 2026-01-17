@@ -15,7 +15,8 @@ public enum CudaDeviceAttribute
     MaxSharedMemoryPerBlock = 8,
     MultiprocessorCount = 16,
     ComputeCapabilityMajor = 75,
-    ComputeCapabilityMinor = 76
+    ComputeCapabilityMinor = 76,
+    CooperativeLaunch = 95
 }
 
 internal static class CudaNativeBindings

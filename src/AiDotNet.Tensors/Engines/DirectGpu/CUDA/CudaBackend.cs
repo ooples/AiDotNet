@@ -38,6 +38,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _gruModule;
     private IntPtr _fp16Module;
     private bool _disposed;
+    private bool _supportsCooperativeLaunch;
+    private int _multiProcessorCount;
 
     public bool IsAvailable { get; }
     public string BackendName => "CUDA";
@@ -87,6 +89,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 CuBlasNative.cuDeviceGetAttribute(out int multiprocessors, (int)CudaDeviceAttribute.MultiprocessorCount, device),
                 "cuDeviceGetAttribute(MultiprocessorCount)");
             ComputeUnits = multiprocessors;
+            _multiProcessorCount = multiprocessors;
+
+            // Check cooperative launch support (requires compute capability 6.0+)
+            var coopResult = CuBlasNative.cuDeviceGetAttribute(
+                out int coopLaunchSupport, (int)CudaDeviceAttribute.CooperativeLaunch, device);
+            _supportsCooperativeLaunch = coopResult == CudaResult.Success && coopLaunchSupport != 0;
 
             CuBlasNative.CheckCudaResult(
                 CuBlasNative.cuDeviceGetAttribute(out int sharedMem, (int)CudaDeviceAttribute.MaxSharedMemoryPerBlock, device),
@@ -7773,6 +7781,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: gru_forward_sequence");
 
+        // The forward kernel uses __syncthreads() which only synchronizes within a block.
+        // If hiddenSize > DefaultBlockSize, threads within a batch would span multiple blocks,
+        // causing a race condition when reading reset gates computed by other threads.
+        // Enforce one-block-per-batch constraint for correctness.
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"GRU forward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level GRU operations.");
+        }
+
         using var _ = PushContext();
 
         int totalThreads = batch * hiddenSize;
@@ -7818,6 +7838,16 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: gru_backward_sequence");
 
+        // The gru_backward_sequence kernel uses grid.sync() for cross-block synchronization
+        // which requires cooperative kernel launch. Validate requirements.
+        if (!_supportsCooperativeLaunch)
+        {
+            throw new InvalidOperationException(
+                "GRU backward sequence requires cooperative kernel launch support, " +
+                "but this CUDA device does not support it (requires compute capability 6.0+). " +
+                "Consider using a newer GPU or reducing batch*hiddenSize to fit in one block.");
+        }
+
         using var _ = PushContext();
 
         int totalThreads = batch * hiddenSize;
@@ -7825,6 +7855,21 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Shared memory size for accumulated hidden gradients (one float per thread)
         uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+
+        // For cooperative launches, grid size is limited by device occupancy
+        // Get max blocks that can be launched cooperatively
+        var occupancyResult = CudaNativeBindings.cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+            out int maxBlocksPerSm, kernel, DefaultBlockSize, (nint)sharedMemSize, 0);
+        if (occupancyResult == CudaResult.Success && maxBlocksPerSm > 0)
+        {
+            int maxCooperativeBlocks = maxBlocksPerSm * _multiProcessorCount;
+            if (grid > maxCooperativeBlocks)
+            {
+                throw new InvalidOperationException(
+                    $"GRU backward sequence grid size ({grid} blocks) exceeds cooperative launch limit " +
+                    $"({maxCooperativeBlocks} blocks). Reduce batch size or hidden size.");
+            }
+        }
 
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr allHPtr = allH.Handle;

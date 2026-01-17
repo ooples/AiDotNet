@@ -41,6 +41,7 @@ public sealed class HipBackend : IAsyncGpuBackend
     private AmdGpuArchitecture _architecture;
     private bool _disposed;
     private HipDeviceProperties _deviceProps;
+    private bool _supportsCooperativeLaunch;
 
     // Additional kernel modules
     private IntPtr _activationModule;
@@ -190,6 +191,14 @@ public sealed class HipBackend : IAsyncGpuBackend
 
             // Detect architecture from GCN arch name
             _architecture = DetectArchitecture(_deviceProps.GcnArchName, 0);
+
+            // Check cooperative launch support
+            int coopLaunchSupport = 0;
+            result = HipNativeBindings.hipDeviceGetAttribute(
+                ref coopLaunchSupport,
+                HipDeviceAttribute.CooperativeLaunch,
+                deviceIndex);
+            _supportsCooperativeLaunch = result == HipError.Success && coopLaunchSupport != 0;
 
             // Create compute stream
             result = HipNativeBindings.hipStreamCreate(ref _stream);
@@ -9128,6 +9137,18 @@ public sealed class HipBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
             throw new InvalidOperationException("HIP kernel not found: gru_forward_sequence");
 
+        // The forward kernel uses __syncthreads() which only synchronizes within a block.
+        // If hiddenSize > DefaultBlockSize, threads within a batch would span multiple blocks,
+        // causing a race condition when reading reset gates computed by other threads.
+        // Enforce one-block-per-batch constraint for correctness.
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"GRU forward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level GRU operations.");
+        }
+
         int totalThreads = batch * hiddenSize;
         uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
 
@@ -9176,6 +9197,31 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         // Shared memory size for accumulated hidden gradients (one float per thread)
         uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+
+        // The gru_backward_sequence kernel uses grid.sync() for cross-block synchronization
+        // which requires cooperative kernel launch. Validate requirements.
+        if (!_supportsCooperativeLaunch)
+        {
+            throw new InvalidOperationException(
+                "GRU backward sequence requires cooperative kernel launch support, " +
+                "but this HIP device does not support it. Consider using a device with " +
+                "cooperative launch capability or reducing batch*hiddenSize to fit in one block.");
+        }
+
+        // For cooperative launches, grid size is limited by device occupancy
+        // Get max blocks that can be launched cooperatively
+        var occupancyResult = HipNativeBindings.hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+            out int maxBlocksPerSm, kernel, DefaultBlockSize, (nint)sharedMemSize, 0);
+        if (occupancyResult == HipError.Success && maxBlocksPerSm > 0)
+        {
+            int maxCooperativeBlocks = maxBlocksPerSm * _deviceProps.MultiProcessorCount;
+            if (grid > maxCooperativeBlocks)
+            {
+                throw new InvalidOperationException(
+                    $"GRU backward sequence grid size ({grid} blocks) exceeds cooperative launch limit " +
+                    $"({maxCooperativeBlocks} blocks). Reduce batch size or hidden size.");
+            }
+        }
 
         var handles = new GCHandle[17];
         try
