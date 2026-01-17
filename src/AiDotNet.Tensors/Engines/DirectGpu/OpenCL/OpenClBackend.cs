@@ -9195,6 +9195,7 @@ KERNEL VARIANTS (A/B testing):
 
         public void LstmBackwardSequence(
             IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+            IGpuBuffer hInit, IGpuBuffer cInit,
             IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
             IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
             IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
@@ -9210,20 +9211,22 @@ KERNEL VARIANTS (A/B testing):
             kernel.SetArg(1u, ((DirectOpenClGpuBuffer)allH).Buffer.Handle);
             kernel.SetArg(2u, ((DirectOpenClGpuBuffer)allC).Buffer.Handle);
             kernel.SetArg(3u, ((DirectOpenClGpuBuffer)cacheGates).Buffer.Handle);
-            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
-            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
-            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
-            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
-            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)gradHInit).Buffer.Handle);
-            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradCInit).Buffer.Handle);
-            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
-            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
-            kernel.SetArg(12u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
-            kernel.SetArg(13u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
-            kernel.SetArg(14u, seqLen);
-            kernel.SetArg(15u, batch);
-            kernel.SetArg(16u, inputSize);
-            kernel.SetArg(17u, hiddenSize);
+            kernel.SetArg(4u, ((DirectOpenClGpuBuffer)hInit).Buffer.Handle);
+            kernel.SetArg(5u, ((DirectOpenClGpuBuffer)cInit).Buffer.Handle);
+            kernel.SetArg(6u, ((DirectOpenClGpuBuffer)weightsIh).Buffer.Handle);
+            kernel.SetArg(7u, ((DirectOpenClGpuBuffer)weightsHh).Buffer.Handle);
+            kernel.SetArg(8u, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kernel.SetArg(9u, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            kernel.SetArg(10u, ((DirectOpenClGpuBuffer)gradHInit).Buffer.Handle);
+            kernel.SetArg(11u, ((DirectOpenClGpuBuffer)gradCInit).Buffer.Handle);
+            kernel.SetArg(12u, ((DirectOpenClGpuBuffer)gradWeightsIh).Buffer.Handle);
+            kernel.SetArg(13u, ((DirectOpenClGpuBuffer)gradWeightsHh).Buffer.Handle);
+            kernel.SetArg(14u, ((DirectOpenClGpuBuffer)gradBiasIh).Buffer.Handle);
+            kernel.SetArg(15u, ((DirectOpenClGpuBuffer)gradBiasHh).Buffer.Handle);
+            kernel.SetArg(16u, seqLen);
+            kernel.SetArg(17u, batch);
+            kernel.SetArg(18u, inputSize);
+            kernel.SetArg(19u, hiddenSize);
 
             int globalSize = ((totalThreads + localSize - 1) / localSize) * localSize;
             kernel.Execute1D(globalSize, localSize);

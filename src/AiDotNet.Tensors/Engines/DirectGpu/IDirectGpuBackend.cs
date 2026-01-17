@@ -2346,6 +2346,7 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="hiddenSize">Hidden state size.</param>
     void LstmBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer hInit, IGpuBuffer cInit,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
         IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,

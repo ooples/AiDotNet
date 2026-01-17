@@ -1473,11 +1473,12 @@ public class DelegatingGpuBackend : IDirectGpuBackend
     /// <inheritdoc/>
     public virtual void LstmBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer hInit, IGpuBuffer cInit,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
         IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
         int seqLen, int batch, int inputSize, int hiddenSize)
-        => Inner.LstmBackwardSequence(gradOutput, allH, allC, cacheGates, weightsIh, weightsHh, input,
+        => Inner.LstmBackwardSequence(gradOutput, allH, allC, cacheGates, hInit, cInit, weightsIh, weightsHh, input,
             gradInput, gradHInit, gradCInit, gradWeightsIh, gradWeightsHh, gradBiasIh, gradBiasHh,
             seqLen, batch, inputSize, hiddenSize);
 

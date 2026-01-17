@@ -112,7 +112,8 @@ extern ""C"" __global__ void lstm_forward_sequence(
     const float* c_init,
     const float* Wi,
     const float* Wh,
-    const float* bias,
+    const float* biasIh,  // [4*hidden] - input-hidden bias
+    const float* biasHh,  // [4*hidden] - hidden-hidden bias
     float* output,
     float* h_states,
     float* c_states,
@@ -134,10 +135,11 @@ extern ""C"" __global__ void lstm_forward_sequence(
     float c_val = c_init[gid];
 
     for (int t = 0; t < timeSteps; t++) {
-        float sumF = bias[h_idx];
-        float sumI = bias[hiddenSize + h_idx];
-        float sumC = bias[2 * hiddenSize + h_idx];
-        float sumO = bias[3 * hiddenSize + h_idx];
+        // Bias is sum of input-hidden and hidden-hidden biases
+        float sumF = biasIh[h_idx] + biasHh[h_idx];
+        float sumI = biasIh[hiddenSize + h_idx] + biasHh[hiddenSize + h_idx];
+        float sumC = biasIh[2 * hiddenSize + h_idx] + biasHh[2 * hiddenSize + h_idx];
+        float sumO = biasIh[3 * hiddenSize + h_idx] + biasHh[3 * hiddenSize + h_idx];
 
         int inputOffset = (b * timeSteps + t) * inputSize;
         for (int i = 0; i < inputSize; i++) {
@@ -370,7 +372,8 @@ extern ""C"" __global__ void lstm_backward_sequence(
     float* gradInput,
     float* dWi,
     float* dWh,
-    float* dBias,
+    float* dBiasIh,     // [4*hidden] - input-hidden bias gradient
+    float* dBiasHh,     // [4*hidden] - hidden-hidden bias gradient
     float* dH_init,
     float* dC_init,
     int batch,
@@ -458,10 +461,15 @@ extern ""C"" __global__ void lstm_backward_sequence(
                 atomicAdd(&dWh[(3 * hiddenSize + h_idx) * hiddenSize + j], dO * hj);
             }
 
-            atomicAdd(&dBias[h_idx], dF);
-            atomicAdd(&dBias[hiddenSize + h_idx], dI);
-            atomicAdd(&dBias[2 * hiddenSize + h_idx], dCCandidate);
-            atomicAdd(&dBias[3 * hiddenSize + h_idx], dO);
+            // Bias gradients - same gradient flows to both biasIh and biasHh since they're summed
+            atomicAdd(&dBiasIh[h_idx], dF);
+            atomicAdd(&dBiasIh[hiddenSize + h_idx], dI);
+            atomicAdd(&dBiasIh[2 * hiddenSize + h_idx], dCCandidate);
+            atomicAdd(&dBiasIh[3 * hiddenSize + h_idx], dO);
+            atomicAdd(&dBiasHh[h_idx], dF);
+            atomicAdd(&dBiasHh[hiddenSize + h_idx], dI);
+            atomicAdd(&dBiasHh[2 * hiddenSize + h_idx], dCCandidate);
+            atomicAdd(&dBiasHh[3 * hiddenSize + h_idx], dO);
 
             int gradInputOffset = (b * timeSteps + t) * inputSize;
             for (int i = 0; i < inputSize; i++) {

@@ -7707,10 +7707,20 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: lstm_forward_sequence");
 
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"LSTM forward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level LSTM operations.");
+        }
+
         using var _ = PushContext();
 
-        int totalThreads = batch * hiddenSize;
-        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
 
         IntPtr inputPtr = input.Handle;
         IntPtr hInitPtr = hInit.Handle;
@@ -7720,13 +7730,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
         IntPtr biasIhPtr = biasIh.Handle;
         IntPtr biasHhPtr = biasHh.Handle;
         IntPtr outputPtr = output.Handle;
-        IntPtr hFinalPtr = hFinal.Handle;
-        IntPtr cFinalPtr = cFinal.Handle;
         IntPtr allHPtr = allH.Handle;
         IntPtr allCPtr = allC.Handle;
         IntPtr cacheGatesPtr = cacheGates.Handle;
 
-        void** args = stackalloc void*[17];
+        // Kernel signature: input, h_init, c_init, Wi, Wh, biasIh, biasHh, output, h_states, c_states, gates, batch, timeSteps, inputSize, hiddenSize
+        void** args = stackalloc void*[15];
         args[0] = &inputPtr;
         args[1] = &hInitPtr;
         args[2] = &cInitPtr;
@@ -7735,21 +7744,23 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[5] = &biasIhPtr;
         args[6] = &biasHhPtr;
         args[7] = &outputPtr;
-        args[8] = &hFinalPtr;
-        args[9] = &cFinalPtr;
-        args[10] = &allHPtr;
-        args[11] = &allCPtr;
-        args[12] = &cacheGatesPtr;
-        args[13] = &seqLen;
-        args[14] = &batch;
-        args[15] = &inputSize;
-        args[16] = &hiddenSize;
+        args[8] = &allHPtr;       // h_states cache
+        args[9] = &allCPtr;       // c_states cache
+        args[10] = &cacheGatesPtr; // gates cache
+        args[11] = &batch;
+        args[12] = &seqLen;       // timeSteps
+        args[13] = &inputSize;
+        args[14] = &hiddenSize;
 
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
+
+        // Note: hFinal and cFinal are not used by the kernel - they can be extracted
+        // from allH[seqLen-1] and allC[seqLen-1] if needed by the caller
     }
 
     public unsafe void LstmBackwardSequence(
         IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer hInit, IGpuBuffer cInit,
         IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
         IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
         IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
@@ -7758,45 +7769,61 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: lstm_backward_sequence");
 
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"LSTM backward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level LSTM operations.");
+        }
+
         using var _ = PushContext();
 
-        int totalThreads = batch * hiddenSize;
-        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
 
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr allHPtr = allH.Handle;
         IntPtr allCPtr = allC.Handle;
         IntPtr cacheGatesPtr = cacheGates.Handle;
+        IntPtr cInitPtr = cInit.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr inputPtr = input.Handle;
         IntPtr weightsIhPtr = weightsIh.Handle;
         IntPtr weightsHhPtr = weightsHh.Handle;
-        IntPtr inputPtr = input.Handle;
         IntPtr gradInputPtr = gradInput.Handle;
-        IntPtr gradHInitPtr = gradHInit.Handle;
-        IntPtr gradCInitPtr = gradCInit.Handle;
         IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
         IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
         IntPtr gradBiasIhPtr = gradBiasIh.Handle;
         IntPtr gradBiasHhPtr = gradBiasHh.Handle;
+        IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr gradCInitPtr = gradCInit.Handle;
 
-        void** args = stackalloc void*[18];
+        // Kernel signature: gradOutput, h_states, c_states, gates, c_init, h_init, input, Wi, Wh,
+        //                   gradInput, dWi, dWh, dBiasIh, dBiasHh, dH_init, dC_init, batch, timeSteps, inputSize, hiddenSize
+        void** args = stackalloc void*[20];
         args[0] = &gradOutputPtr;
-        args[1] = &allHPtr;
-        args[2] = &allCPtr;
-        args[3] = &cacheGatesPtr;
-        args[4] = &weightsIhPtr;
-        args[5] = &weightsHhPtr;
+        args[1] = &allHPtr;        // h_states
+        args[2] = &allCPtr;        // c_states
+        args[3] = &cacheGatesPtr;  // gates
+        args[4] = &cInitPtr;       // c_init
+        args[5] = &hInitPtr;       // h_init
         args[6] = &inputPtr;
-        args[7] = &gradInputPtr;
-        args[8] = &gradHInitPtr;
-        args[9] = &gradCInitPtr;
-        args[10] = &gradWeightsIhPtr;
-        args[11] = &gradWeightsHhPtr;
+        args[7] = &weightsIhPtr;   // Wi
+        args[8] = &weightsHhPtr;   // Wh
+        args[9] = &gradInputPtr;
+        args[10] = &gradWeightsIhPtr;  // dWi
+        args[11] = &gradWeightsHhPtr;  // dWh
         args[12] = &gradBiasIhPtr;
         args[13] = &gradBiasHhPtr;
-        args[14] = &seqLen;
-        args[15] = &batch;
-        args[16] = &inputSize;
-        args[17] = &hiddenSize;
+        args[14] = &gradHInitPtr;  // dH_init
+        args[15] = &gradCInitPtr;  // dC_init
+        args[16] = &batch;
+        args[17] = &seqLen;        // timeSteps
+        args[18] = &inputSize;
+        args[19] = &hiddenSize;
 
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
@@ -7824,8 +7851,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         using var _ = PushContext();
 
-        int totalThreads = batch * hiddenSize;
-        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
 
         IntPtr inputPtr = input.Handle;
         IntPtr hInitPtr = hInit.Handle;
@@ -7867,10 +7895,20 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: gru_backward_sequence");
 
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"GRU backward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level GRU operations.");
+        }
+
         using var _ = PushContext();
 
-        int totalThreads = batch * hiddenSize;
-        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
 
         // Shared memory size for accumulated hidden gradients (one float per thread)
         uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
