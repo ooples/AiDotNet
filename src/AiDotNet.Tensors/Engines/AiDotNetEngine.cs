@@ -171,7 +171,7 @@ public static class AiDotNetEngine
     /// <returns>True if executed on GPU, false if GPU is not available.</returns>
     public static bool WithGpuContext(Action<GpuExecutionContext> action, GpuExecutionOptions? options = null)
     {
-        ArgumentNullException.ThrowIfNull(action);
+        if (action == null) throw new ArgumentNullException(nameof(action));
 
         if (Current is DirectGpuTensorEngine gpuEngine)
         {
